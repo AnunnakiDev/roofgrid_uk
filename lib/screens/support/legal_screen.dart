@@ -1,4 +1,3 @@
-echo @"
 import 'package:flutter/material.dart';
 
 class LegalScreen extends StatelessWidget {
@@ -12,4 +11,3 @@ class LegalScreen extends StatelessWidget {
     );
   }
 }
-"@ > lib\screens\support\legal_screen.dart

@@ -1,4 +1,3 @@
-echo @"
 import 'package:flutter/material.dart';
 
 class TilesScreen extends StatelessWidget {
@@ -12,4 +11,3 @@ class TilesScreen extends StatelessWidget {
     );
   }
 }
-"@ > lib\screens\tiles_screen.dart

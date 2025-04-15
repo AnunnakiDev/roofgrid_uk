@@ -1,4 +1,3 @@
-echo @"
 import 'package:flutter/material.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
@@ -12,4 +11,3 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 }
-"@ > lib\screens\admin_dashboard_screen.dart

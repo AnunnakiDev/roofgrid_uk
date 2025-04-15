@@ -1,5 +1,5 @@
-echo @"
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    show AppBar, BuildContext, Center, Scaffold, StatelessWidget, Text, Widget;
 
 class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
@@ -12,4 +12,3 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 }
-"@ > lib\screens\subscription_screen.dart

@@ -1,5 +1,3 @@
-mkdir lib\screens\support
-echo @"
 import 'package:flutter/material.dart';
 
 class FaqScreen extends StatelessWidget {
@@ -13,4 +11,3 @@ class FaqScreen extends StatelessWidget {
     );
   }
 }
-"@ > lib\screens\support\faq_screen.dart
