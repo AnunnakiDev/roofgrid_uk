@@ -107,7 +107,13 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
     state = state.copyWith(crossBonded: value).clearResults();
   }
 
-  Future<void> calculateVertical(List<double> rafterHeights) async {
+  Future<void> calculateVertical({
+    required List<double> rafterHeights,
+    double? courseOffset,
+    double? eaveBatten,
+    double? ridgeOffset,
+    bool crossBonded = false,
+  }) async {
     if (state.selectedTile == null) {
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
@@ -140,7 +146,11 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
     }
   }
 
-  Future<void> calculateHorizontal(List<double> widths) async {
+  Future<void> calculateHorizontal(
+    List<double> widths, {
+    required List<double> widths,
+    bool crossBonded = false,
+  }) async {
     if (state.selectedTile == null) {
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
@@ -160,7 +170,7 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
         abutmentSide: state.abutmentSide,
         useLHTile: state.useLHTile,
         lhTileWidth: state.selectedTile!.leftHandTileWidth ?? 0,
-        crossBonded: state.crossBonded,
+        crossBonded: crossBonded ? 'YES' : 'NO',
       );
 
       final result = HorizontalCalculationService.calculateHorizontal(input);
@@ -191,7 +201,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       id: 'default-slate',
       name: 'Standard Slate',
       manufacturer: 'Generic',
-      materialType: MaterialType.slate,
+      materialType: TileSlateType.slate,
       description: 'Standard 500x250mm natural slate',
       isPublic: true,
       isApproved: true,
@@ -209,7 +219,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       id: 'default-plain-tile',
       name: 'Standard Plain Tile',
       manufacturer: 'Generic',
-      materialType: MaterialType.plainTile,
+      materialType: TileSlateType.plainTile,
       description: 'Standard 265x165mm clay plain tile',
       isPublic: true,
       isApproved: true,
@@ -227,7 +237,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       id: 'default-concrete-tile',
       name: 'Standard Concrete Tile',
       manufacturer: 'Generic',
-      materialType: MaterialType.concreteTile,
+      materialType: TileSlateType.concreteTile,
       description: 'Standard 420x330mm concrete tile',
       isPublic: true,
       isApproved: true,

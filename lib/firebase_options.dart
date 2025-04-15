@@ -32,55 +32,50 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBNG0Vkaid36qLuMzbNtLPT4j3iwGvLMUo',
-    appId: '1:796676497165:web:9b33d87571a7a3cd4b9a44',
-    messagingSenderId: '796676497165',
-    projectId: 'roofgriduk',
-    authDomain: 'roofgriduk.firebaseapp.com',
-    storageBucket: 'roofgriduk.firebasestorage.app',
+    apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
+    appId: '1:928783649894:web:9b33d87571a7a3cd4b9a44',
+    messagingSenderId: '928783649894',
+    projectId: 'roofgriduk-f2f56',
+    authDomain: 'roofgriduk-f2f56.firebaseapp.com',
+    storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
     measurementId: 'G-NSLE7J6VG0',
   );
 
-  // Replace placeholder values with actual Firebase configuration values
-
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBgi4VoHLXRddBv2hLybGGrTi93yBCTi4U',
-    appId: '1:796676497165:android:ffcb241b044d6a694b9a44',
-    messagingSenderId: '796676497165',
-    projectId: 'roofgriduk',
-    storageBucket: 'roofgriduk.firebasestorage.app',
+    apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
+    appId: '1:928783649894:android:ff5b08a8b5753f8e4271a7',
+    messagingSenderId: '928783649894',
+    projectId: 'roofgriduk-f2f56',
+    storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: "AIzaSyBNG0Vkaid36qLuMzbNtLPT4j3iwGvLMUo",
-    appId: "1:796676497165:web:9b33d87571a7a3cd4b9a44",
-    messagingSenderId: "796676497165",
-    projectId: "roofgriduk",
-    storageBucket: "roofgriduk.firebasestorage.app",
-    iosClientId:
-        "YOUR_IOS_CLIENT_ID", // You'll need to replace this if you use iOS
-    iosBundleId: "com.roofgriduk.app",
+    apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
+    appId: '1:928783649894:ios:ff5b08a8b5753f8e4271a7',
+    messagingSenderId: '928783649894',
+    projectId: 'roofgriduk-f2f56',
+    storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
+    iosClientId: 'YOUR_IOS_CLIENT_ID', // Replace with actual iOS client ID
+    iosBundleId: 'com.example.roofgrid_uk',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: "AIzaSyBNG0Vkaid36qLuMzbNtLPT4j3iwGvLMUo",
-    appId: "1:796676497165:web:9b33d87571a7a3cd4b9a44",
-    messagingSenderId: "796676497165",
-    projectId: "roofgriduk",
-    storageBucket: "roofgriduk.firebasestorage.app",
-    iosClientId:
-        "YOUR_IOS_CLIENT_ID", // You'll need to replace this if you use macOS
-    iosBundleId: "com.roofgriduk.app",
+    apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
+    appId: '1:928783649894:ios:ff5b08a8b5753f8e4271a7',
+    messagingSenderId: '928783649894',
+    projectId: 'roofgriduk-f2f56',
+    storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
+    iosClientId: 'YOUR_IOS_CLIENT_ID', // Replace with actual macOS client ID
+    iosBundleId: 'com.example.roofgrid_uk',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBNG0Vkaid36qLuMzbNtLPT4j3iwGvLMUo',
-    appId: '1:796676497165:web:8a971a8e754326b94b9a44',
-    messagingSenderId: '796676497165',
-    projectId: 'roofgriduk',
-    authDomain: 'roofgriduk.firebaseapp.com',
-    storageBucket: 'roofgriduk.firebasestorage.app',
+    apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
+    appId: '1:928783649894:web:8a971a8e754326b94b9a44',
+    messagingSenderId: '928783649894',
+    projectId: 'roofgriduk-f2f56',
+    authDomain: 'roofgriduk-f2f56.firebaseapp.com',
+    storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
     measurementId: 'G-S7DYPHPP56',
   );
-
 }

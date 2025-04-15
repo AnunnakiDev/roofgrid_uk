@@ -1,15 +1,12 @@
-// models/user_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Enum representing user roles in the RoofGrid UK app.
 enum UserRole {
   free,
   pro,
   admin,
 }
 
-/// Model class representing a user with authentication and subscription details.
 class UserModel {
   final String id;
   final String? email;
@@ -37,7 +34,6 @@ class UserModel {
     this.lastLoginAt,
   });
 
-  /// Creates a UserModel from a Firebase User object.
   UserModel.fromFirebaseUser(
     User user, {
     UserRole role = UserRole.free,
@@ -64,7 +60,6 @@ class UserModel {
           lastLoginAt: lastLoginAt ?? DateTime.now(),
         );
 
-  /// Creates a UserModel from a Firestore DocumentSnapshot.
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null) {
@@ -100,7 +95,6 @@ class UserModel {
     );
   }
 
-  /// Creates a copy of this UserModel with updated fields.
   UserModel copyWith({
     String? id,
     String? email,
@@ -129,7 +123,6 @@ class UserModel {
     );
   }
 
-  /// Converts this UserModel to a JSON-compatible map for Firestore.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -152,7 +145,6 @@ class UserModel {
     };
   }
 
-  /// Creates a UserModel from a JSON map.
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] as String,
@@ -183,31 +175,27 @@ class UserModel {
     );
   }
 
-  /// Whether the user is currently on an active trial.
   bool get isTrialActive =>
-      role == UserRole.pro &&
+      (role == UserRole.pro || role == UserRole.admin) &&
       proTrialEndDate != null &&
       proTrialEndDate!.isAfter(DateTime.now());
 
-  /// Whether the user’s trial has expired.
   bool get isTrialExpired =>
-      role == UserRole.pro &&
+      (role == UserRole.pro || role == UserRole.admin) &&
       proTrialEndDate != null &&
       proTrialEndDate!.isBefore(DateTime.now());
 
-  /// Whether the trial is about to expire (within 7 days).
   bool get isTrialAboutToExpire => isTrialActive && remainingTrialDays <= 7;
 
-  /// Whether the user has an active paid subscription.
   bool get isSubscribed =>
-      role == UserRole.pro &&
+      (role == UserRole.pro || role == UserRole.admin) &&
       subscriptionEndDate != null &&
       subscriptionEndDate!.isAfter(DateTime.now());
 
-  /// Whether the user has Pro status (either trial or subscribed).
-  bool get isPro => role == UserRole.pro && (isTrialActive || isSubscribed);
+  bool get isPro =>
+      (role == UserRole.pro || role == UserRole.admin) &&
+      (isTrialActive || isSubscribed);
 
-  /// Number of days remaining in the trial period.
   int get remainingTrialDays {
     if (isTrialActive && proTrialEndDate != null) {
       return proTrialEndDate!.difference(DateTime.now()).inDays;

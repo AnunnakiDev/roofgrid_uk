@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum MaterialType {
+enum TileSlateType {
   slate,
   fibreCementSlate,
   interlockingTile,
@@ -14,7 +14,7 @@ class TileModel {
   final String id;
   final String name;
   final String manufacturer;
-  final MaterialType materialType;
+  final TileSlateType materialType;
   final String description;
   final bool isPublic;
   final bool isApproved;
@@ -58,9 +58,9 @@ class TileModel {
       id: json['id'] as String,
       name: json['name'] as String,
       manufacturer: json['manufacturer'] as String,
-      materialType: MaterialType.values.firstWhere(
-        (e) => e.toString() == 'MaterialType.${json['materialType']}',
-        orElse: () => MaterialType.unknown,
+      materialType: TileSlateType.values.firstWhere(
+        (e) => e.toString() == 'TileSlateType.${json['materialType']}',
+        orElse: () => TileSlateType.unknown,
       ),
       description: json['description'] as String,
       isPublic: json['isPublic'] as bool,
@@ -106,5 +106,45 @@ class TileModel {
     };
   }
 
-  Future<TileModel> copyWith({required String id}) {}
+  TileModel copyWith({
+    String? id,
+    String? name,
+    String? manufacturer,
+    TileSlateType? materialType,
+    String? description,
+    bool? isPublic,
+    bool? isApproved,
+    String? createdById,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    double? slateTileHeight,
+    double? tileCoverWidth,
+    double? minGauge,
+    double? maxGauge,
+    double? minSpacing,
+    double? maxSpacing,
+    double? leftHandTileWidth,
+    bool? defaultCrossBonded,
+  }) {
+    return TileModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      manufacturer: manufacturer ?? this.manufacturer,
+      materialType: materialType ?? this.materialType,
+      description: description ?? this.description,
+      isPublic: isPublic ?? this.isPublic,
+      isApproved: isApproved ?? this.isApproved,
+      createdById: createdById ?? this.createdById,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      slateTileHeight: slateTileHeight ?? this.slateTileHeight,
+      tileCoverWidth: tileCoverWidth ?? this.tileCoverWidth,
+      minGauge: minGauge ?? this.minGauge,
+      maxGauge: maxGauge ?? this.maxGauge,
+      minSpacing: minSpacing ?? this.minSpacing,
+      maxSpacing: maxSpacing ?? this.maxSpacing,
+      leftHandTileWidth: leftHandTileWidth ?? this.leftHandTileWidth,
+      defaultCrossBonded: defaultCrossBonded ?? this.defaultCrossBonded,
+    );
+  }
 }

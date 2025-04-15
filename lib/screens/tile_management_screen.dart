@@ -17,14 +17,13 @@ class TileManagementScreen extends ConsumerStatefulWidget {
 
 class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   bool _isLoading = false;
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final user = authState.userId;
+    final userAsync = ref.watch(currentUserProvider);
 
     // Safety check - redirect if not logged in
-    if (user == null) {
+    if (authState.userId == null) {
       return const Scaffold(
         body: Center(
           child: Text('Please log in to access this feature'),
@@ -32,19 +31,50 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tile Management'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showTileForm(context, user, null),
-            tooltip: 'Add New Tile',
+    return userAsync.when(
+      data: (user) {
+        if (user == null) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Tile Management'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () => _showTileForm(context, user, null),
+                tooltip: 'Add New Tile',
+              ),
+            ],
           ),
-        ],
+          body: user.isPro
+              ? _buildProUserContent(user)
+              : _buildFreeUserContent(user),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       ),
-      body:
-          user.isPro ? _buildProUserContent(user) : _buildFreeUserContent(user),
+      error: (error, stackTrace) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text('Error loading user data',
+                  style: TextStyle(fontSize: 18)),
+              const SizedBox(height: 8),
+              Text(error.toString(), style: const TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

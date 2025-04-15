@@ -1,9 +1,10 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -39,6 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+      drawer: const MainDrawer(),
       body: userAsync.when(
         data: (user) => _buildHomeContent(context, user),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -50,6 +52,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
           ),
         ),
+      ),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: 0,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              context.go('/home');
+              break;
+            case 1:
+              context.go('/calculator');
+              break;
+            case 2:
+              context.go('/results');
+              break;
+            case 3:
+              context.go('/tiles');
+              break;
+          }
+        },
+        items: const [
+          BottomNavItem(
+            label: 'Home',
+            icon: Icons.home_outlined,
+            activeIcon: Icons.home,
+          ),
+          BottomNavItem(
+            label: 'Calculator',
+            icon: Icons.calculate_outlined,
+            activeIcon: Icons.calculate,
+          ),
+          BottomNavItem(
+            label: 'Results',
+            icon: Icons.save_outlined,
+            activeIcon: Icons.save,
+          ),
+          BottomNavItem(
+            label: 'Tiles',
+            icon: Icons.grid_view_outlined,
+            activeIcon: Icons.grid_view,
+          ),
+        ],
       ),
     );
   }
@@ -285,6 +328,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               context.go('/subscription');
                             },
                             child: const Text('Upgrade'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (user.isSubscribed && !user.isTrialActive) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.star,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Pro Subscription Active',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                                Text(
+                                  'Valid until ${user.subscriptionEndDate!.toString().substring(0, 10)}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
