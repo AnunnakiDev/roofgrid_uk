@@ -214,4 +214,6 @@ class UserModel {
     }
     return 0;
   }
+
+  get trialStartDate => null;
 }

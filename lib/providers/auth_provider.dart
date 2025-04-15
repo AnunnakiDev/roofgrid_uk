@@ -135,10 +135,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false);
       return true;
     } on FirebaseAuthException catch (e) {
-      state = state.copyWith(
-        error: mapFirebaseError(e.code),
-        isLoading: false,
-      );
+      state = state.copyWith(error: mapFirebaseError(e.code), isLoading: false);
       return false;
     } catch (e) {
       state = state.copyWith(
@@ -161,7 +158,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<bool> createUserWithEmailAndPassword(
-      String email, String password) async {
+    String email,
+    String password,
+  ) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
       final userCredential = await _auth.createUserWithEmailAndPassword(
@@ -208,8 +207,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> updateUserProfile(
-      {String? displayName, String? photoURL}) async {
+  Future<void> updateUserProfile({
+    String? displayName,
+    String? photoURL,
+  }) async {
     final user = _auth.currentUser;
     if (user != null) {
       await user.updateDisplayName(displayName);
@@ -227,27 +228,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: true, error: null);
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
-        state = state.copyWith(
-          isLoading: false,
-          error: 'No user logged in.',
-        );
+        state = state.copyWith(isLoading: false, error: 'No user logged in.');
         return false;
       }
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'role': 'pro',
         'proTrialStartDate': Timestamp.now(),
-        'proTrialEndDate':
-            Timestamp.fromDate(DateTime.now().add(const Duration(days: 14))),
+        'proTrialEndDate': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 14)),
+        ),
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       await _analytics.logEvent(name: 'upgrade_to_pro');
       state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Failed to upgrade: $e',
-      );
+      state = state.copyWith(isLoading: false, error: 'Failed to upgrade: $e');
       return false;
     }
   }
@@ -383,8 +379,8 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 final authStateStreamProvider = StreamProvider<UserModel?>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
   return authNotifier._auth.authStateChanges().map(
-        (User? user) => user != null ? UserModel.fromFirebaseUser(user) : null,
-      );
+    (User? user) => user != null ? UserModel.fromFirebaseUser(user) : null,
+  );
 });
 
 final currentUserProvider = StreamProvider<UserModel?>((ref) {
@@ -402,8 +398,10 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
           sink.addError(TimeoutException('Failed to load user data in time'));
         },
       )
-      .map((snapshot) =>
-          snapshot.exists ? UserModel.fromFirestore(snapshot) : null)
+      .map(
+        (snapshot) =>
+            snapshot.exists ? UserModel.fromFirestore(snapshot) : null,
+      )
       .handleError((error) {
         return null;
       });

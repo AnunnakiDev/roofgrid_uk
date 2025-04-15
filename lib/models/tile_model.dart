@@ -105,4 +105,6 @@ class TileModel {
       'defaultCrossBonded': defaultCrossBonded,
     };
   }
+
+  Future<TileModel> copyWith({required String id}) {}
 }
