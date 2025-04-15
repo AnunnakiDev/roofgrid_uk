@@ -5,9 +5,11 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
 
 /// Screen for managing tiles - Pro users can view all tiles from the database,
-/// while free users can only create and manage their own custom tiles
+/// while free users see a greyed-out section with an "Upgrade to Pro" CTA
 class TileManagementScreen extends ConsumerStatefulWidget {
   const TileManagementScreen({super.key});
 
@@ -27,6 +29,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
     // Safety check - redirect if not logged in
     if (!authState.isAuthenticated) {
+      print('User is not authenticated'); // Debug log
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.go('/auth/login');
       });
@@ -40,27 +43,83 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     return userAsync.when(
       data: (user) {
         if (user == null) {
+          print('User is null'); // Debug log
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(),
             ),
           );
         }
-
+        print(
+            'User authenticated: ${user.id}, Role: ${user.role}, IsAdmin: ${user.isAdmin}'); // Debug log
         return Scaffold(
           appBar: AppBar(
             title: const Text('Tile Management'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _showTileForm(context, user, null),
-                tooltip: 'Add New Tile',
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
               ),
-            ],
+            ),
+            actions: user.isPro
+                ? [
+                    Tooltip(
+                      message: 'Add a new tile',
+                      child: IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () => _showTileForm(context, user, null),
+                      ),
+                    ),
+                  ]
+                : null,
           ),
+          drawer: const MainDrawer(),
           body: user.isPro
               ? _buildProUserContent(user)
               : _buildFreeUserContent(user),
+          bottomNavigationBar: BottomNavBar(
+            currentIndex: 3, // Tiles is the fourth item (index 3)
+            onTap: (index) {
+              switch (index) {
+                case 0:
+                  context.go('/home');
+                  break;
+                case 1:
+                  context.go('/calculator');
+                  break;
+                case 2:
+                  context.go('/results');
+                  break;
+                case 3:
+                  context.go('/tiles');
+                  break;
+              }
+            },
+            items: const [
+              BottomNavItem(
+                label: 'Home',
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home,
+              ),
+              BottomNavItem(
+                label: 'Calculator',
+                icon: Icons.calculate_outlined,
+                activeIcon: Icons.calculate,
+              ),
+              BottomNavItem(
+                label: 'Results',
+                icon: Icons.save_outlined,
+                activeIcon: Icons.save,
+              ),
+              BottomNavItem(
+                label: 'Tiles',
+                icon: Icons.grid_view_outlined,
+                activeIcon: Icons.grid_view,
+              ),
+            ],
+          ),
         );
       },
       loading: () => const Scaffold(
@@ -92,41 +151,143 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     return tilesAsync.when(
       data: (tiles) {
         if (tiles.isEmpty) {
-          return const Center(
-            child: Text('No tiles found. Create your first tile!'),
-          );
+          return _buildPlaceholderContent(context, user);
         }
 
         return _buildTileList(tiles, user);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, stack) => Center(
-        child: Text('Error loading tiles: ${err.toString()}'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading tiles: ${err.toString()}',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Content for Free users - can only see and edit their own tiles
+  /// Placeholder content for Pro users when no tiles are available
+  Widget _buildPlaceholderContent(BuildContext context, UserModel user) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.grid_view,
+              size: 80,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Tiles Available',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Get started by creating your first tile profile.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Tooltip(
+              message: 'Add a new tile',
+              child: ElevatedButton.icon(
+                onPressed: () => _showTileForm(context, user, null),
+                icon: const Icon(Icons.add),
+                label: const Text('Create New Tile'),
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  textStyle: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Content for Free users - greyed out with an "Upgrade to Pro" CTA
   Widget _buildFreeUserContent(UserModel user) {
-    // Free users have no saved tiles; show a message
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        // Notice for free users
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.amber.shade100,
-          child: const Text(
-            'Free users must manually input tile data. Upgrade to Pro to access the complete tile database.',
-            style: TextStyle(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+        // Greyed-out content
+        Opacity(
+          opacity: 0.5,
+          child: Container(
+            color: Colors.grey[300],
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.grid_view,
+                    size: 80,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 24),
+                  Text(
+                    'Tile Management',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Upgrade to Pro to access tile management features.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        const Expanded(
-          child: Center(
-            child: Text(
-              'Upgrade to Pro to save and manage tiles.',
-              style: TextStyle(fontSize: 16),
+        // CTA overlay
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Tooltip(
+                  message: 'Unlock tile management features',
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      context.go('/subscription');
+                    },
+                    icon: const Icon(Icons.star),
+                    label: const Text('Upgrade to Pro'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      textStyle: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -146,17 +307,35 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     }
 
     return ListView.builder(
+      padding: const EdgeInsets.all(16.0),
       itemCount: groupedTiles.keys.length,
       itemBuilder: (context, index) {
         final tileSlateType = groupedTiles.keys.elementAt(index);
         final tilesInGroup = groupedTiles[tileSlateType]!;
 
-        return ExpansionTile(
-          title: Text(_getTileSlateTypeDisplayName(tileSlateType)),
-          subtitle: Text('${tilesInGroup.length} tiles'),
-          children: tilesInGroup
-              .map((tile) => _buildTileListItem(tile, user))
-              .toList(),
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ExpansionTile(
+            title: Text(
+              _getTileSlateTypeDisplayName(tileSlateType),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            subtitle: Text(
+              '${tilesInGroup.length} tiles',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            children: tilesInGroup
+                .map((tile) => _buildTileListItem(tile, user))
+                .toList(),
+          ),
         );
       },
     );
@@ -169,22 +348,35 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     final bool isDeletable = tile.createdById == user.id;
 
     return ListTile(
-      title: Text(tile.name),
-      subtitle: Text('${tile.manufacturer} - ${tile.description}'),
+      title: Text(
+        tile.name,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      subtitle: Text(
+        '${tile.manufacturer} - ${tile.description}',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isEditable)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => _showTileForm(context, user, tile),
-              tooltip: 'Edit Tile',
+            Tooltip(
+              message: 'Edit this tile',
+              child: IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => _showTileForm(context, user, tile),
+              ),
             ),
           if (isDeletable)
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () => _confirmDeleteTile(context, tile),
-              tooltip: 'Delete Tile',
+            Tooltip(
+              message: 'Delete this tile',
+              child: IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () => _confirmDeleteTile(context, tile),
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
         ],
       ),
@@ -197,7 +389,12 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(tile.name),
+        title: Text(
+          tile.name,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,9 +435,18 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
         children: [
           Text(
             '$label:',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
           ),
-          Text(value),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );
@@ -292,162 +498,186 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(isEditing ? 'Edit Tile' : 'Create New Tile'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration:
-                          const InputDecoration(labelText: 'Tile Name *'),
-                      validator: (value) =>
-                          value?.isEmpty ?? true ? 'Name is required' : null,
-                    ),
-                    DropdownButtonFormField<TileSlateType>(
-                      value: _selectedTileSlateType,
-                      decoration:
-                          const InputDecoration(labelText: 'Material Type *'),
-                      items: TileSlateType.values.map((type) {
-                        return DropdownMenuItem(
-                          value: type,
-                          child: Text(_getTileSlateTypeDisplayName(type)),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _selectedTileSlateType = value);
-                        }
-                      },
-                    ),
-                    TextFormField(
-                      controller: manufacturerController,
-                      decoration:
-                          const InputDecoration(labelText: 'Manufacturer *'),
-                      validator: (value) => value?.isEmpty ?? true
-                          ? 'Manufacturer is required'
-                          : null,
-                    ),
-                    TextFormField(
-                      controller: descriptionController,
-                      decoration:
-                          const InputDecoration(labelText: 'Description'),
-                      maxLines: 2,
-                    ),
-                    TextFormField(
-                      controller: heightController,
-                      decoration: const InputDecoration(
-                          labelText: 'Height/Length (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) return 'Height is required';
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: widthController,
-                      decoration: const InputDecoration(
-                          labelText: 'Cover Width (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) return 'Width is required';
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: minGaugeController,
-                      decoration:
-                          const InputDecoration(labelText: 'Min Gauge (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) {
-                          return 'Min gauge is required';
-                        }
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: maxGaugeController,
-                      decoration:
-                          const InputDecoration(labelText: 'Max Gauge (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) {
-                          return 'Max gauge is required';
-                        }
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: minSpacingController,
-                      decoration: const InputDecoration(
-                          labelText: 'Min Spacing (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) {
-                          return 'Min spacing is required';
-                        }
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: maxSpacingController,
-                      decoration: const InputDecoration(
-                          labelText: 'Max Spacing (mm) *'),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value?.isEmpty ?? true) {
-                          return 'Max spacing is required';
-                        }
-                        if (double.tryParse(value!) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    SwitchListTile(
-                      title: const Text('Cross Bonded'),
-                      value: isCrossBonded,
-                      onChanged: (value) {
-                        setState(() => isCrossBonded = value);
-                      },
-                    ),
-                    if (isCrossBonded)
-                      TextFormField(
-                        controller: leftHandTileWidthController,
+          title: Text(
+            isEditing ? 'Edit Tile' : 'Create New Tile',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+              minWidth: 300,
+            ),
+            child: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildTextField(
+                        controller: nameController,
+                        label: 'Tile Name *',
+                        validator: (value) =>
+                            value?.isEmpty ?? true ? 'Name is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<TileSlateType>(
+                        value: _selectedTileSlateType,
                         decoration: const InputDecoration(
-                            labelText: 'Left Hand Tile Width (mm)'),
+                          labelText: 'Material Type *',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                        ),
+                        items: TileSlateType.values.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Text(_getTileSlateTypeDisplayName(type)),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _selectedTileSlateType = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: manufacturerController,
+                        label: 'Manufacturer *',
+                        validator: (value) => value?.isEmpty ?? true
+                            ? 'Manufacturer is required'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: descriptionController,
+                        label: 'Description',
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: heightController,
+                        label: 'Height/Length (mm) *',
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value != null && value.isNotEmpty) {
-                            if (double.tryParse(value) == null) {
-                              return 'Invalid number';
-                            }
+                          if (value?.isEmpty ?? true) {
+                            return 'Height is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
                           }
                           return null;
                         },
                       ),
-                  ],
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: widthController,
+                        label: 'Cover Width (mm) *',
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'Width is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: minGaugeController,
+                        label: 'Min Gauge (mm) *',
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'Min gauge is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: maxGaugeController,
+                        label: 'Max Gauge (mm) *',
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'Max gauge is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: minSpacingController,
+                        label: 'Min Spacing (mm) *',
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'Min spacing is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: maxSpacingController,
+                        label: 'Max Spacing (mm) *',
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'Max spacing is required';
+                          }
+                          if (double.tryParse(value!) == null) {
+                            return 'Invalid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        title: const Text('Cross Bonded'),
+                        value: isCrossBonded,
+                        onChanged: (value) {
+                          setState(() => isCrossBonded = value);
+                        },
+                        activeColor: Theme.of(context).colorScheme.primary,
+                      ),
+                      if (isCrossBonded) ...[
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          controller: leftHandTileWidthController,
+                          label: 'Left Hand Tile Width (mm)',
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value != null && value.isNotEmpty) {
+                              if (double.tryParse(value) == null) {
+                                return 'Invalid number';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -541,6 +771,28 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     );
   }
 
+  /// Helper to build styled text fields for the form
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      ),
+      keyboardType: keyboardType,
+      validator: validator,
+      maxLines: maxLines,
+    );
+  }
+
   /// Confirm dialog before deleting a tile
   void _confirmDeleteTile(BuildContext context, TileModel tile) {
     showDialog(
@@ -548,7 +800,9 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Tile?'),
         content: Text(
-            'Are you sure you want to delete "${tile.name}"? This action cannot be undone.'),
+          'Are you sure you want to delete "${tile.name}"? This action cannot be undone.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

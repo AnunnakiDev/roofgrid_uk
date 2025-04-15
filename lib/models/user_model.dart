@@ -12,6 +12,9 @@ class UserModel {
   final String? email;
   final String? displayName;
   final String? photoURL;
+  final String? phone; // Added field for phone number
+  final String? subscription; // Added field for subscription status
+  final String? profileImage; // Added field for profile image URL
   final UserRole role;
   final DateTime? proTrialStartDate;
   final DateTime? proTrialEndDate;
@@ -25,6 +28,9 @@ class UserModel {
     this.email,
     this.displayName,
     this.photoURL,
+    this.phone,
+    this.subscription,
+    this.profileImage,
     this.role = UserRole.free,
     this.proTrialStartDate,
     this.proTrialEndDate,
@@ -44,11 +50,17 @@ class UserModel {
     bool? isAdmin,
     DateTime? createdAt,
     DateTime? lastLoginAt,
+    String? phone,
+    String? subscription,
+    String? profileImage,
   }) : this(
           id: user.uid,
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
+          phone: phone,
+          subscription: subscription,
+          profileImage: profileImage,
           role: isPro
               ? UserRole.pro
               : (isAdmin == true ? UserRole.admin : UserRole.free),
@@ -71,6 +83,9 @@ class UserModel {
       email: data['email'] as String?,
       displayName: data['displayName'] as String?,
       photoURL: data['photoURL'] as String?,
+      phone: data['phone'] as String?, // Added field
+      subscription: data['subscription'] as String?, // Added field
+      profileImage: data['profileImage'] as String?, // Added field
       role: UserRole.values.firstWhere(
         (r) =>
             r.toString().split('.').last == (data['role'] as String? ?? 'free'),
@@ -100,6 +115,9 @@ class UserModel {
     String? email,
     String? displayName,
     String? photoURL,
+    String? phone,
+    String? subscription,
+    String? profileImage,
     UserRole? role,
     bool? isAdmin,
     DateTime? proTrialStartDate,
@@ -113,6 +131,9 @@ class UserModel {
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       photoURL: photoURL ?? this.photoURL,
+      phone: phone ?? this.phone,
+      subscription: subscription ?? this.subscription,
+      profileImage: profileImage ?? this.profileImage,
       role: role ?? this.role,
       isAdmin: isAdmin ?? this.isAdmin,
       proTrialStartDate: proTrialStartDate ?? this.proTrialStartDate,
@@ -129,6 +150,9 @@ class UserModel {
       'email': email,
       'displayName': displayName,
       'photoURL': photoURL,
+      'phone': phone,
+      'subscription': subscription,
+      'profileImage': profileImage,
       'role': role.toString().split('.').last,
       'isAdmin': isAdmin,
       'proTrialStartDate': proTrialStartDate != null
@@ -151,6 +175,9 @@ class UserModel {
       email: json['email'] as String?,
       displayName: json['displayName'] as String?,
       photoURL: json['photoURL'] as String?,
+      phone: json['phone'] as String?,
+      subscription: json['subscription'] as String?,
+      profileImage: json['profileImage'] as String?,
       role: UserRole.values.firstWhere(
         (r) =>
             r.toString().split('.').last == (json['role'] as String? ?? 'free'),

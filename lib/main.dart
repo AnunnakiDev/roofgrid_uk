@@ -6,6 +6,7 @@ import 'package:roofgrid_uk/utils/app_theme.dart';
 import 'package:roofgrid_uk/firebase_options.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +14,10 @@ void main() async {
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await FirebaseAppCheck.instance.activate(
+      androidProvider:
+          AndroidProvider.debug, // Use debug provider for development
     );
     await FirebaseAnalytics.instance.logAppOpen();
   } catch (e) {

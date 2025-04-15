@@ -29,6 +29,8 @@ class TileModel {
   final double maxSpacing;
   final double? leftHandTileWidth;
   final bool defaultCrossBonded;
+  final String? dataSheet; // Added field for datasheet URL
+  final String? image; // Added field for image URL
 
   TileModel({
     required this.id,
@@ -49,37 +51,74 @@ class TileModel {
     required this.maxSpacing,
     this.leftHandTileWidth,
     required this.defaultCrossBonded,
+    this.dataSheet,
+    this.image,
   }) : updatedAt = updatedAt ?? DateTime.now();
 
-  String get materialTypeString => materialType.toString().split('.').last;
+  String get materialTypeString {
+    switch (materialType) {
+      case TileSlateType.slate:
+        return 'Slate';
+      case TileSlateType.fibreCementSlate:
+        return 'Fibre Cement Slate';
+      case TileSlateType.interlockingTile:
+        return 'Interlocking Tile';
+      case TileSlateType.plainTile:
+        return 'Plain Tile';
+      case TileSlateType.concreteTile:
+        return 'Concrete Tile';
+      case TileSlateType.pantile:
+        return 'Pantile';
+      case TileSlateType.unknown:
+        return 'Unknown';
+    }
+  }
 
   factory TileModel.fromJson(Map<String, dynamic> json) {
+    // Map Firestore TileSlateType string to TileSlateType enum
+    TileSlateType parseTileSlateType(String? type) {
+      switch (type?.trim()) {
+        case 'Slate':
+          return TileSlateType.slate;
+        case 'Fibre Cement Slate':
+          return TileSlateType.fibreCementSlate;
+        case 'Interlocking Tile':
+          return TileSlateType.interlockingTile;
+        case 'Plain Tile':
+          return TileSlateType.plainTile;
+        case 'Concrete Tile':
+          return TileSlateType.concreteTile;
+        case 'Pantile':
+          return TileSlateType.pantile;
+        case 'Unknown':
+        default:
+          return TileSlateType.unknown;
+      }
+    }
+
     return TileModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      manufacturer: json['manufacturer'] as String,
-      materialType: TileSlateType.values.firstWhere(
-        (e) => e.toString() == 'TileSlateType.${json['materialType']}',
-        orElse: () => TileSlateType.unknown,
-      ),
-      description: json['description'] as String,
-      isPublic: json['isPublic'] as bool,
-      isApproved: json['isApproved'] as bool,
-      createdById: json['createdById'] as String,
-      createdAt: (json['createdAt'] as Timestamp).toDate(),
-      updatedAt: json['updatedAt'] != null
-          ? (json['updatedAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      slateTileHeight: (json['slateTileHeight'] as num).toDouble(),
-      tileCoverWidth: (json['tileCoverWidth'] as num).toDouble(),
-      minGauge: (json['minGauge'] as num).toDouble(),
-      maxGauge: (json['maxGauge'] as num).toDouble(),
-      minSpacing: (json['minSpacing'] as num).toDouble(),
-      maxSpacing: (json['maxSpacing'] as num).toDouble(),
-      leftHandTileWidth: json['leftHandTileWidth'] != null
-          ? (json['leftHandTileWidth'] as num).toDouble()
+      id: json['id'].toString(), // Handles int or String
+      name: json['name'] as String? ?? '',
+      manufacturer: json['manufacturer'] as String? ?? '',
+      materialType: parseTileSlateType(json['TileSlateType'] as String?),
+      description: json['description'] as String? ?? '',
+      isPublic: json['isPublic'] as bool? ?? false,
+      isApproved: json['isApproved'] as bool? ?? false,
+      createdById: json['createdById'].toString(), // Handles int or String
+      createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      slateTileHeight: (json['slateTileHeight'] as num?)?.toDouble() ?? 0.0,
+      tileCoverWidth: (json['tileCoverWidth'] as num?)?.toDouble() ?? 0.0,
+      minGauge: (json['minGauge'] as num?)?.toDouble() ?? 0.0,
+      maxGauge: (json['maxGauge'] as num?)?.toDouble() ?? 0.0,
+      minSpacing: (json['minSpacing'] as num?)?.toDouble() ?? 0.0,
+      maxSpacing: (json['maxSpacing'] as num?)?.toDouble() ?? 0.0,
+      leftHandTileWidth: json['LHTileWidth'] != null
+          ? (json['LHTileWidth'] as num).toDouble()
           : null,
-      defaultCrossBonded: json['defaultCrossBonded'] as bool,
+      defaultCrossBonded: json['defaultCrossBonded'] as bool? ?? false,
+      dataSheet: json['dataSheet'] as String?,
+      image: json['image'] as String?,
     );
   }
 
@@ -88,7 +127,7 @@ class TileModel {
       'id': id,
       'name': name,
       'manufacturer': manufacturer,
-      'materialType': materialTypeString,
+      'TileSlateType': materialTypeString, // Store as human-readable string
       'description': description,
       'isPublic': isPublic,
       'isApproved': isApproved,
@@ -101,8 +140,10 @@ class TileModel {
       'maxGauge': maxGauge,
       'minSpacing': minSpacing,
       'maxSpacing': maxSpacing,
-      if (leftHandTileWidth != null) 'leftHandTileWidth': leftHandTileWidth,
+      if (leftHandTileWidth != null) 'LHTileWidth': leftHandTileWidth,
       'defaultCrossBonded': defaultCrossBonded,
+      if (dataSheet != null) 'dataSheet': dataSheet,
+      if (image != null) 'image': image,
     };
   }
 
@@ -125,6 +166,8 @@ class TileModel {
     double? maxSpacing,
     double? leftHandTileWidth,
     bool? defaultCrossBonded,
+    String? dataSheet,
+    String? image,
   }) {
     return TileModel(
       id: id ?? this.id,
@@ -145,6 +188,8 @@ class TileModel {
       maxSpacing: maxSpacing ?? this.maxSpacing,
       leftHandTileWidth: leftHandTileWidth ?? this.leftHandTileWidth,
       defaultCrossBonded: defaultCrossBonded ?? this.defaultCrossBonded,
+      dataSheet: dataSheet ?? this.dataSheet,
+      image: image ?? this.image,
     );
   }
 }

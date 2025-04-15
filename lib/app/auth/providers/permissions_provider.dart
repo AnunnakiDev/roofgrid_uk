@@ -11,8 +11,7 @@ class PermissionsService {
   // Constants for maximum allowed features by user type
   static const int _maxRaftersForFree = 1;
   static const int _maxWidthsForFree = 1;
-  static const int _maxTilesForFree =
-      0; // Free users don't get access to tile database
+// Free users don't get access to tile database
   static const bool _allowCustomTilesForFree = false;
   static const bool _allowExportForFree = false;
   static const bool _allowSaveProjectsForFree =
