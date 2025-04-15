@@ -941,9 +941,9 @@ class _VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
       rafterHeights.add(height);
     }
 
-    await ref.read(calculatorProvider.notifier).calculateVertical(
-          rafterHeights: rafterHeights,
-        );
+    await ref
+        .read(calculatorProvider.notifier)
+        .calculateVertical(rafterHeights);
   }
 
   Widget _buildManualTileInputs() {
@@ -1663,9 +1663,7 @@ class _HorizontalCalculatorTabState
       widths.add(width);
     }
 
-    await ref.read(calculatorProvider.notifier).calculateHorizontal(
-          widths: widths,
-        );
+    await ref.read(calculatorProvider.notifier).calculateHorizontal(widths);
   }
 
   Widget _buildHorizontalResultsCard(CalculatorState calcState) {

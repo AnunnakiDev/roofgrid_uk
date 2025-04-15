@@ -107,13 +107,7 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
     state = state.copyWith(crossBonded: value).clearResults();
   }
 
-  Future<void> calculateVertical({
-    required List<double> rafterHeights,
-    double? courseOffset,
-    double? eaveBatten,
-    double? ridgeOffset,
-    bool crossBonded = false,
-  }) async {
+  Future<void> calculateVertical(List<double> rafterHeights) async {
     if (state.selectedTile == null) {
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
@@ -146,11 +140,7 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
     }
   }
 
-  Future<void> calculateHorizontal(
-    List<double> widths, {
-    required List<double> widths,
-    bool crossBonded = false,
-  }) async {
+  Future<void> calculateHorizontal(List<double> widths) async {
     if (state.selectedTile == null) {
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
@@ -170,7 +160,7 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
         abutmentSide: state.abutmentSide,
         useLHTile: state.useLHTile,
         lhTileWidth: state.selectedTile!.leftHandTileWidth ?? 0,
-        crossBonded: crossBonded ? 'YES' : 'NO',
+        crossBonded: state.crossBonded,
       );
 
       final result = HorizontalCalculationService.calculateHorizontal(input);
@@ -207,6 +197,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       isApproved: true,
       createdById: 'system',
       createdAt: now,
+      updatedAt: now,
       slateTileHeight: 500, // mm
       minGauge: 100, // mm
       maxGauge: 200, // mm
@@ -225,6 +216,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       isApproved: true,
       createdById: 'system',
       createdAt: now,
+      updatedAt: now,
       slateTileHeight: 265, // mm
       minGauge: 85, // mm
       maxGauge: 115, // mm
@@ -243,6 +235,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
       isApproved: true,
       createdById: 'system',
       createdAt: now,
+      updatedAt: now,
       slateTileHeight: 420, // mm
       minGauge: 310, // mm
       maxGauge: 345, // mm

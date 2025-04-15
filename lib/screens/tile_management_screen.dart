@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
-import 'package:roofgrid_uk/models/tiles/services/tile_service.dart';
+import 'package:roofgrid_uk/providers/tile_provider.dart';
 
 /// Screen for managing tiles - Pro users can view all tiles from the database,
 /// while free users can only create and manage their own custom tiles
@@ -17,13 +18,18 @@ class TileManagementScreen extends ConsumerStatefulWidget {
 
 class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   bool _isLoading = false;
+  TileSlateType? _selectedTileSlateType;
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final userAsync = ref.watch(currentUserProvider);
 
     // Safety check - redirect if not logged in
-    if (authState.userId == null) {
+    if (!authState.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.go('/auth/login');
+      });
       return const Scaffold(
         body: Center(
           child: Text('Please log in to access this feature'),
@@ -102,9 +108,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
   /// Content for Free users - can only see and edit their own tiles
   Widget _buildFreeUserContent(UserModel user) {
-    // Watch only user's custom tiles
-    final tilesAsync = ref.watch(userTilesProvider(user.id));
-
+    // Free users have no saved tiles; show a message
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -118,22 +122,11 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             textAlign: TextAlign.center,
           ),
         ),
-
-        // User's custom tiles list
-        Expanded(
-          child: tilesAsync.when(
-            data: (tiles) {
-              if (tiles.isEmpty) {
-                return const Center(
-                  child: Text('No custom tiles found. Create your first tile!'),
-                );
-              }
-
-              return _buildTileList(tiles, user);
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(
-              child: Text('Error loading tiles: ${err.toString()}'),
+        const Expanded(
+          child: Center(
+            child: Text(
+              'Upgrade to Pro to save and manage tiles.',
+              style: TextStyle(fontSize: 16),
             ),
           ),
         ),
@@ -144,7 +137,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   /// Build tile list with options to edit/delete
   Widget _buildTileList(List<TileModel> tiles, UserModel user) {
     // Group tiles by material type
-    final groupedTiles = <MaterialType, List<TileModel>>{};
+    final groupedTiles = <TileSlateType, List<TileModel>>{};
     for (final tile in tiles) {
       if (!groupedTiles.containsKey(tile.materialType)) {
         groupedTiles[tile.materialType] = [];
@@ -155,11 +148,11 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     return ListView.builder(
       itemCount: groupedTiles.keys.length,
       itemBuilder: (context, index) {
-        final materialType = groupedTiles.keys.elementAt(index);
-        final tilesInGroup = groupedTiles[materialType]!;
+        final tileSlateType = groupedTiles.keys.elementAt(index);
+        final tilesInGroup = groupedTiles[tileSlateType]!;
 
         return ExpansionTile(
-          title: Text(_getMaterialTypeDisplayName(materialType)),
+          title: Text(_getTileSlateTypeDisplayName(tileSlateType)),
           subtitle: Text('${tilesInGroup.length} tiles'),
           children: tilesInGroup
               .map((tile) => _buildTileListItem(tile, user))
@@ -211,7 +204,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _infoRow('Material Type',
-                  _getMaterialTypeDisplayName(tile.materialType)),
+                  _getTileSlateTypeDisplayName(tile.materialType)),
               _infoRow('Manufacturer', tile.manufacturer),
               _infoRow('Height/Length', '${tile.slateTileHeight} mm'),
               _infoRow('Cover Width', '${tile.tileCoverWidth} mm'),
@@ -256,6 +249,15 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   /// Show form to create or edit a tile
   void _showTileForm(
       BuildContext context, UserModel user, TileModel? existingTile) {
+    if (!user.isPro) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upgrade to Pro to save and manage tiles.'),
+        ),
+      );
+      return;
+    }
+
     final formKey = GlobalKey<FormState>();
     final isEditing = existingTile != null;
 
@@ -283,8 +285,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     );
 
     // Current values
-    MaterialType selectedMaterialType =
-        existingTile?.materialType ?? MaterialType.slate;
+    _selectedTileSlateType = existingTile?.materialType ?? TileSlateType.slate;
     bool isCrossBonded = existingTile?.defaultCrossBonded ?? false;
 
     showDialog(
@@ -308,19 +309,19 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                       validator: (value) =>
                           value?.isEmpty ?? true ? 'Name is required' : null,
                     ),
-                    DropdownButtonFormField<MaterialType>(
-                      value: selectedMaterialType,
+                    DropdownButtonFormField<TileSlateType>(
+                      value: _selectedTileSlateType,
                       decoration:
                           const InputDecoration(labelText: 'Material Type *'),
-                      items: MaterialType.values.map((type) {
+                      items: TileSlateType.values.map((type) {
                         return DropdownMenuItem(
                           value: type,
-                          child: Text(_getMaterialTypeDisplayName(type)),
+                          child: Text(_getTileSlateTypeDisplayName(type)),
                         );
                       }).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          setState(() => selectedMaterialType = value);
+                          setState(() => _selectedTileSlateType = value);
                         }
                       },
                     ),
@@ -463,10 +464,10 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
                   // Create or update the tile
                   final TileModel tileData = isEditing
-                      ? existingTile.copyWith(
+                      ? existingTile!.copyWith(
                           name: nameController.text,
                           manufacturer: manufacturerController.text,
-                          materialType: selectedMaterialType,
+                          materialType: _selectedTileSlateType!,
                           description: descriptionController.text,
                           slateTileHeight: double.parse(heightController.text),
                           tileCoverWidth: double.parse(widthController.text),
@@ -485,13 +486,14 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                           id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
                           name: nameController.text,
                           manufacturer: manufacturerController.text,
-                          materialType: selectedMaterialType,
+                          materialType: _selectedTileSlateType!,
                           description: descriptionController.text,
                           isPublic:
                               false, // User-created tiles are private by default
                           isApproved: false,
                           createdById: user.id,
                           createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
                           slateTileHeight: double.parse(heightController.text),
                           tileCoverWidth: double.parse(widthController.text),
                           minGauge: double.parse(minGaugeController.text),
@@ -507,16 +509,15 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
                   setState(() => _isLoading = true);
 
-                  bool success;
                   if (isEditing) {
-                    success = await tileService.updateTile(tileData);
+                    await tileService.updateTile(tileData);
                   } else {
-                    success = await tileService.saveTile(tileData);
+                    await tileService.createTile(tileData);
                   }
 
                   setState(() => _isLoading = false);
 
-                  if (success && mounted) {
+                  if (mounted) {
                     Navigator.of(context).pop();
                     // Force refresh providers
                     ref.refresh(userTilesProvider(user.id));
@@ -558,14 +559,14 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
               Navigator.of(context).pop();
 
               final tileService = ref.read(tileServiceProvider);
-              final user = ref.read(authProvider).user;
+              final user = ref.read(currentUserProvider).value;
 
               if (user != null) {
                 setState(() => _isLoading = true);
-                final success = await tileService.deleteTile(tile.id);
+                await tileService.deleteTile(tile.id, user.id);
                 setState(() => _isLoading = false);
 
-                if (success) {
+                if (mounted) {
                   ref.refresh(userTilesProvider(user.id));
                   if (user.isPro) {
                     ref.refresh(allAvailableTilesProvider(user.id));
@@ -581,21 +582,21 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   }
 
   /// Helper to get a display-friendly name for material types
-  String _getMaterialTypeDisplayName(MaterialType type) {
+  String _getTileSlateTypeDisplayName(TileSlateType type) {
     switch (type) {
-      case MaterialType.slate:
+      case TileSlateType.slate:
         return 'Natural Slate';
-      case MaterialType.fibreCementSlate:
+      case TileSlateType.fibreCementSlate:
         return 'Fibre Cement Slate';
-      case MaterialType.interlockingTile:
+      case TileSlateType.interlockingTile:
         return 'Interlocking Tile';
-      case MaterialType.plainTile:
+      case TileSlateType.plainTile:
         return 'Plain Tile';
-      case MaterialType.concreteTile:
+      case TileSlateType.concreteTile:
         return 'Concrete Tile';
-      case MaterialType.pantile:
+      case TileSlateType.pantile:
         return 'Pantile';
-      case MaterialType.unknown:
+      case TileSlateType.unknown:
         return 'Unknown Type';
     }
   }

@@ -14,22 +14,9 @@ import 'package:roofgrid_uk/screens/support/faq_screen.dart';
 import 'package:roofgrid_uk/screens/support/legal_screen.dart';
 import 'package:roofgrid_uk/screens/support/contact_screen.dart';
 import 'package:roofgrid_uk/screens/subscription_screen.dart';
+import 'package:roofgrid_uk/screens/saved_results_screen.dart';
+import 'package:roofgrid_uk/screens/tile_management_screen.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
-
-// Placeholder screens (to be replaced with actual implementations)
-class ResultsScreen extends StatelessWidget {
-  const ResultsScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Results Screen')));
-}
-
-class TilesScreen extends StatelessWidget {
-  const TilesScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Tiles Screen')));
-}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -42,7 +29,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isGoingToAuth = state.uri.path.startsWith('/auth');
       final isSplash = state.uri.path == '/splash';
 
-      // Skip redirect logic for the splash screen; let SplashScreen handle navigation
       if (isSplash) {
         return null;
       }
@@ -55,11 +41,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/home';
       }
 
-      // Handle admin route access
       if (isLoggedIn && state.uri.path == '/admin') {
         final user = userAsync.value;
         if (user == null) {
-          // User data not loaded yet; redirect to home as a fallback
           return '/home';
         }
         if (user.role != UserRole.admin) {
@@ -124,11 +108,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/results',
-        builder: (context, state) => const ResultsScreen(),
+        builder: (context, state) => const SavedResultsScreen(),
       ),
       GoRoute(
         path: '/tiles',
-        builder: (context, state) => const TilesScreen(),
+        builder: (context, state) => const TileManagementScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
