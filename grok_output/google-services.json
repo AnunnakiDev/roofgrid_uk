@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "928783649894",
+    "project_id": "roofgriduk-f2f56",
+    "storage_bucket": "roofgriduk-f2f56.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928783649894:android:ff5b08a8b5753f8e4271a7",
+        "android_client_info": {
+          "package_name": "com.example.roofgrid_uk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

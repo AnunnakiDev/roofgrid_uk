@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,9 @@ import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
 
 /// Screen for managing tiles - Pro users can view all tiles from the database,
 /// while free users see a greyed-out section with an "Upgrade to Pro" CTA
@@ -21,6 +25,10 @@ class TileManagementScreen extends ConsumerStatefulWidget {
 class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   bool _isLoading = false;
   TileSlateType? _selectedTileSlateType;
+  File? _imageFile;
+  File? _dataSheetFile;
+  String? _imageUrl;
+  String? _dataSheetUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +165,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
         return _buildTileList(tiles, user);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(
+      error: (err, stackTrace) => Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -346,6 +354,19 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     final bool isEditable = tile.createdById == user.id ||
         (user.isPro && tile.createdById == 'system');
     final bool isDeletable = tile.createdById == user.id;
+    final bool canSubmit = !tile.isPublic ||
+        !tile.isApproved; // Show Submit button if not public/approved
+    final bool isPending =
+        tile.isPublic && !tile.isApproved; // Tile is pending review
+    final bool canShowSubmitButton = (user.isPro || user.isAdmin) &&
+        tile.createdById == user.id &&
+        canSubmit;
+
+    // Debug log to check why Submit button might not be showing
+    print('Tile ${tile.name}: canSubmit=$canSubmit, isPending=$isPending, '
+        'canShowSubmitButton=$canShowSubmitButton, user.isPro=${user.isPro}, '
+        'user.isAdmin=${user.isAdmin}, tile.isPublic=${tile.isPublic}, '
+        'tile.isApproved=${tile.isApproved}, tile.createdById=${tile.createdById}, user.id=${user.id}');
 
     return ListTile(
       title: Text(
@@ -353,7 +374,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
         style: Theme.of(context).textTheme.titleMedium,
       ),
       subtitle: Text(
-        '${tile.manufacturer} - ${tile.description}',
+        '${tile.manufacturer} - ${tile.description}${isPending ? ' (Pending Review)' : ''}',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -378,10 +399,64 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
             ),
+          if (canShowSubmitButton) // Show Submit for Pro/Admin user's own tiles
+            Tooltip(
+              message: isPending
+                  ? 'Tile is pending review'
+                  : 'Submit for admin review',
+              child: IconButton(
+                icon: const Icon(Icons.upload),
+                onPressed: isPending
+                    ? null // Disable if pending review
+                    : () => _submitTileForReview(context, tile, user),
+                color: isPending
+                    ? Colors.grey
+                    : Theme.of(context).colorScheme.primary,
+              ),
+            ),
         ],
       ),
       onTap: () => _showTileDetails(context, tile),
     );
+  }
+
+  /// Submit a tile for admin review
+  void _submitTileForReview(
+      BuildContext context, TileModel tile, UserModel user) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final tileService = ref.read(tileServiceProvider);
+      final updatedTile = tile.copyWith(
+        isPublic: true,
+        isApproved: false,
+        updatedAt: DateTime.now(),
+      );
+      await tileService.updateTile(updatedTile);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tile submitted for admin review.'),
+          ),
+        );
+        // Refresh the tile list
+        ref.refresh(userTilesProvider(user.id));
+        ref.refresh(allAvailableTilesProvider(user.id));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error submitting tile: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   /// Show detailed tile information
@@ -400,6 +475,31 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Placeholder for tile image
+              Center(
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  color: Colors.grey[300],
+                  child: tile.image != null && tile.image!.isNotEmpty
+                      ? Image.network(
+                          tile.image!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                            Icons.broken_image,
+                            size: 50,
+                            color: Colors.grey,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.image,
+                          size: 50,
+                          color: Colors.grey,
+                        ),
+                ),
+              ),
+              const SizedBox(height: 16),
               _infoRow('Material Type',
                   _getTileSlateTypeDisplayName(tile.materialType)),
               _infoRow('Manufacturer', tile.manufacturer),
@@ -413,6 +513,52 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
               if (tile.leftHandTileWidth != null && tile.leftHandTileWidth! > 0)
                 _infoRow(
                     'Left Hand Tile Width', '${tile.leftHandTileWidth} mm'),
+              if (tile.dataSheet != null && tile.dataSheet!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'View Data Sheet:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final uri = Uri.tryParse(tile.dataSheet!);
+                          if (uri != null) {
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri,
+                                  mode: LaunchMode.externalApplication);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Could not open datasheet. Try opening in browser.'),
+                                ),
+                              );
+                              // Fallback to browser
+                              if (await canLaunchUrl(
+                                  Uri.parse('https://www.google.com'))) {
+                                await launchUrl(
+                                    Uri.parse('https://www.google.com'),
+                                    mode: LaunchMode.externalApplication);
+                              }
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Invalid datasheet URL.'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('View Data Sheet'),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -493,6 +639,16 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     // Current values
     _selectedTileSlateType = existingTile?.materialType ?? TileSlateType.slate;
     bool isCrossBonded = existingTile?.defaultCrossBonded ?? false;
+
+    // Initialize file states
+    _imageFile = isEditing && existingTile?.image != null
+        ? File(existingTile!.image!)
+        : null;
+    _dataSheetFile = isEditing && existingTile?.dataSheet != null
+        ? File(existingTile!.dataSheet!)
+        : null;
+    _imageUrl = existingTile?.image;
+    _dataSheetUrl = existingTile?.dataSheet;
 
     showDialog(
       context: context,
@@ -676,6 +832,66 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                           },
                         ),
                       ],
+                      const SizedBox(height: 16),
+                      // Image upload field
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _imageFile != null
+                                  ? 'Image: ${_imageFile!.path.split('/').last}'
+                                  : 'No image selected',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final result =
+                                  await FilePicker.platform.pickFiles(
+                                type: FileType.image,
+                              );
+                              if (result != null &&
+                                  result.files.single.path != null) {
+                                setState(() {
+                                  _imageFile = File(result.files.single.path!);
+                                });
+                              }
+                            },
+                            child: const Text('Upload Image'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Datasheet upload field
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _dataSheetFile != null
+                                  ? 'DataSheet: ${_dataSheetFile!.path.split('/').last}'
+                                  : 'No datasheet selected',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final result =
+                                  await FilePicker.platform.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: ['pdf'],
+                              );
+                              if (result != null &&
+                                  result.files.single.path != null) {
+                                setState(() {
+                                  _dataSheetFile =
+                                      File(result.files.single.path!);
+                                });
+                              }
+                            },
+                            child: const Text('Upload DataSheet (PDF)'),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -692,9 +908,26 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                 if (formKey.currentState!.validate()) {
                   final tileService = ref.read(tileServiceProvider);
 
+                  // Upload image and datasheet if selected
+                  if (_imageFile != null) {
+                    final storageRef = FirebaseStorage.instance.ref().child(
+                        'tiles/${user.id}/${_imageFile!.path.split('/').last}');
+                    await storageRef.putFile(_imageFile!);
+                    _imageUrl = await storageRef.getDownloadURL();
+                    print('Image URL: $_imageUrl'); // Debug log
+                  }
+
+                  if (_dataSheetFile != null) {
+                    final storageRef = FirebaseStorage.instance.ref().child(
+                        'tiles/${user.id}/${_dataSheetFile!.path.split('/').last}');
+                    await storageRef.putFile(_dataSheetFile!);
+                    _dataSheetUrl = await storageRef.getDownloadURL();
+                    print('DataSheet URL: $_dataSheetUrl'); // Debug log
+                  }
+
                   // Create or update the tile
                   final TileModel tileData = isEditing
-                      ? existingTile.copyWith(
+                      ? existingTile!.copyWith(
                           name: nameController.text,
                           manufacturer: manufacturerController.text,
                           materialType: _selectedTileSlateType!,
@@ -711,6 +944,8 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                               ? double.parse(leftHandTileWidthController.text)
                               : null,
                           updatedAt: DateTime.now(),
+                          image: _imageUrl,
+                          dataSheet: _dataSheetUrl,
                         )
                       : TileModel(
                           id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
@@ -718,8 +953,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                           manufacturer: manufacturerController.text,
                           materialType: _selectedTileSlateType!,
                           description: descriptionController.text,
-                          isPublic:
-                              false, // User-created tiles are private by default
+                          isPublic: false,
                           isApproved: false,
                           createdById: user.id,
                           createdAt: DateTime.now(),
@@ -735,6 +969,8 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                                   leftHandTileWidthController.text.isNotEmpty
                               ? double.parse(leftHandTileWidthController.text)
                               : null,
+                          image: _imageUrl,
+                          dataSheet: _dataSheetUrl,
                         );
 
                   setState(() => _isLoading = true);
