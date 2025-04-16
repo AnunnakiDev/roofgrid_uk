@@ -694,7 +694,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
                   // Create or update the tile
                   final TileModel tileData = isEditing
-                      ? existingTile!.copyWith(
+                      ? existingTile.copyWith(
                           name: nameController.text,
                           manufacturer: manufacturerController.text,
                           materialType: _selectedTileSlateType!,

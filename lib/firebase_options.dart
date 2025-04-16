@@ -61,17 +61,17 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
-    appId: '1:928783649894:ios:ff5b08a8b5753f8e4271a7',
+    appId: '1:928783649894:ios:39133267206dc8c34271a7',
     messagingSenderId: '928783649894',
     projectId: 'roofgriduk-f2f56',
     storageBucket: 'roofgriduk-f2f56.firebasestorage.app',
     iosClientId: 'YOUR_IOS_CLIENT_ID', // Replace with actual macOS client ID
-    iosBundleId: 'com.example.roofgrid_uk',
+    iosBundleId: 'com.company.roofgriduk',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY',
-    appId: '1:928783649894:web:8a971a8e754326b94b9a44',
+    appId: '1:928783649894:ios:39133267206dc8c34271a7',
     messagingSenderId: '928783649894',
     projectId: 'roofgriduk-f2f56',
     authDomain: 'roofgriduk-f2f56.firebaseapp.com',

@@ -7,9 +7,9 @@ class TileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> createTile(TileModel tile) async {
-    // Save tile in the user's subcollection: tiles/$userId/$tileId
+    // Save tile in the user's subcollection: users/$userId/tiles/$tileId
     await _firestore
-        .collection('tiles')
+        .collection('users')
         .doc(tile.createdById)
         .collection('tiles')
         .doc(tile.id)
@@ -17,9 +17,9 @@ class TileService {
   }
 
   Future<void> updateTile(TileModel tile) async {
-    // Update tile in the user's subcollection: tiles/$userId/$tileId
+    // Update tile in the user's subcollection: users/$userId/tiles/$tileId
     await _firestore
-        .collection('tiles')
+        .collection('users')
         .doc(tile.createdById)
         .collection('tiles')
         .doc(tile.id)
@@ -27,9 +27,9 @@ class TileService {
   }
 
   Future<void> deleteTile(String tileId, String userId) async {
-    // Delete tile from the user's subcollection: tiles/$userId/$tileId
+    // Delete tile from the user's subcollection: users/$userId/tiles/$tileId
     await _firestore
-        .collection('tiles')
+        .collection('users')
         .doc(userId)
         .collection('tiles')
         .doc(tileId)
@@ -39,7 +39,7 @@ class TileService {
   Future<void> saveTile(TileModel tile) async {
     // Check if the tile exists to decide between create and update
     final tileDoc = await _firestore
-        .collection('tiles')
+        .collection('users')
         .doc(tile.createdById)
         .collection('tiles')
         .doc(tile.id)
@@ -55,7 +55,7 @@ class TileService {
   Future<List<TileModel>> fetchUserTiles(String userId) async {
     print('Fetching user tiles for userId: $userId'); // Debug log
     final snapshot = await _firestore
-        .collection('tiles')
+        .collection('users')
         .doc(userId)
         .collection('tiles')
         .get();
@@ -64,9 +64,9 @@ class TileService {
 
   Future<List<TileModel>> fetchAllAvailableTiles(String userId) async {
     print('Fetching all available tiles for userId: $userId'); // Debug log
-    // Fetch public tiles from the top-level tiles collection
+    // Fetch public tiles from the users collection (if stored there)
     final publicSnapshot = await _firestore
-        .collection('tiles')
+        .collectionGroup('tiles')
         .where('isPublic', isEqualTo: true)
         .where('isApproved', isEqualTo: true)
         .get();
@@ -74,7 +74,7 @@ class TileService {
         .map((doc) => TileModel.fromJson(doc.data()))
         .toList();
 
-    // Fetch user tiles from the subcollection: tiles/$userId
+    // Fetch user tiles from the subcollection: users/$userId/tiles
     final userTiles = await fetchUserTiles(userId);
 
     return [...publicTiles, ...userTiles];

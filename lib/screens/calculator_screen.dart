@@ -694,8 +694,7 @@ class _VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                       'Under Eave Batten', '${result.underEaveBatten} mm'),
                 if (result.eaveBatten != null)
                   _resultItem('Eave Batten', '${result.eaveBatten} mm'),
-                if (result.firstBatten != null)
-                  _resultItem('1st Batten', '${result.firstBatten} mm'),
+                _resultItem('1st Batten', '${result.firstBatten} mm'),
                 if (result.cutCourse != null)
                   _resultItem('Cut Course', '${result.cutCourse} mm'),
                 _resultItem('Gauge', result.gauge),
@@ -1708,8 +1707,7 @@ class _HorizontalCalculatorTabState
                   _resultItem('RH Overhang', '${result.rhOverhang} mm'),
                 if (result.cutTile != null)
                   _resultItem('Cut Tile', '${result.cutTile} mm'),
-                if (result.firstMark != null)
-                  _resultItem('First Mark', '${result.firstMark} mm'),
+                _resultItem('First Mark', '${result.firstMark} mm'),
                 if (result.secondMark != null)
                   _resultItem('Second Mark', '${result.secondMark} mm'),
                 _resultItem('Marks', result.marks),

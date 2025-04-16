@@ -11,17 +11,33 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
+
+  // Initialize App Check separately
+  try {
+    // For production, use Play Integrity provider
+    // For development, use debug provider and set the token via emulator
     await FirebaseAppCheck.instance.activate(
+      // androidProvider: AndroidProvider.playIntegrity, // Use Play Integrity for production
       androidProvider:
           AndroidProvider.debug, // Use debug provider for development
     );
+  } catch (e) {
+    debugPrint('App Check initialization failed: $e');
+  }
+
+  // Initialize Analytics
+  try {
     await FirebaseAnalytics.instance.logAppOpen();
   } catch (e) {
-    debugPrint('Firebase initialization failed: $e');
+    debugPrint('Firebase Analytics initialization failed: $e');
   }
 
   runApp(const ProviderScope(child: MyApp()));

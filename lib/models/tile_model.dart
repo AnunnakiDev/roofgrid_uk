@@ -96,6 +96,16 @@ class TileModel {
       }
     }
 
+    // Helper to parse a value that might be a string or number into a double
+    double parseNumber(dynamic value) {
+      if (value is num) {
+        return value.toDouble();
+      } else if (value is String) {
+        return double.tryParse(value) ?? 0.0;
+      }
+      return 0.0;
+    }
+
     return TileModel(
       id: json['id'].toString(), // Handles int or String
       name: json['name'] as String? ?? '',
@@ -107,15 +117,14 @@ class TileModel {
       createdById: json['createdById'].toString(), // Handles int or String
       createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      slateTileHeight: (json['slateTileHeight'] as num?)?.toDouble() ?? 0.0,
-      tileCoverWidth: (json['tileCoverWidth'] as num?)?.toDouble() ?? 0.0,
-      minGauge: (json['minGauge'] as num?)?.toDouble() ?? 0.0,
-      maxGauge: (json['maxGauge'] as num?)?.toDouble() ?? 0.0,
-      minSpacing: (json['minSpacing'] as num?)?.toDouble() ?? 0.0,
-      maxSpacing: (json['maxSpacing'] as num?)?.toDouble() ?? 0.0,
-      leftHandTileWidth: json['LHTileWidth'] != null
-          ? (json['LHTileWidth'] as num).toDouble()
-          : null,
+      slateTileHeight: parseNumber(json['slateTileHeight']),
+      tileCoverWidth: parseNumber(json['tileCoverWidth']),
+      minGauge: parseNumber(json['minGauge']),
+      maxGauge: parseNumber(json['maxGauge']),
+      minSpacing: parseNumber(json['minSpacing']),
+      maxSpacing: parseNumber(json['maxSpacing']),
+      leftHandTileWidth:
+          json['LHTileWidth'] != null ? parseNumber(json['LHTileWidth']) : null,
       defaultCrossBonded: json['defaultCrossBonded'] as bool? ?? false,
       dataSheet: json['dataSheet'] as String?,
       image: json['image'] as String?,
