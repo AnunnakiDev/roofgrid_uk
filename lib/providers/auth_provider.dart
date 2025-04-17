@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -40,16 +41,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId:
-        '796676497165-1cti237566v6smagn7o1huscmticpf69.apps.googleusercontent.com', // Replace with your Web Client ID
+        '796676497165-1cti237566v6smagn7o1huscmticpf69.apps.googleusercontent.com',
     scopes: ['email'],
   );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Toggle reCAPTCHA for development (set to false for emulator testing)
+  final bool _isRecaptchaEnabled = false;
 
   AuthNotifier() : super(const AuthState());
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password, String captchaToken) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+
+      // Simulate CAPTCHA verification during development
+      if (_isRecaptchaEnabled) {
+        // Call Cloud Function to verify CAPTCHA
+        final callable =
+            FirebaseFunctions.instance.httpsCallable('verifyCaptcha');
+        final result = await callable.call({'token': captchaToken});
+        if (result.data['success'] != true) {
+          state = state.copyWith(
+            isLoading: false,
+            error:
+                'CAPTCHA verification failed: ${result.data['message'] ?? ''}',
+          );
+          return false;
+        }
+      } else {
+        print("reCAPTCHA bypassed for development");
+      }
+
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -61,19 +83,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
       );
       return true;
+    } on FirebaseFunctionsException catch (e) {
+      state = state.copyWith(
+        isAuthenticated: false,
+        error: 'CAPTCHA error: ${e.message} (Code: ${e.code})',
+        isLoading: false,
+      );
+      print('FirebaseFunctionsException: ${e.code}, ${e.message}');
+      return false;
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
         isAuthenticated: false,
         error: mapFirebaseError(e.code),
         isLoading: false,
       );
+      print('FirebaseAuthException: ${e.code}, ${e.message}');
       return false;
     } catch (e) {
       state = state.copyWith(
         isAuthenticated: false,
-        error: 'An unexpected error occurred.',
+        error: 'Unexpected error: $e',
         isLoading: false,
       );
+      print('Unexpected error: $e');
       return false;
     }
   }

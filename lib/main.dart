@@ -20,15 +20,13 @@ void main() async {
     debugPrint('Firebase initialization failed: $e');
   }
 
-  // Initialize App Check separately
   try {
-    // For production, use Play Integrity provider
-    // For development, use debug provider and set the token via emulator
     await FirebaseAppCheck.instance.activate(
-      // androidProvider: AndroidProvider.playIntegrity, // Use Play Integrity for production
-      androidProvider:
-          AndroidProvider.debug, // Use debug provider for development
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
     );
+    final token = await FirebaseAppCheck.instance.getToken(true);
+    debugPrint('App Check Debug Token: $token');
   } catch (e) {
     debugPrint('App Check initialization failed: $e');
   }

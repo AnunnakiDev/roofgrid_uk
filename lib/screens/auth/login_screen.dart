@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/widgets/captcha_widget.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +15,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String? _captchaToken;
+  // Toggle reCAPTCHA for development (set to false for emulator testing)
+  final bool _isRecaptchaEnabled = false;
 
   @override
   void dispose() {
@@ -24,33 +28,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
+      if (_isRecaptchaEnabled && _captchaToken == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Please wait for CAPTCHA verification'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        return;
+      }
       final success = await ref.read(authProvider.notifier).login(
             _emailController.text.trim(),
             _passwordController.text.trim(),
+            _captchaToken ?? "",
           );
-      if (success) {
-        // Navigation will be handled by go_router redirect
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(authProvider).error ?? 'Login failed'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+      if (mounted) {
+        if (success) {
+          // Navigation handled by go_router redirect
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ref.read(authProvider).error ?? 'Login failed'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
       }
     }
   }
 
   Future<void> _signInWithGoogle() async {
     final success = await ref.read(authProvider.notifier).signInWithGoogle();
-    if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(ref.read(authProvider).error ?? 'Google Sign-In failed'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+    if (mounted) {
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(ref.read(authProvider).error ?? 'Google Sign-In failed'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 
@@ -104,6 +124,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 16),
+              if (_isRecaptchaEnabled)
+                CaptchaWidget(
+                  onVerified: (token) {
+                    setState(() {
+                      _captchaToken = token;
+                    });
+                  },
+                ),
               const SizedBox(height: 16),
               if (authState.isLoading)
                 const CircularProgressIndicator()

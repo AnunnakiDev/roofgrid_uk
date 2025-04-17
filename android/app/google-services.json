@@ -12,7 +12,12 @@
           "package_name": "com.example.roofgrid_uk"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "928783649894-n89p829cbge6iu4crb55st5n044uvl2t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAxrYOLGv4DBMgrFkxTVdhk_7YjvcpdZQY"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "928783649894-n89p829cbge6iu4crb55st5n044uvl2t.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "928783649894-o8dqfj26081uo7bkfdhnmtkcqr8bint1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.company.roofgriduk"
+              }
+            }
+          ]
         }
       }
     }
