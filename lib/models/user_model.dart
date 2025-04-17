@@ -19,7 +19,6 @@ class UserModel {
   final DateTime? proTrialStartDate;
   final DateTime? proTrialEndDate;
   final DateTime? subscriptionEndDate;
-  final bool isAdmin;
   final DateTime createdAt;
   final DateTime? lastLoginAt;
 
@@ -35,7 +34,6 @@ class UserModel {
     this.proTrialStartDate,
     this.proTrialEndDate,
     this.subscriptionEndDate,
-    this.isAdmin = false,
     required this.createdAt,
     this.lastLoginAt,
   });
@@ -43,11 +41,9 @@ class UserModel {
   UserModel.fromFirebaseUser(
     User user, {
     UserRole role = UserRole.free,
-    bool isPro = false,
     DateTime? proTrialStartDate,
     DateTime? proTrialEndDate,
     DateTime? subscriptionEndDate,
-    bool? isAdmin,
     DateTime? createdAt,
     DateTime? lastLoginAt,
     String? phone,
@@ -61,13 +57,10 @@ class UserModel {
           phone: phone,
           subscription: subscription,
           profileImage: profileImage,
-          role: isPro
-              ? UserRole.pro
-              : (isAdmin == true ? UserRole.admin : UserRole.free),
+          role: role,
           proTrialStartDate: proTrialStartDate,
           proTrialEndDate: proTrialEndDate,
           subscriptionEndDate: subscriptionEndDate,
-          isAdmin: isAdmin ?? false,
           createdAt: createdAt ?? DateTime.now(),
           lastLoginAt: lastLoginAt ?? DateTime.now(),
         );
@@ -78,20 +71,22 @@ class UserModel {
       throw Exception('User data not found for ID: ${doc.id}');
     }
 
+    final userRole = UserRole.values.firstWhere(
+      (r) =>
+          r.toString().split('.').last == (data['role'] as String? ?? 'free'),
+      orElse: () => UserRole.free,
+    );
+    print('Parsed role for user ${doc.id}: $userRole'); // Debug log
+
     return UserModel(
       id: doc.id,
       email: data['email'] as String?,
       displayName: data['displayName'] as String?,
       photoURL: data['photoURL'] as String?,
-      phone: data['phone'] as String?, // Added field
-      subscription: data['subscription'] as String?, // Added field
-      profileImage: data['profileImage'] as String?, // Added field
-      role: UserRole.values.firstWhere(
-        (r) =>
-            r.toString().split('.').last == (data['role'] as String? ?? 'free'),
-        orElse: () => UserRole.free,
-      ),
-      isAdmin: data['isAdmin'] as bool? ?? false,
+      phone: data['phone'] as String?,
+      subscription: data['subscription'] as String?,
+      profileImage: data['profileImage'] as String?,
+      role: userRole,
       proTrialStartDate: data['proTrialStartDate'] != null
           ? (data['proTrialStartDate'] as Timestamp).toDate()
           : null,
@@ -119,7 +114,6 @@ class UserModel {
     String? subscription,
     String? profileImage,
     UserRole? role,
-    bool? isAdmin,
     DateTime? proTrialStartDate,
     DateTime? proTrialEndDate,
     DateTime? subscriptionEndDate,
@@ -135,7 +129,6 @@ class UserModel {
       subscription: subscription ?? this.subscription,
       profileImage: profileImage ?? this.profileImage,
       role: role ?? this.role,
-      isAdmin: isAdmin ?? this.isAdmin,
       proTrialStartDate: proTrialStartDate ?? this.proTrialStartDate,
       proTrialEndDate: proTrialEndDate ?? this.proTrialEndDate,
       subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
@@ -154,7 +147,6 @@ class UserModel {
       'subscription': subscription,
       'profileImage': profileImage,
       'role': role.toString().split('.').last,
-      'isAdmin': isAdmin,
       'proTrialStartDate': proTrialStartDate != null
           ? Timestamp.fromDate(proTrialStartDate!)
           : null,
@@ -183,7 +175,6 @@ class UserModel {
             r.toString().split('.').last == (json['role'] as String? ?? 'free'),
         orElse: () => UserRole.free,
       ),
-      isAdmin: json['isAdmin'] as bool? ?? false,
       proTrialStartDate: json['proTrialStartDate'] != null
           ? DateTime.parse(json['proTrialStartDate'] as String)
           : null,
@@ -222,6 +213,9 @@ class UserModel {
   bool get isPro =>
       (role == UserRole.pro || role == UserRole.admin) &&
       (isTrialActive || isSubscribed);
+
+  bool get isAdmin =>
+      role == UserRole.admin; // Ensures isAdmin is true for admin role
 
   int get remainingTrialDays {
     if (isTrialActive && proTrialEndDate != null) {
