@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -45,12 +46,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     scopes: ['email'],
   );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _storage = const FlutterSecureStorage();
   // Toggle reCAPTCHA for development (set to false for emulator testing)
   final bool _isRecaptchaEnabled = false;
 
   AuthNotifier() : super(const AuthState());
 
-  Future<bool> login(String email, String password, String captchaToken) async {
+  Future<bool> login(String email, String password, String captchaToken,
+      {bool rememberMe = false}) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
 
@@ -76,6 +79,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: email,
         password: password,
       );
+      if (rememberMe) {
+        final token = await userCredential.user?.getIdToken();
+        if (token != null) {
+          await _storage.write(key: 'auth_token', value: token);
+        }
+      }
       await _analytics.logLogin(loginMethod: 'email');
       state = state.copyWith(
         isAuthenticated: true,
@@ -180,6 +189,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signOut() async {
     try {
+      await _storage.delete(key: 'auth_token');
       await _auth.signOut();
       await _googleSignIn.signOut();
       await _analytics.logEvent(name: 'sign_out');
@@ -378,6 +388,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } catch (e) {
       print('Failed to initialize default tiles: $e');
+    }
+  }
+
+  Future<bool> checkPersistentLogin() async {
+    try {
+      final token = await _storage.read(key: 'auth_token');
+      if (token != null && _auth.currentUser != null) {
+        // Firebase automatically refreshes tokens, so we just check if the user is still authenticated
+        if (_auth.currentUser != null) {
+          state = state.copyWith(
+            isAuthenticated: true,
+            userId: _auth.currentUser!.uid,
+          );
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      print('Error checking persistent login: $e');
+      return false;
     }
   }
 

@@ -16,6 +16,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String? _captchaToken;
+  bool _rememberMe = false;
   // Toggle reCAPTCHA for development (set to false for emulator testing)
   final bool _isRecaptchaEnabled = false;
 
@@ -43,6 +44,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             _emailController.text.trim(),
             _passwordController.text.trim(),
             _captchaToken ?? "",
+            rememberMe: _rememberMe,
           );
       if (mounted) {
         if (success) {
@@ -125,6 +127,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              CheckboxListTile(
+                title: const Text('Remember Me'),
+                value: _rememberMe,
+                onChanged: (value) {
+                  setState(() {
+                    _rememberMe = value ?? false;
+                  });
+                },
+              ),
               if (_isRecaptchaEnabled)
                 CaptchaWidget(
                   onVerified: (token) {

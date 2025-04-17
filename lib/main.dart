@@ -11,7 +11,6 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -20,18 +19,18 @@ void main() async {
     debugPrint('Firebase initialization failed: $e');
   }
 
-  try {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.debug,
-      appleProvider: AppleProvider.debug,
-    );
-    final token = await FirebaseAppCheck.instance.getToken(true);
-    debugPrint('App Check Debug Token: $token');
-  } catch (e) {
-    debugPrint('App Check initialization failed: $e');
-  }
+  // Comment out App Check for emulator testing
+  // try {
+  //   await FirebaseAppCheck.instance.activate(
+  //     androidProvider: AndroidProvider.debug,
+  //     appleProvider: AppleProvider.debug,
+  //   );
+  //   final token = await FirebaseAppCheck.instance.getToken(true);
+  //   debugPrint('App Check Debug Token: $token');
+  // } catch (e) {
+  //   debugPrint('App Check initialization failed: $e');
+  // }
 
-  // Initialize Analytics
   try {
     await FirebaseAnalytics.instance.logAppOpen();
   } catch (e) {
@@ -46,12 +45,15 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Initialize default tiles when the app starts
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(authProvider.notifier).initializeDefaultTiles();
+    final router = ref.watch(routerProvider);
+
+    // Ensure auth state is initialized before routing
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      print("Checking persistent login on app start");
+      await ref.read(authProvider.notifier).checkPersistentLogin();
+      await ref.read(authProvider.notifier).initializeDefaultTiles();
     });
 
-    final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'RoofGrid UK',
       theme: AppTheme.lightTheme,

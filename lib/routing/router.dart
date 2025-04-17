@@ -19,31 +19,37 @@ import 'package:roofgrid_uk/screens/tile_management_screen.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
-  final userAsync = ref.watch(currentUserProvider);
+  final authState = ref.watch(authStateStreamProvider);
 
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) async {
-      final isLoggedIn = authState.isAuthenticated;
+      final isLoggedIn = authState.asData?.value != null;
       final isGoingToAuth = state.uri.path.startsWith('/auth');
       final isSplash = state.uri.path == '/splash';
 
+      print(
+          "Router redirect: isLoggedIn=$isLoggedIn, matchedLocation=${state.uri.path}");
+
       if (isSplash) {
+        print("Staying on splash screen");
         return null;
       }
 
       if (!isLoggedIn && !isGoingToAuth) {
+        print("Redirecting to /auth/login");
         return '/auth/login';
       }
 
       if (isLoggedIn && isGoingToAuth) {
+        print("Redirecting to /home");
         return '/home';
       }
 
       if (isLoggedIn && state.uri.path == '/admin') {
-        final user = userAsync.value;
+        final user = ref.read(currentUserProvider).value;
         if (user == null) {
+          print("User not loaded, redirecting to /home");
           return '/home';
         }
         if (user.role != UserRole.admin) {
@@ -51,6 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'access_denied',
             parameters: {'route': '/admin', 'role': user.role.toString()},
           );
+          print("Access denied for /admin, redirecting to /home");
           return '/home';
         }
       }
@@ -115,15 +122,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const TileManagementScreen(),
       ),
     ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Text(
-          'Route not found: ${state.uri.path}',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
+    errorBuilder: (context, state) {
+      print("Router error: ${state.error}");
+      return Scaffold(
+        body: Center(
+          child: Text(
+            'Route not found: ${state.uri.path}',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 });
