@@ -11,6 +11,8 @@ import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 /// Screen for managing tiles - Pro users can view all tiles from the database,
 /// while free users see a greyed-out section with an "Upgrade to Pro" CTA
@@ -29,6 +31,32 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   File? _dataSheetFile;
   String? _imageUrl;
   String? _dataSheetUrl;
+  bool _isOnline = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check connectivity on init
+    _checkConnectivity();
+    // Listen to connectivity changes
+    Connectivity().onConnectivityChanged.listen((result) {
+      setState(() {
+        _isOnline = result != ConnectivityResult.none;
+      });
+      if (_isOnline) {
+        // Refresh tiles when going online
+        ref.refresh(allAvailableTilesProvider(
+            ref.read(currentUserProvider).value?.id ?? ''));
+      }
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    setState(() {
+      _isOnline = result != ConnectivityResult.none;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +186,22 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
     return tilesAsync.when(
       data: (tiles) {
+        // Sync tiles to Hive if online
+        if (_isOnline) {
+          final tilesBox = Hive.box<TileModel>('tilesBox');
+          for (var tile in tiles) {
+            tilesBox.put(tile.id, tile);
+          }
+          print("Synced ${tiles.length} tiles to Hive");
+        }
+
+        // Use Hive if offline
+        if (!_isOnline) {
+          final tilesBox = Hive.box<TileModel>('tilesBox');
+          tiles = tilesBox.values.toList();
+          print("Offline: Loaded ${tiles.length} tiles from Hive");
+        }
+
         if (tiles.isEmpty) {
           return _buildPlaceholderContent(context, user);
         }
@@ -165,22 +209,32 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
         return _buildTileList(tiles, user);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stackTrace) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error, size: 48, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading tiles: ${err.toString()}',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+      error: (err, stackTrace) {
+        // Fallback to Hive if Firestore fails
+        final tilesBox = Hive.box<TileModel>('tilesBox');
+        final tiles = tilesBox.values.toList();
+        if (tiles.isNotEmpty) {
+          print(
+              "Error loading tiles from Firestore, using Hive: ${tiles.length} tiles");
+          return _buildTileList(tiles, user);
+        }
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                'Error loading tiles: ${err.toString()}',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -423,6 +477,16 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   /// Submit a tile for admin review
   void _submitTileForReview(
       BuildContext context, TileModel tile, UserModel user) async {
+    if (!_isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Cannot submit tile offline. Please connect to the internet.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -433,6 +497,10 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
         updatedAt: DateTime.now(),
       );
       await tileService.updateTile(updatedTile);
+
+      // Update Hive
+      final tilesBox = Hive.box<TileModel>('tilesBox');
+      await tilesBox.put(updatedTile.id, updatedTile);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -525,35 +593,44 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: () async {
-                          final uri = Uri.tryParse(tile.dataSheet!);
-                          if (uri != null) {
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(uri,
-                                  mode: LaunchMode.externalApplication);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Could not open datasheet. Try opening in browser.'),
-                                ),
-                              );
-                              // Fallback to browser
-                              if (await canLaunchUrl(
-                                  Uri.parse('https://www.google.com'))) {
-                                await launchUrl(
-                                    Uri.parse('https://www.google.com'),
-                                    mode: LaunchMode.externalApplication);
+                        onPressed: _isOnline
+                            ? () async {
+                                final uri = Uri.tryParse(tile.dataSheet!);
+                                if (uri != null) {
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri,
+                                        mode: LaunchMode.externalApplication);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Could not open datasheet. Try opening in browser.'),
+                                      ),
+                                    );
+                                    // Fallback to browser
+                                    if (await canLaunchUrl(
+                                        Uri.parse('https://www.google.com'))) {
+                                      await launchUrl(
+                                          Uri.parse('https://www.google.com'),
+                                          mode: LaunchMode.externalApplication);
+                                    }
+                                  }
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Invalid datasheet URL.'),
+                                    ),
+                                  );
+                                }
                               }
-                            }
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Invalid datasheet URL.'),
-                              ),
-                            );
-                          }
-                        },
+                            : () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Cannot open datasheet offline. Please connect to the internet.'),
+                                  ),
+                                );
+                              },
                         child: const Text('View Data Sheet'),
                       ),
                     ],
@@ -906,6 +983,16 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
+                  if (!_isOnline) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Cannot save tile offline. Please connect to the internet.'),
+                      ),
+                    );
+                    return;
+                  }
+
                   final tileService = ref.read(tileServiceProvider);
 
                   // Upload image and datasheet if selected
@@ -981,15 +1068,17 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                     await tileService.createTile(tileData);
                   }
 
+                  // Update Hive
+                  final tilesBox = Hive.box<TileModel>('tilesBox');
+                  await tilesBox.put(tileData.id, tileData);
+
                   setState(() => _isLoading = false);
 
                   if (mounted) {
                     Navigator.of(context).pop();
                     // Force refresh providers
                     ref.refresh(userTilesProvider(user.id));
-                    if (user.isPro) {
-                      ref.refresh(allAvailableTilesProvider(user.id));
-                    }
+                    ref.refresh(allAvailableTilesProvider(user.id));
                   }
                 }
               },
@@ -1046,6 +1135,16 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
           ),
           TextButton(
             onPressed: () async {
+              if (!_isOnline) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Cannot delete tile offline. Please connect to the internet.'),
+                  ),
+                );
+                return;
+              }
+
               Navigator.of(context).pop();
 
               final tileService = ref.read(tileServiceProvider);
@@ -1054,13 +1153,14 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
               if (user != null) {
                 setState(() => _isLoading = true);
                 await tileService.deleteTile(tile.id, user.id);
+                // Remove from Hive
+                final tilesBox = Hive.box<TileModel>('tilesBox');
+                await tilesBox.delete(tile.id);
                 setState(() => _isLoading = false);
 
                 if (mounted) {
                   ref.refresh(userTilesProvider(user.id));
-                  if (user.isPro) {
-                    ref.refresh(allAvailableTilesProvider(user.id));
-                  }
+                  ref.refresh(allAvailableTilesProvider(user.id));
                 }
               }
             },

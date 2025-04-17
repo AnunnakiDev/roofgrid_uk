@@ -1,10 +1,12 @@
-// lib/app/results/saved_results_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SavedResultsScreen extends ConsumerStatefulWidget {
   const SavedResultsScreen({super.key});
@@ -16,6 +18,31 @@ class SavedResultsScreen extends ConsumerStatefulWidget {
 class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+  bool _isOnline = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check connectivity on init
+    _checkConnectivity();
+    // Listen to connectivity changes
+    Connectivity().onConnectivityChanged.listen((result) {
+      setState(() {
+        _isOnline = result != ConnectivityResult.none;
+      });
+      if (_isOnline) {
+        // Refresh results when going online
+        ref.invalidate(savedResultsProvider);
+      }
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    setState(() {
+      _isOnline = result != ConnectivityResult.none;
+    });
+  }
 
   @override
   void dispose() {
@@ -47,7 +74,16 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
 
     if (shouldDelete == true) {
       try {
-        await ref.read(resultsServiceProvider).deleteResult(userId, resultId);
+        final resultsBox = Hive.box<SavedResult>('resultsBox');
+        if (_isOnline) {
+          await ref.read(resultsServiceProvider).deleteResult(userId, resultId);
+          await resultsBox.delete(resultId);
+          print("Result $resultId deleted from Firestore and Hive");
+        } else {
+          // Mark for deletion when online
+          await resultsBox.delete(resultId);
+          print("Result $resultId deleted from Hive (offline)");
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Result deleted successfully'),
@@ -110,6 +146,22 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
         },
         child: resultsAsync.when(
           data: (results) {
+            final resultsBox = Hive.box<SavedResult>('resultsBox');
+
+            // Sync results to Hive if online
+            if (_isOnline) {
+              for (var result in results) {
+                resultsBox.put(result.id, result);
+              }
+              print("Synced ${results.length} results to Hive");
+            }
+
+            // Use Hive if offline
+            if (!_isOnline) {
+              results = resultsBox.values.toList();
+              print("Offline: Loaded ${results.length} results from Hive");
+            }
+
             if (results.isEmpty) {
               return Center(
                 child: Column(
@@ -197,35 +249,93 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) => Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error,
-                  size: 80,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Error Loading Results',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
+          error: (error, stackTrace) {
+            // Fallback to Hive if Firestore fails
+            final resultsBox = Hive.box<SavedResult>('resultsBox');
+            final results = resultsBox.values.toList();
+            if (results.isNotEmpty) {
+              print(
+                  "Error loading results from Firestore, using Hive: ${results.length} results");
+              return ListView.builder(
+                padding: const EdgeInsets.all(8.0),
+                itemCount: results.length,
+                itemBuilder: (context, index) {
+                  final result = results[index];
+                  return Card(
+                    elevation: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: ListTile(
+                      title: Text(
+                        result.title,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(savedResultsProvider),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
+                      subtitle: Text(
+                        '${result.type.name.toUpperCase()} - ${result.createdAt.toLocal().toString().split('.')[0]}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.visibility),
+                            tooltip: 'Visualize',
+                            onPressed: () {
+                              ref.read(selectedResultProvider.notifier).state =
+                                  result;
+                              context.push('/result-visualization');
+                            },
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            tooltip: 'Delete',
+                            onPressed: user != null
+                                ? () => _deleteResult(result.id, user.id)
+                                : null,
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        ref.read(selectedResultProvider.notifier).state =
+                            result;
+                        context.push('/result-detail');
+                      },
+                    ),
+                  );
+                },
+              );
+            }
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error,
+                    size: 80,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error Loading Results',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(savedResultsProvider),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

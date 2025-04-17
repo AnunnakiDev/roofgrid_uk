@@ -31,6 +31,9 @@ dependencies:
   webview_flutter: ^4.9.0  # For reCAPTCHA widget
   http: ^1.2.2  # For HTTP requests (if needed)
   cloud_functions: ^5.1.1  # For server-side CAPTCHA validation
+  hive: ^2.2.3  # Hive for offline storage
+  hive_flutter: ^1.1.0  # Hive Flutter extension
+  connectivity_plus: ^6.0.5  # For network connectivity detection
 
 dependency_overrides:
   fake_async: ^1.3.3
@@ -44,6 +47,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  hive_generator: ^2.0.1  # For generating Hive adapters
+  build_runner: ^2.4.13  # For running code generation
 
 flutter:
   uses-material-design: true

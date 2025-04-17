@@ -7,9 +7,29 @@ import 'package:roofgrid_uk/firebase_options.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:roofgrid_uk/models/tile_model.dart';
+import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive
+  await Hive.initFlutter();
+  // Register Hive adapters
+  Hive.registerAdapter(TileSlateTypeAdapter());
+  Hive.registerAdapter(TileModelAdapter());
+  Hive.registerAdapter(UserRoleAdapter());
+  Hive.registerAdapter(UserModelAdapter());
+  Hive.registerAdapter(CalculationTypeAdapter());
+  Hive.registerAdapter(SavedResultAdapter());
+  // Open Hive boxes
+  await Hive.openBox('appState');
+  await Hive.openBox<TileModel>('tilesBox');
+  await Hive.openBox<UserModel>('userBox');
+  await Hive.openBox<SavedResult>('resultsBox');
 
   try {
     await Firebase.initializeApp(
