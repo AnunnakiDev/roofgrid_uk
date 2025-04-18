@@ -6,7 +6,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/screens/auth/login_screen.dart';
 import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
 import 'package:roofgrid_uk/screens/auth/register_screen.dart';
-import 'package:roofgrid_uk/screens/calculator_screen.dart';
+import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
 import 'package:roofgrid_uk/screens/home_screen.dart';
 import 'package:roofgrid_uk/screens/splash_screen.dart';
 import 'package:roofgrid_uk/screens/admin_dashboard_screen.dart';
@@ -16,6 +16,7 @@ import 'package:roofgrid_uk/screens/support/contact_screen.dart';
 import 'package:roofgrid_uk/screens/subscription_screen.dart';
 import 'package:roofgrid_uk/screens/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/tile_management_screen.dart';
+import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -27,6 +28,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = authState.asData?.value != null;
       final isGoingToAuth = state.uri.path.startsWith('/auth');
       final isSplash = state.uri.path == '/splash';
+      final isCalculator = state.uri.path == '/calculator';
 
       print(
           "Router redirect: isLoggedIn=$isLoggedIn, matchedLocation=${state.uri.path}");
@@ -34,6 +36,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isSplash) {
         print("Staying on splash screen");
         return null;
+      }
+
+      if (isCalculator) {
+        print("Redirecting /calculator to /calculator/tile-select");
+        return '/calculator/tile-select';
       }
 
       if (!isLoggedIn && !isGoingToAuth) {
@@ -92,6 +99,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/calculator',
         builder: (context, state) => const CalculatorScreen(),
+      ),
+      GoRoute(
+        path: '/calculator/main',
+        builder: (context, state) => const CalculatorScreen(),
+      ),
+      GoRoute(
+        path: '/calculator/tile-select',
+        builder: (context, state) => const TileSelectorScreen(),
       ),
       GoRoute(
         path: '/admin',

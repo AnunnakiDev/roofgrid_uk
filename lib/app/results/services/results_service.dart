@@ -1,4 +1,3 @@
-// lib/app/results/services/results_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 
@@ -37,6 +36,15 @@ class ResultsService {
           result.type.toString().toLowerCase().contains(query.toLowerCase());
       return titleMatch || typeMatch;
     }).toList();
+  }
+
+  Future<void> saveResult(String userId, SavedResult result) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('saved_results')
+        .doc(result.id)
+        .set(result.toJson());
   }
 
   Future<void> deleteResult(String userId, String resultId) async {
