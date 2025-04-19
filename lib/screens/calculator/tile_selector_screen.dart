@@ -30,6 +30,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   String? _imageUrl;
   String? _dataSheetUrl;
   bool _isOnline = true;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -51,6 +52,12 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
     setState(() {
       _isOnline = result != ConnectivityResult.none;
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -156,14 +163,35 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Semantics(
         label: 'Search tiles',
         child: TextField(
+          controller: _searchController,
           decoration: InputDecoration(
             hintText: 'Search by name or manufacturer',
             prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      setState(() {
+                        _searchQuery = '';
+                        _searchController.clear();
+                      });
+                    },
+                    tooltip: 'Clear search',
+                  )
+                : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(30.0),
+              borderSide:
+                  BorderSide(color: Theme.of(context).colorScheme.primary),
+            ),
+            filled: true,
+            fillColor: Theme.of(context).colorScheme.surface,
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
           ),
           onChanged: (value) {
             setState(() {
@@ -177,23 +205,40 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
 
   Widget _buildFilterChips() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Wrap(
-        spacing: 8.0,
-        children: TileSlateType.values.map<Widget>((type) {
-          return Semantics(
-            label: 'Filter by ${_getTileSlateTypeDisplayName(type)}',
-            child: FilterChip(
-              label: Text(_getTileSlateTypeDisplayName(type)),
-              selected: _selectedFilter == type,
-              onSelected: (selected) {
-                setState(() {
-                  _selectedFilter = selected ? type : null;
-                });
-              },
-            ),
-          );
-        }).toList(),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: TileSlateType.values.map<Widget>((type) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Semantics(
+                label: 'Filter by ${_getTileSlateTypeDisplayName(type)}',
+                child: FilterChip(
+                  label: Text(_getTileSlateTypeDisplayName(type)),
+                  selected: _selectedFilter == type,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedFilter = selected ? type : null;
+                    });
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20.0),
+                    side: BorderSide(
+                        color: Theme.of(context).colorScheme.primary),
+                  ),
+                  selectedColor:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                  labelStyle: TextStyle(
+                    color: _selectedFilter == type
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -218,70 +263,219 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   }
 
   Widget _buildTileCard(TileModel tile, UserModel user) {
+    String placeholderImagePath;
+    switch (tile.materialType) {
+      case TileSlateType.slate:
+        placeholderImagePath = 'assets/images/tiles/natural_slate';
+        break;
+      case TileSlateType.fibreCementSlate:
+        placeholderImagePath = 'assets/images/tiles/fibre_cement_slate';
+        break;
+      case TileSlateType.interlockingTile:
+        placeholderImagePath = 'assets/images/tiles/interlocking_tile';
+        break;
+      case TileSlateType.plainTile:
+        placeholderImagePath = 'assets/images/tiles/plain_tile';
+        break;
+      case TileSlateType.concreteTile:
+        placeholderImagePath = 'assets/images/tiles/concrete_tile';
+        break;
+      case TileSlateType.pantile:
+        placeholderImagePath = 'assets/images/tiles/pantile';
+        break;
+      case TileSlateType.unknown:
+      default:
+        placeholderImagePath = 'assets/images/tiles/unknown_type';
+        break;
+    }
+
+    // Try PNG first, then JPG
+    Widget placeholderImage() {
+      try {
+        return Image.asset(
+          '$placeholderImagePath.png',
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset(
+              '$placeholderImagePath.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset(
+                  'assets/images/tiles/unknown_type.png',
+                  fit: BoxFit.cover,
+                );
+              },
+            );
+          },
+        );
+      } catch (e) {
+        return Image.asset(
+          'assets/images/tiles/unknown_type.png',
+          fit: BoxFit.cover,
+        );
+      }
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       child: ExpansionTile(
-        leading: tile.image != null && tile.image!.isNotEmpty
-            ? Image.network(tile.image!,
-                width: 50, height: 50, fit: BoxFit.cover)
-            : const Icon(Icons.image_not_supported, size: 50),
-        title: Text(tile.name, style: Theme.of(context).textTheme.titleMedium),
-        subtitle: Text(
-            'Max Gauge: ${tile.maxGauge} mm | Cover Width: ${tile.tileCoverWidth} mm'),
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8.0),
+            color: Colors.grey[200],
+          ),
+          child: tile.image != null && tile.image!.isNotEmpty
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: Image.network(
+                    tile.image!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        placeholderImage(),
+                  ),
+                )
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: placeholderImage(),
+                ),
+        ),
+        title: Text(
+          tile.name,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Material Type: ${_getTileSlateTypeDisplayName(tile.materialType)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'Max Gauge: ${tile.maxGauge} mm | Cover Width: ${tile.tileCoverWidth} mm',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              label: 'Edit tile ${tile.name}',
+              child: ElevatedButton(
+                onPressed: () => _showEditTileDialog(context, tile),
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: Theme.of(context).textTheme.labelMedium,
+                ),
+                child: const Text('Edit'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Semantics(
+              label: 'Select tile ${tile.name}',
+              child: ElevatedButton(
+                onPressed: () {
+                  ref.read(calculatorProvider.notifier).setTile(tile);
+                  context.go('/calculator/main');
+                },
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: Theme.of(context).textTheme.labelMedium,
+                ),
+                child: const Text('Select'),
+              ),
+            ),
+          ],
+        ),
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                    'Material Type: ${_getTileSlateTypeDisplayName(tile.materialType)}'),
-                Text('Manufacturer: ${tile.manufacturer}'),
-                Text('Description: ${tile.description}'),
-                Text('Height/Length: ${tile.slateTileHeight} mm'),
-                Text('Min Gauge: ${tile.minGauge} mm'),
-                Text('Min Spacing: ${tile.minSpacing} mm'),
-                Text('Max Spacing: ${tile.maxSpacing} mm'),
-                Text('Cross Bonded: ${tile.defaultCrossBonded ? "Yes" : "No"}'),
+                _infoRow('Material Type',
+                    _getTileSlateTypeDisplayName(tile.materialType)),
+                _infoRow('Manufacturer', tile.manufacturer),
+                _infoRow('Description', tile.description),
+                _infoRow('Height/Length', '${tile.slateTileHeight} mm'),
+                _infoRow('Cover Width', '${tile.tileCoverWidth} mm'),
+                _infoRow('Min Gauge', '${tile.minGauge} mm'),
+                _infoRow('Max Gauge', '${tile.maxGauge} mm'),
+                _infoRow('Min Spacing', '${tile.minSpacing} mm'),
+                _infoRow('Max Spacing', '${tile.maxSpacing} mm'),
+                _infoRow(
+                    'Cross Bonded', tile.defaultCrossBonded ? 'Yes' : 'No'),
                 if (tile.leftHandTileWidth != null &&
                     tile.leftHandTileWidth! > 0)
-                  Text('Left Hand Tile Width: ${tile.leftHandTileWidth} mm'),
+                  _infoRow(
+                      'Left Hand Tile Width', '${tile.leftHandTileWidth} mm'),
                 if (tile.dataSheet != null && tile.dataSheet!.isNotEmpty)
-                  Semantics(
-                    label: 'View data sheet for ${tile.name}',
-                    child: TextButton(
-                      onPressed: () => _launchURL(tile.dataSheet!),
-                      child: const Text('View Data Sheet'),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Data Sheet',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Semantics(
+                          label: 'View data sheet for ${tile.name}',
+                          child: TextButton(
+                            onPressed: () => _launchURL(tile.dataSheet!),
+                            child: const Text('View'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Semantics(
-                label: 'Edit tile ${tile.name}',
-                child: TextButton(
-                  onPressed: () => _showEditTileDialog(context, tile),
-                  child: const Text('Edit'),
-                ),
-              ),
-              Semantics(
-                label: 'Select tile ${tile.name}',
-                child: TextButton(
-                  onPressed: () {
-                    ref.read(calculatorProvider.notifier).setTile(tile);
-                    context.go('/calculator/main');
-                  },
-                  child: const Text('Select'),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     ).animate().fadeIn();
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildFreeUserContent(UserModel user) {
@@ -856,7 +1050,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       }
                       final newTile = TileModel(
                         id: isEditing
-                            ? tile!.id
+                            ? tile.id
                             : 'personal_${DateTime.now().millisecondsSinceEpoch}',
                         name: nameController.text,
                         manufacturer: manufacturerController.text,
@@ -873,10 +1067,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                                 leftHandTileWidthController.text.isNotEmpty
                             ? double.parse(leftHandTileWidthController.text)
                             : null,
-                        isPublic: isEditing ? tile!.isPublic : false,
-                        isApproved: isEditing ? tile!.isApproved : false,
+                        isPublic: isEditing ? tile.isPublic : false,
+                        isApproved: isEditing ? tile.isApproved : false,
                         createdById: user.id,
-                        createdAt: isEditing ? tile!.createdAt : DateTime.now(),
+                        createdAt: isEditing ? tile.createdAt : DateTime.now(),
                         updatedAt: DateTime.now(),
                         image: _imageUrl,
                         dataSheet: _dataSheetUrl,

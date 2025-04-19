@@ -7,7 +7,6 @@ import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 class CalculatorScreen extends ConsumerStatefulWidget {
   const CalculatorScreen({super.key});

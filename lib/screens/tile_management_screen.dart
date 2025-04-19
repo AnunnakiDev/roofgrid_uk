@@ -238,12 +238,12 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
               label: 'Create new tile',
               child: ElevatedButton(
                 onPressed: () => context.go('/calculator/tile-select'),
-                child: const Text('Create New Tile'),
                 style: ElevatedButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   textStyle: Theme.of(context).textTheme.titleMedium,
                 ),
+                child: const Text('Create New Tile'),
               ),
             ),
           ],
@@ -293,7 +293,6 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                   label: 'Upgrade to Pro',
                   child: ElevatedButton(
                     onPressed: () => context.go('/subscription'),
-                    child: const Text('Upgrade to Pro'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
@@ -301,6 +300,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
                           horizontal: 24, vertical: 12),
                       textStyle: Theme.of(context).textTheme.titleMedium,
                     ),
+                    child: const Text('Upgrade to Pro'),
                   ),
                 ),
               ],
