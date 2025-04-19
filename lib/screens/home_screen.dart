@@ -408,7 +408,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: _buildFeatureCard(
                   context,
                   title: 'Horizontal',
-                  subtitle: 'Rafter Gauge',
+                  subtitle: 'Marking Out',
                   icon: Icons.auto_awesome_mosaic,
                   onTap: () {
                     _analytics.logEvent(

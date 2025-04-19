@@ -55,6 +55,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     final authState = ref.watch(authProvider);
     final userAsync = ref.watch(currentUserProvider);
 
+    // Early check for authentication state to prevent provider calls
     if (!authState.isAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.go('/auth/login');
@@ -161,47 +162,68 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
 
   Widget _buildProUserContent(UserModel user) {
     final tilesAsync = ref.watch(allAvailableTilesProvider(user.id));
-    return tilesAsync.when(
-      data: (tiles) {
-        if (_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          for (var tile in tiles) {
-            tilesBox.put(tile.id, tile);
-          }
-        }
-        if (!_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          tiles = tilesBox.values.toList();
-        }
-        if (tiles.isEmpty) {
-          return _buildPlaceholderContent(context, user);
-        }
-        return _buildTileList(tiles, user);
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stackTrace) {
-        final tilesBox = Hive.box<TileModel>('tilesBox');
-        final tiles = tilesBox.values.toList();
-        if (tiles.isNotEmpty) {
-          return _buildTileList(tiles, user);
-        }
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(
-                'Error loading tiles: $err',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text(
+            'Manage your tile profiles',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: tilesAsync.when(
+            data: (tiles) {
+              if (_isOnline) {
+                final tilesBox = Hive.box<TileModel>('tilesBox');
+                for (var tile in tiles) {
+                  tilesBox.put(tile.id, tile);
+                }
+              }
+              if (!_isOnline) {
+                final tilesBox = Hive.box<TileModel>('tilesBox');
+                tiles = tilesBox.values.toList();
+              }
+              if (tiles.isEmpty) {
+                return _buildPlaceholderContent(context, user);
+              }
+              return _buildTileList(tiles, user);
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, stackTrace) {
+              if (err is UnauthenticatedException) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  context.go('/auth/login');
+                });
+                return const Center(
+                    child: Text('Please log in to access this feature'));
+              }
+              final tilesBox = Hive.box<TileModel>('tilesBox');
+              final tiles = tilesBox.values.toList();
+              if (tiles.isNotEmpty) {
+                return _buildTileList(tiles, user);
+              }
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading tiles: $err',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

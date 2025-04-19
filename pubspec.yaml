@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'  # Ensure SDK supports null safety (Dart 3.7.2)
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -16,7 +16,7 @@ dependencies:
   firebase_app_check: ^0.3.1
   cloud_firestore: ^5.5.1
   firebase_storage: ^12.4.5
-  file_picker: ^8.1.2  # Updated to a version supporting V2 embedding
+  file_picker: ^8.1.2
   google_sign_in: ^6.2.1
   flutter_riverpod: ^2.5.1
   go_router: ^14.8.1
@@ -27,13 +27,14 @@ dependencies:
   share_plus: ^10.1.4
   screenshot: ^3.0.0
   url_launcher: ^6.3.0
-  flutter_secure_storage: ^9.2.2  # For secure storage of auth tokens
-  webview_flutter: ^4.9.0  # For reCAPTCHA widget
-  http: ^1.2.2  # For HTTP requests (if needed)
-  cloud_functions: ^5.1.1  # For server-side CAPTCHA validation
-  hive: ^2.2.3  # Hive for offline storage
-  hive_flutter: ^1.1.0  # Hive Flutter extension
-  connectivity_plus: ^6.0.5  # For network connectivity detection
+  flutter_secure_storage: ^9.2.2
+  webview_flutter: ^4.9.0
+  http: ^1.2.2
+  cloud_functions: ^5.1.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  connectivity_plus: ^6.0.5
+  flutter_stripe: ^11.5.0
 
 dependency_overrides:
   fake_async: ^1.3.3
@@ -47,8 +48,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  hive_generator: ^2.0.1  # For generating Hive adapters
-  build_runner: ^2.4.13  # For running code generation
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
@@ -56,3 +57,6 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/images/tiles/
+    - assets/images/logo/RoofGridUk-Logo-hor-500.png
+    - assets/images/logo/RoofGridUk-Logo-hor-250.png
+    - assets/images/logo/logo-square-600.png

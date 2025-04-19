@@ -3,6 +3,8 @@
     {
       "source": "functions",
       "codebase": "default",
+      "runtime": "nodejs22",
+      "gen": "2",
       "ignore": [
         "node_modules",
         ".git",
@@ -11,5 +13,25 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "emulators": {
+    "functions": {
+      "port": 5002
+    },
+    "ui": {
+      "port": 4001
+    },
+    "hub": {
+      "port": 4401
+    },
+    "logging": {
+      "port": 4501
+    },
+    "eventarc": {
+      "port": 9300
+    },
+    "tasks": {
+      "port": 9500
+    }
+  }
 }

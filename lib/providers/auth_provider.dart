@@ -10,6 +10,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/providers/tile_provider.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -53,8 +54,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   late final Box<UserModel> _userBox;
   // Toggle reCAPTCHA for development (set to false for emulator testing)
   final bool _isRecaptchaEnabled = false;
+  final Ref _ref;
 
-  AuthNotifier() : super(const AuthState()) {
+  AuthNotifier(this._ref) : super(const AuthState()) {
     // Open Hive box for user data
     _userBox = Hive.box<UserModel>('userBox');
 
@@ -132,6 +134,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _userBox.put(userCredential.user!.uid, newUser);
           print("New user created and saved to Hive: ${newUser.id}");
         }
+        // Initialize default tiles after successful login
+        await initializeDefaultTiles();
       } else {
         print(
             "Offline: Skipping Firestore fetch, using Hive data if available");
@@ -198,9 +202,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'displayName': userCredential.user?.displayName ?? 'User',
           'email': userCredential.user?.email,
           'role': 'free',
-          'lastUpdated': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastLoginAt': FieldValue.serverTimestamp(),
           'photoURL': userCredential.user?.photoURL,
         }, SetOptions(merge: true));
+
+        // Wait for the write to propagate
+        await _waitForUserDocument(userCredential.user!.uid);
 
         final userDoc = await _firestore
             .collection('users')
@@ -209,6 +217,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final userModel = UserModel.fromFirestore(userDoc);
         await _userBox.put(userCredential.user!.uid, userModel);
         print("Google Sign-In user data saved to Hive: ${userModel.id}");
+        // Initialize default tiles after successful login
+        await initializeDefaultTiles();
       } else {
         print("Offline: Creating temporary user data in Hive");
         final userModel = UserModel.fromFirebaseUser(userCredential.user!);
@@ -310,16 +320,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
         role = 'admin';
       }
 
+      // Set up trial for new users
+      final now = DateTime.now();
+      final trialStartDate = now;
+      final trialEndDate = now.add(const Duration(days: 14));
+
       // Store user data in Firestore with the assigned role
-      final newUser = UserModel.fromFirebaseUser(userCredential.user!,
-          role: UserRole.values
-              .firstWhere((r) => r.toString().split('.').last == role));
+      final newUser = UserModel.fromFirebaseUser(
+        userCredential.user!,
+        role: UserRole.values
+            .firstWhere((r) => r.toString().split('.').last == role),
+        proTrialStartDate: trialStartDate,
+        proTrialEndDate: trialEndDate,
+        createdAt: now,
+        lastLoginAt: now,
+      );
       await _firestore
           .collection('users')
           .doc(userCredential.user?.uid)
           .set(newUser.toJson());
+
+      // Wait for the write to propagate
+      await _waitForUserDocument(userCredential.user!.uid);
+
       await _userBox.put(userCredential.user!.uid, newUser);
       print("New user created and saved to Hive: ${newUser.id}");
+
+      // Initialize default tiles after successful signup
+      await initializeDefaultTiles();
 
       state = state.copyWith(
         isAuthenticated: true,
@@ -422,6 +450,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> initializeDefaultTiles() async {
     try {
+      print('Initializing default tiles');
       // Check connectivity
       final connectivityResult = await Connectivity().checkConnectivity();
       bool isOnline = connectivityResult != ConnectivityResult.none;
@@ -538,11 +567,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     } catch (e) {
       print('Failed to initialize default tiles: $e');
+      rethrow;
     }
   }
 
   Future<bool> checkPersistentLogin() async {
     try {
+      print('Checking persistent login');
       final token = await _storage.read(key: 'auth_token');
       if (token != null && _auth.currentUser != null) {
         // Firebase automatically refreshes tokens, so we just check if the user is still authenticated
@@ -559,6 +590,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
               final userModel = UserModel.fromFirestore(userDoc);
               await _userBox.put(_auth.currentUser!.uid, userModel);
               print("User data synced from Firestore to Hive: ${userModel.id}");
+              // Initialize default tiles after successful login
+              await initializeDefaultTiles();
             }
           } else {
             print("Offline: Using user data from Hive");
@@ -578,6 +611,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
       print('Error checking persistent login: $e');
       return false;
     }
+  }
+
+  Future<void> _waitForUserDocument(String userId) async {
+    const maxAttempts = 10;
+    const delay = Duration(milliseconds: 500);
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        print("User document found after $attempt attempts");
+        return;
+      }
+      print(
+          "User document not found, attempt $attempt/$maxAttempts, retrying...");
+      await Future.delayed(delay);
+    }
+    throw Exception("User document not found after $maxAttempts attempts");
   }
 
   bool isUserLoggedIn() {
@@ -604,7 +653,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
+  return AuthNotifier(ref);
 });
 
 final authStateStreamProvider = StreamProvider<UserModel?>((ref) {
@@ -627,17 +676,8 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
     final userBox = Hive.box<UserModel>('userBox');
 
     if (isOnline) {
-      // Fetch from Firestore if online
-      return FirebaseFirestore.instance
-          .collection('users')
-          .doc(authState.userId)
-          .snapshots()
-          .timeout(
-        const Duration(seconds: 10),
-        onTimeout: (sink) {
-          sink.addError(TimeoutException('Failed to load user data in time'));
-        },
-      ).map((snapshot) {
+      // Fetch from Firestore if online with retry mechanism
+      return _fetchUserWithRetry(authState.userId!).map((snapshot) {
         if (snapshot.exists) {
           final userModel = UserModel.fromFirestore(snapshot);
           userBox.put(authState.userId!, userModel); // Update Hive
@@ -657,3 +697,35 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
     }
   });
 });
+
+Stream<DocumentSnapshot> _fetchUserWithRetry(String userId) async* {
+  const maxAttempts = 10;
+  const delay = Duration(milliseconds: 500);
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (snapshot.exists) {
+        yield snapshot;
+        // Listen for further updates
+        yield* FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .snapshots();
+        return;
+      }
+      print(
+          "User document not found, attempt $attempt/$maxAttempts, retrying...");
+      await Future.delayed(delay);
+    } catch (e) {
+      print("Error fetching user document, attempt $attempt/$maxAttempts: $e");
+      if (attempt == maxAttempts) {
+        rethrow;
+      }
+      await Future.delayed(delay);
+    }
+  }
+  throw TimeoutException('Failed to load user data in time');
+}

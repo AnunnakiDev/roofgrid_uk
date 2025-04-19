@@ -122,7 +122,7 @@ class UserModel {
           : DateTime.now(),
       lastLoginAt: data['lastLoginAt'] != null
           ? (data['lastLoginAt'] as Timestamp).toDate()
-          : null,
+          : DateTime.now(),
     );
   }
 
@@ -168,11 +168,17 @@ class UserModel {
       'subscription': subscription,
       'profileImage': profileImage,
       'role': role.toString().split('.').last,
-      'proTrialStartDate': proTrialStartDate?.toIso8601String(),
-      'proTrialEndDate': proTrialEndDate?.toIso8601String(),
-      'subscriptionEndDate': subscriptionEndDate?.toIso8601String(),
-      'createdAt': createdAt.toIso8601String(),
-      'lastLoginAt': lastLoginAt?.toIso8601String(),
+      'proTrialStartDate': proTrialStartDate != null
+          ? Timestamp.fromDate(proTrialStartDate!)
+          : null,
+      'proTrialEndDate':
+          proTrialEndDate != null ? Timestamp.fromDate(proTrialEndDate!) : null,
+      'subscriptionEndDate': subscriptionEndDate != null
+          ? Timestamp.fromDate(subscriptionEndDate!)
+          : null,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'lastLoginAt':
+          lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
     };
   }
 
@@ -238,6 +244,4 @@ class UserModel {
     }
     return 0;
   }
-
-  get trialStartDate => null;
 }

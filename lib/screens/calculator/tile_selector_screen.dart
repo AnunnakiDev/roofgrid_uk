@@ -41,8 +41,8 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
         _isOnline = result != ConnectivityResult.none;
       });
       if (_isOnline) {
-        ref.invalidate(
-            allAvailableTilesProvider(ref.read(currentUserProvider).value!.id));
+        ref.invalidate(allAvailableTilesProvider(
+            ref.read(currentUserProvider).value?.id ?? ''));
       }
     });
   }
@@ -62,102 +62,157 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final userAsync = ref.watch(currentUserProvider);
-    final extra =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final TileModel? initialTile = extra?['tile'] as TileModel?;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(initialTile != null ? 'Edit Tile' : 'Select Tile'),
-        actions: [
-          if (userAsync.value?.isPro == true && initialTile == null)
-            Semantics(
-              label: 'Create new tile',
-              child: IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _showEditTileDialog(context, null),
-                tooltip: 'Create New Tile',
-              ),
-            ),
-        ],
+    // Early check for authentication state to prevent provider calls
+    if (!authState.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.go('/auth/login');
+      });
+      return const Scaffold(
+        body: Center(child: Text('Please log in to access this feature')),
+      );
+    }
+
+    return userAsync.when(
+      data: (user) {
+        if (user == null) {
+          return const Scaffold(
+            body: Center(child: Text('User not found. Please sign in again.')),
+          );
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Select Tile'),
+            actions: [
+              if (user.isPro)
+                Semantics(
+                  label: 'Create new tile',
+                  child: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => _showEditTileDialog(context, null),
+                    tooltip: 'Create New Tile',
+                  ),
+                ),
+            ],
+          ),
+          body: user.isPro
+              ? _buildProUserContent(user)
+              : _buildFreeUserContent(user),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       ),
-      body: userAsync.when(
-        data: (user) {
-          if (user == null) {
-            return const Center(
-                child: Text('User not found. Please sign in again.'));
-          }
-          return user.isPro
-              ? _buildProUserContent(user, initialTile)
-              : _buildFreeUserContent(user);
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Text('Error: $error',
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      error: (error, stackTrace) => Scaffold(
+        body: Center(
+          child: Text(
+            'Error: $error',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildProUserContent(UserModel user, TileModel? initialTile) {
+  Widget _buildProUserContent(UserModel user) {
+    final extra =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final TileModel? initialTile = extra?['tile'] as TileModel?;
+
     final tilesAsync = ref.watch(allAvailableTilesProvider(user.id));
-    return tilesAsync.when(
-      data: (tiles) {
-        if (_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          for (var tile in tiles) {
-            tilesBox.put(tile.id, tile);
-          }
-        }
-        if (!_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          tiles = tilesBox.values.toList();
-        }
-        final filteredTiles = tiles.where((tile) {
-          final matchesSearch =
-              tile.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                  tile.manufacturer
-                      .toLowerCase()
-                      .contains(_searchQuery.toLowerCase());
-          final matchesFilter =
-              _selectedFilter == null || tile.materialType == _selectedFilter;
-          return matchesSearch && matchesFilter;
-        }).toList();
-        if (initialTile != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showEditTileDialog(context, initialTile);
-          });
-        }
-        return Column(
-          children: [
-            _buildSearchBar(),
-            _buildFilterChips(),
-            Expanded(
-              child: ListView.builder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Semantics(
+            label: 'Step 1 description',
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.0,
+                ),
+              ),
+              child: const Text(
+                'Step 1, Choose your Tile or Slate to get started.',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ).animate().fadeIn(duration: 600.ms),
+          ),
+        ),
+        _buildSearchBar(),
+        _buildFilterChips(),
+        Expanded(
+          child: tilesAsync.when(
+            data: (tiles) {
+              if (_isOnline) {
+                final tilesBox = Hive.box<TileModel>('tilesBox');
+                for (var tile in tiles) {
+                  tilesBox.put(tile.id, tile);
+                }
+              }
+              if (!_isOnline) {
+                final tilesBox = Hive.box<TileModel>('tilesBox');
+                tiles = tilesBox.values.toList();
+              }
+              final filteredTiles = tiles.where((tile) {
+                final matchesSearch = tile.name
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase()) ||
+                    tile.manufacturer
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase());
+                final matchesFilter = _selectedFilter == null ||
+                    tile.materialType == _selectedFilter;
+                return matchesSearch && matchesFilter;
+              }).toList();
+              if (initialTile != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showEditTileDialog(context, initialTile);
+                });
+              }
+              return ListView.builder(
                 itemCount: filteredTiles.length,
                 itemBuilder: (context, index) {
                   final tile = filteredTiles[index];
                   return _buildTileCard(tile, user);
                 },
-              ),
-            ),
-          ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) {
-        final tilesBox = Hive.box<TileModel>('tilesBox');
-        final tiles = tilesBox.values.toList();
-        if (tiles.isNotEmpty) {
-          return _buildTileList(tiles, user);
-        }
-        return Center(
-          child: Text('Error loading tiles: $error',
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        );
-      },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stackTrace) {
+              if (error is UnauthenticatedException) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  context.go('/auth/login');
+                });
+                return const Center(
+                    child: Text('Please log in to access this feature'));
+              }
+              final tilesBox = Hive.box<TileModel>('tilesBox');
+              final tiles = tilesBox.values.toList();
+              if (tiles.isNotEmpty) {
+                return _buildTileList(tiles, user);
+              }
+              return Center(
+                child: Text(
+                  'Error loading tiles: $error',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -354,7 +409,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Material Type: ${_getTileSlateTypeDisplayName(tile.materialType)}',
+              _getTileSlateTypeDisplayName(tile.materialType),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -376,12 +431,12 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
               label: 'Edit tile ${tile.name}',
               child: ElevatedButton(
                 onPressed: () => _showEditTileDialog(context, tile),
+                child: const Text('Edit'),
                 style: ElevatedButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   textStyle: Theme.of(context).textTheme.labelMedium,
                 ),
-                child: const Text('Edit'),
               ),
             ),
             const SizedBox(width: 8),
@@ -392,12 +447,12 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                   ref.read(calculatorProvider.notifier).setTile(tile);
                   context.go('/calculator/main');
                 },
+                child: const Text('Select'),
                 style: ElevatedButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   textStyle: Theme.of(context).textTheme.labelMedium,
                 ),
-                child: const Text('Select'),
               ),
             ),
           ],
@@ -793,12 +848,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Height is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -814,12 +867,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Width is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -835,12 +886,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Min gauge is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -856,12 +905,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Max gauge is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -877,12 +924,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Min spacing is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -898,12 +943,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value?.isEmpty ?? true) {
+                          if (value?.isEmpty ?? true)
                             return 'Max spacing is required';
-                          }
-                          if (double.tryParse(value!) == null) {
+                          if (double.tryParse(value!) == null)
                             return 'Invalid number';
-                          }
                           return null;
                         },
                       ),
@@ -1050,7 +1093,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       }
                       final newTile = TileModel(
                         id: isEditing
-                            ? tile.id
+                            ? tile!.id
                             : 'personal_${DateTime.now().millisecondsSinceEpoch}',
                         name: nameController.text,
                         manufacturer: manufacturerController.text,
@@ -1067,10 +1110,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                                 leftHandTileWidthController.text.isNotEmpty
                             ? double.parse(leftHandTileWidthController.text)
                             : null,
-                        isPublic: isEditing ? tile.isPublic : false,
-                        isApproved: isEditing ? tile.isApproved : false,
+                        isPublic: isEditing ? tile!.isPublic : false,
+                        isApproved: isEditing ? tile!.isApproved : false,
                         createdById: user.id,
-                        createdAt: isEditing ? tile.createdAt : DateTime.now(),
+                        createdAt: isEditing ? tile!.createdAt : DateTime.now(),
                         updatedAt: DateTime.now(),
                         image: _imageUrl,
                         dataSheet: _dataSheetUrl,

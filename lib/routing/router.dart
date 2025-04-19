@@ -17,6 +17,8 @@ import 'package:roofgrid_uk/screens/subscription_screen.dart';
 import 'package:roofgrid_uk/screens/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/tile_management_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
+import 'package:roofgrid_uk/screens/subscription/success_page.dart';
+import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -28,7 +30,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = authState.asData?.value != null;
       final isGoingToAuth = state.uri.path.startsWith('/auth');
       final isSplash = state.uri.path == '/splash';
+      final isSupport = state.uri.path.startsWith('/support');
       final isCalculator = state.uri.path == '/calculator';
+      final isSubscriptionRedirect =
+          state.uri.path.startsWith('/subscription') &&
+              state.uri.path != '/subscription';
 
       print(
           "Router redirect: isLoggedIn=$isLoggedIn, matchedLocation=${state.uri.path}");
@@ -38,9 +44,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      if (isSupport) {
+        print("Allowing access to support page: ${state.uri.path}");
+        return null; // Allow access to support pages for all users
+      }
+
       if (isCalculator) {
         print("Redirecting /calculator to /calculator/tile-select");
         return '/calculator/tile-select';
+      }
+
+      if (isSubscriptionRedirect) {
+        print(
+            "Allowing access to subscription redirect pages: ${state.uri.path}");
+        return null; // Allow access to /subscription/success and /subscription/cancel
       }
 
       if (!isLoggedIn && !isGoingToAuth) {
@@ -127,6 +144,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/subscription',
         builder: (context, state) => const SubscriptionScreen(),
+      ),
+      GoRoute(
+        path: '/subscription/success',
+        builder: (context, state) => const SuccessPage(),
+      ),
+      GoRoute(
+        path: '/subscription/cancel',
+        builder: (context, state) => const CancelPage(),
       ),
       GoRoute(
         path: '/results',

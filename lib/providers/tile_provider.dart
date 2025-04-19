@@ -3,6 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 
+// Custom exception for unauthenticated access
+class UnauthenticatedException implements Exception {
+  final String message;
+  UnauthenticatedException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class TileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -87,24 +96,43 @@ final tileServiceProvider = Provider<TileService>((ref) {
 
 final userTilesProvider =
     FutureProvider.family<List<TileModel>, String>((ref, userId) async {
+  final authState = ref.watch(authStateStreamProvider);
+  print('userTilesProvider: Checking auth state for userId: $userId');
+  if (authState.asData?.value == null) {
+    print('userTilesProvider: User not authenticated, throwing exception');
+    throw UnauthenticatedException('User must be logged in to access tiles');
+  }
+
   final tileService = ref.read(tileServiceProvider);
   final user = ref.read(currentUserProvider).value;
 
   if (user == null || !user.isPro) {
+    print('userTilesProvider: User is not Pro, returning empty list');
     return []; // Free users have no saved tiles
   }
 
+  print('userTilesProvider: Fetching tiles for userId: $userId');
   return tileService.fetchUserTiles(userId);
 });
 
 final allAvailableTilesProvider =
     FutureProvider.family<List<TileModel>, String>((ref, userId) async {
+  final authState = ref.watch(authStateStreamProvider);
+  print('allAvailableTilesProvider: Checking auth state for userId: $userId');
+  if (authState.asData?.value == null) {
+    print(
+        'allAvailableTilesProvider: User not authenticated, throwing exception');
+    throw UnauthenticatedException('User must be logged in to access tiles');
+  }
+
   final tileService = ref.read(tileServiceProvider);
   final user = ref.read(currentUserProvider).value;
 
   if (user == null || !user.isPro) {
+    print('allAvailableTilesProvider: User is not Pro, returning empty list');
     return []; // Free users have no access to the tile database
   }
 
+  print('allAvailableTilesProvider: Fetching all tiles for userId: $userId');
   return tileService.fetchAllAvailableTiles(userId);
 });

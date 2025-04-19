@@ -84,91 +84,138 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       appBar: AppBar(
         title: const Text('Login'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Semantics(
+                  label: 'RoofGrid UK logo',
+                  child: Image.asset(
+                    'assets/images/logo/logo-square-600.png',
+                    height: 200,
+                    width: 200,
+                  ),
                 ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                Semantics(
+                  label: 'App description',
+                  child: const Text(
+                    'RoofGrid UK: Precision Roofing Calculations.',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                obscureText: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              CheckboxListTile(
-                title: const Text('Remember Me'),
-                value: _rememberMe,
-                onChanged: (value) {
-                  setState(() {
-                    _rememberMe = value ?? false;
-                  });
-                },
-              ),
-              if (_isRecaptchaEnabled)
-                CaptchaWidget(
-                  onVerified: (token) {
+                const SizedBox(height: 24),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your email';
+                    }
+                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your password';
+                    }
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('Remember Me'),
+                  value: _rememberMe,
+                  onChanged: (value) {
                     setState(() {
-                      _captchaToken = token;
+                      _rememberMe = value ?? false;
                     });
                   },
                 ),
-              const SizedBox(height: 16),
-              if (authState.isLoading)
-                const CircularProgressIndicator()
-              else
-                ElevatedButton(
-                  onPressed: _login,
-                  child: const Text('Login'),
+                if (_isRecaptchaEnabled)
+                  CaptchaWidget(
+                    onVerified: (token) {
+                      setState(() {
+                        _captchaToken = token;
+                      });
+                    },
+                  ),
+                const SizedBox(height: 16),
+                if (authState.isLoading)
+                  const CircularProgressIndicator()
+                else
+                  ElevatedButton(
+                    onPressed: _login,
+                    child: const Text('Login'),
+                  ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => context.go('/auth/forgot-password'),
+                  child: const Text('Forgot Password?'),
                 ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => context.go('/auth/forgot-password'),
-                child: const Text('Forgot Password?'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _signInWithGoogle,
-                icon: const Icon(Icons.login),
-                label: const Text('Sign in with Google'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => context.go('/auth/register'),
-                child: const Text('Don\'t have an account? Register'),
-              ),
-            ],
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: _signInWithGoogle,
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign in with Google'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => context.go('/auth/register'),
+                  child: const Text('Don\'t have an account? Register'),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Semantics(
+                      label: 'FAQ support link',
+                      child: TextButton(
+                        onPressed: () => context.go('/support/faq'),
+                        child: const Text('FAQ'),
+                      ),
+                    ),
+                    Semantics(
+                      label: 'Legal support link',
+                      child: TextButton(
+                        onPressed: () => context.go('/support/legal'),
+                        child: const Text('Legal'),
+                      ),
+                    ),
+                    Semantics(
+                      label: 'Contact support link',
+                      child: TextButton(
+                        onPressed: () => context.go('/support/contact'),
+                        child: const Text('Contact'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

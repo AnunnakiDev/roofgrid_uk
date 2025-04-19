@@ -7,6 +7,7 @@ import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class SavedResultsScreen extends ConsumerStatefulWidget {
   const SavedResultsScreen({super.key});
@@ -111,6 +112,12 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: _isSearching
             ? TextField(
                 controller: _searchController,
@@ -123,7 +130,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
                   ref.invalidate(searchResultsProvider(value));
                 },
               )
-            : const Text('Saved Results'),
+            : null,
         actions: [
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
@@ -140,203 +147,246 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
         ],
       ),
       drawer: const MainDrawer(),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(savedResultsProvider);
-        },
-        child: resultsAsync.when(
-          data: (results) {
-            final resultsBox = Hive.box<SavedResult>('resultsBox');
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Semantics(
+              label: 'Saved results description',
+              child: Container(
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.0,
+                  ),
+                ),
+                child: const Text(
+                  'View your saved calculations',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ).animate().fadeIn(duration: 600.ms),
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(savedResultsProvider);
+              },
+              child: resultsAsync.when(
+                data: (results) {
+                  final resultsBox = Hive.box<SavedResult>('resultsBox');
 
-            // Sync results to Hive if online
-            if (_isOnline) {
-              for (var result in results) {
-                resultsBox.put(result.id, result);
-              }
-              print("Synced ${results.length} results to Hive");
-            }
+                  // Sync results to Hive if online
+                  if (_isOnline) {
+                    for (var result in results) {
+                      resultsBox.put(result.id, result);
+                    }
+                    print("Synced ${results.length} results to Hive");
+                  }
 
-            // Use Hive if offline
-            if (!_isOnline) {
-              results = resultsBox.values.toList();
-              print("Offline: Loaded ${results.length} results from Hive");
-            }
+                  // Use Hive if offline
+                  if (!_isOnline) {
+                    results = resultsBox.values.toList();
+                    print(
+                        "Offline: Loaded ${results.length} results from Hive");
+                  }
 
-            if (results.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.save_alt,
-                      size: 80,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.5),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No Saved Results',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  if (results.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.save_alt,
+                            size: 80,
                             color: Theme.of(context)
                                 .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Save your calculations to view them here.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
+                                .primary
                                 .withOpacity(0.5),
                           ),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return ListView.builder(
-              padding: const EdgeInsets.all(8.0),
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                final result = results[index];
-                return Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: ListTile(
-                    title: Text(
-                      result.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${result.type.name.toUpperCase()} - ${result.createdAt.toLocal().toString().split('.')[0]}',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.visibility),
-                          tooltip: 'Visualize',
-                          onPressed: () {
-                            ref.read(selectedResultProvider.notifier).state =
-                                result;
-                            context.push('/result-visualization');
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.delete,
-                            color: Theme.of(context).colorScheme.error,
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Saved Results',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.7),
+                                ),
                           ),
-                          tooltip: 'Delete',
-                          onPressed: user != null
-                              ? () => _deleteResult(result.id, user.id)
-                              : null,
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      ref.read(selectedResultProvider.notifier).state = result;
-                      context.push('/result-detail');
-                    },
-                  ),
-                );
-              },
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) {
-            // Fallback to Hive if Firestore fails
-            final resultsBox = Hive.box<SavedResult>('resultsBox');
-            final results = resultsBox.values.toList();
-            if (results.isNotEmpty) {
-              print(
-                  "Error loading results from Firestore, using Hive: ${results.length} results");
-              return ListView.builder(
-                padding: const EdgeInsets.all(8.0),
-                itemCount: results.length,
-                itemBuilder: (context, index) {
-                  final result = results[index];
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: ListTile(
-                      title: Text(
-                        result.title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        '${result.type.name.toUpperCase()} - ${result.createdAt.toLocal().toString().split('.')[0]}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.visibility),
-                            tooltip: 'Visualize',
-                            onPressed: () {
-                              ref.read(selectedResultProvider.notifier).state =
-                                  result;
-                              context.push('/result-visualization');
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.delete,
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                            tooltip: 'Delete',
-                            onPressed: user != null
-                                ? () => _deleteResult(result.id, user.id)
-                                : null,
+                          const SizedBox(height: 8),
+                          Text(
+                            'Save your calculations to view them here.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.5),
+                                ),
                           ),
                         ],
                       ),
-                      onTap: () {
-                        ref.read(selectedResultProvider.notifier).state =
-                            result;
-                        context.push('/result-detail');
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(8.0),
+                    itemCount: results.length,
+                    itemBuilder: (context, index) {
+                      final result = results[index];
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: ListTile(
+                          title: Text(
+                            result.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            '${result.type.name.toUpperCase()} - ${result.createdAt.toLocal().toString().split('.')[0]}',
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.visibility),
+                                tooltip: 'Visualize',
+                                onPressed: () {
+                                  ref
+                                      .read(selectedResultProvider.notifier)
+                                      .state = result;
+                                  context.push('/result-visualization');
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete,
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                tooltip: 'Delete',
+                                onPressed: user != null
+                                    ? () => _deleteResult(result.id, user.id)
+                                    : null,
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            ref.read(selectedResultProvider.notifier).state =
+                                result;
+                            context.push('/result-detail');
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stackTrace) {
+                  // Fallback to Hive if Firestore fails
+                  final resultsBox = Hive.box<SavedResult>('resultsBox');
+                  final results = resultsBox.values.toList();
+                  if (results.isNotEmpty) {
+                    print(
+                        "Error loading results from Firestore, using Hive: ${results.length} results");
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: results.length,
+                      itemBuilder: (context, index) {
+                        final result = results[index];
+                        return Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: ListTile(
+                            title: Text(
+                              result.title,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(
+                              '${result.type.name.toUpperCase()} - ${result.createdAt.toLocal().toString().split('.')[0]}',
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.visibility),
+                                  tooltip: 'Visualize',
+                                  onPressed: () {
+                                    ref
+                                        .read(selectedResultProvider.notifier)
+                                        .state = result;
+                                    context.push('/result-visualization');
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                  tooltip: 'Delete',
+                                  onPressed: user != null
+                                      ? () => _deleteResult(result.id, user.id)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              ref.read(selectedResultProvider.notifier).state =
+                                  result;
+                              context.push('/result-detail');
+                            },
+                          ),
+                        );
                       },
+                    );
+                  }
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error Loading Results',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          error.toString(),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => ref.invalidate(savedResultsProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
                   );
                 },
-              );
-            }
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error Loading Results',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error.toString(),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => ref.invalidate(savedResultsProvider),
-                    child: const Text('Retry'),
-                  ),
-                ],
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

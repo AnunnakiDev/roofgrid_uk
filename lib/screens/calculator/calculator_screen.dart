@@ -7,6 +7,7 @@ import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class CalculatorScreen extends ConsumerStatefulWidget {
   const CalculatorScreen({super.key});
@@ -46,8 +47,36 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final userAsync = ref.watch(currentUserProvider);
 
+    if (!authState.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.go('/auth/login');
+      });
+      return const Scaffold(
+        body: Center(child: Text('Please log in to access this feature')),
+      );
+    }
+
+    return userAsync.when(
+      data: (user) => _buildScaffold(context, user),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, stackTrace) => Scaffold(
+        body: Center(
+          child: Text(
+            'Error loading user data: $error',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, UserModel? user) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Roofing Calculator'),
@@ -88,17 +117,37 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
         ],
       ),
       drawer: const MainDrawer(),
-      body: userAsync.when(
-        data: (user) => _buildCalculatorContent(context, user),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Text(
-            'Error loading user data: $error',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Semantics(
+              label: 'Step 2 description',
+              child: Container(
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.0,
+                  ),
                 ),
+                child: const Text(
+                  'Step 2, Enter your measurements, swipe between tabs',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ).animate().fadeIn(duration: 600.ms),
+            ),
           ),
-        ),
+          Expanded(
+            child: _buildCalculatorContent(context, user),
+          ),
+        ],
       ),
       bottomNavigationBar: BottomNavBar(
         currentIndex: 1,
@@ -157,7 +206,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
           child: Text('User data not found. Please sign in again.'));
     }
 
-    final canUseMultipleRafters = user.isPro;
+    final canUseMultipleRafts = user.isPro;
     final canUseAdvancedOptions = user.isPro;
     final canExport = user.isPro;
     final canAccessDatabase = user.isPro;
@@ -168,7 +217,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
         VerticalCalculatorTab(
           key: _verticalTabKey,
           user: user,
-          canUseMultipleRafters: canUseMultipleRafters,
+          canUseMultipleRafters: canUseMultipleRafts,
           canUseAdvancedOptions: canUseAdvancedOptions,
           canExport: canExport,
           canAccessDatabase: canAccessDatabase,
@@ -176,7 +225,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
         HorizontalCalculatorTab(
           key: _horizontalTabKey,
           user: user,
-          canUseMultipleWidths: canUseMultipleRafters,
+          canUseMultipleWidths: canUseMultipleRafts,
           canUseAdvancedOptions: canUseAdvancedOptions,
           canExport: canExport,
           canAccessDatabase: canAccessDatabase,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 
 class MainDrawer extends ConsumerWidget {
@@ -27,22 +28,25 @@ class MainDrawer extends ConsumerWidget {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'RoofGrid UK',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                Semantics(
+                  label: 'RoofGrid UK logo',
+                  child: Image.asset(
+                    'assets/images/logo/RoofGridUk-Logo-hor-250.png',
+                    fit: BoxFit.contain,
+                    height: 40, // Adjusted for better fit on smaller screens
+                    width: double.infinity,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 userAsync.when(
                   data: (user) {
                     if (user == null) {
                       return const Text(
                         'Not signed in',
-                        style: TextStyle(color: Colors.white70),
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
                       );
                     }
                     return Column(
@@ -55,10 +59,14 @@ class MainDrawer extends ConsumerWidget {
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: 4),
                         Text(
                           user.email ?? 'No Email',
-                          style: const TextStyle(color: Colors.white70),
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -81,10 +89,13 @@ class MainDrawer extends ConsumerWidget {
                       ],
                     );
                   },
-                  loading: () => const CircularProgressIndicator(),
+                  loading: () => const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
                   error: (error, stackTrace) => Text(
                     'Error: $error',
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -130,13 +141,32 @@ class MainDrawer extends ConsumerWidget {
               Navigator.pop(context);
             },
           ),
-          ListTile(
+          ExpansionTile(
             leading: const Icon(Icons.support),
             title: const Text('Support'),
-            onTap: () {
-              context.go('/support/contact');
-              Navigator.pop(context);
-            },
+            children: [
+              ListTile(
+                title: const Text('FAQ'),
+                onTap: () {
+                  context.go('/support/faq');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Legal'),
+                onTap: () {
+                  context.go('/support/legal');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Contact'),
+                onTap: () {
+                  context.go('/support/contact');
+                  Navigator.pop(context);
+                },
+              ),
+            ],
           ),
           ListTile(
             leading: const Icon(Icons.admin_panel_settings),
