@@ -6,7 +6,6 @@ import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class CalculatorScreen extends ConsumerStatefulWidget {
@@ -134,9 +133,9 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
                   ),
                 ),
                 child: const Text(
-                  'Step 2, Enter your measurements, swipe between tabs',
+                  'Step 2, enter your measurements',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
@@ -149,37 +148,59 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: 1,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 1, // Highlight Calculator tab
         onTap: (index) {
-          switch (index) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/calculator/tile-select');
-              break;
-            case 2:
-              context.go('/results');
-              break;
-            case 3:
+          if (index == 0) context.go('/home'); // Home
+          if (index == 1)
+            context.go('/home'); // Profile (redirects to home for now)
+          if (index == 2) {
+            // Tiles
+            if (user?.isPro != true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Upgrade to Pro to access this feature'),
+                ),
+              );
+              context.go('/subscription');
+            } else {
               context.go('/tiles');
-              break;
+            }
+          }
+          if (index == 3) {
+            // Results
+            if (user?.isPro != true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Upgrade to Pro to access this feature'),
+                ),
+              );
+              context.go('/subscription');
+            } else {
+              context.go('/results');
+            }
           }
         },
-        items: const [
-          BottomNavItem(
-              label: 'Home', icon: Icons.home, activeIcon: Icons.home_filled),
-          BottomNavItem(
-              label: 'Calculator',
-              icon: Icons.calculate,
-              activeIcon: Icons.calculate_outlined),
-          BottomNavItem(
-              label: 'Results', icon: Icons.save, activeIcon: Icons.save_alt),
-          BottomNavItem(
-              label: 'Tiles',
-              icon: Icons.grid_view,
-              activeIcon: Icons.grid_view_outlined),
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey,
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: Opacity(
+              opacity: user?.isPro == true ? 1.0 : 0.5,
+              child: const Icon(Icons.grid_view),
+            ),
+            label: 'Tiles',
+          ),
+          BottomNavigationBarItem(
+            icon: Opacity(
+              opacity: user?.isPro == true ? 1.0 : 0.5,
+              child: const Icon(Icons.save),
+            ),
+            label: 'Results',
+          ),
         ],
       ),
       floatingActionButton: Semantics(

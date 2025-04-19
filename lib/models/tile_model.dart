@@ -155,8 +155,9 @@ class TileModel {
       maxGauge: parseNumber(json['maxGauge']),
       minSpacing: parseNumber(json['minSpacing']),
       maxSpacing: parseNumber(json['maxSpacing']),
-      leftHandTileWidth:
-          json['LHTileWidth'] != null ? parseNumber(json['LHTileWidth']) : null,
+      leftHandTileWidth: json['leftHandTileWidth'] != null
+          ? parseNumber(json['leftHandTileWidth'])
+          : null,
       defaultCrossBonded: json['defaultCrossBonded'] as bool? ?? false,
       dataSheet: json['dataSheet'] as String?,
       image: json['image'] as String?,
@@ -181,7 +182,7 @@ class TileModel {
       'maxGauge': maxGauge,
       'minSpacing': minSpacing,
       'maxSpacing': maxSpacing,
-      if (leftHandTileWidth != null) 'LHTileWidth': leftHandTileWidth,
+      if (leftHandTileWidth != null) 'leftHandTileWidth': leftHandTileWidth,
       'defaultCrossBonded': defaultCrossBonded,
       if (dataSheet != null) 'dataSheet': dataSheet,
       if (image != null) 'image': image,

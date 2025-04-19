@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/profile_management_widget.dart';
+import 'package:roofgrid_uk/widgets/profile_summary_widget.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +18,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _analytics = FirebaseAnalytics.instance;
+  bool _isProfileExpanded = false;
 
   Future<void> _signOut() async {
     await ref.read(authProvider.notifier).signOut();
@@ -53,44 +56,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: 0,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0, // Highlight Profile tab
         onTap: (index) {
-          switch (index) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/calculator');
-              break;
-            case 2:
+          if (index == 0) context.go('/home'); // Profile
+          if (index == 1) context.go('/calculator'); // Calculator
+          if (index == 2) {
+            // Results
+            final user = ref.read(currentUserProvider).value;
+            if (user?.isPro != true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Upgrade to Pro to access this feature'),
+                ),
+              );
+              context.go('/subscription');
+            } else {
               context.go('/results');
-              break;
-            case 3:
+            }
+          }
+          if (index == 3) {
+            // Tiles
+            final user = ref.read(currentUserProvider).value;
+            if (user?.isPro != true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Upgrade to Pro to access this feature'),
+                ),
+              );
+              context.go('/subscription');
+            } else {
               context.go('/tiles');
-              break;
+            }
           }
         },
-        items: const [
-          BottomNavItem(
-            label: 'Home',
-            icon: Icons.home_outlined,
-            activeIcon: Icons.home,
-          ),
-          BottomNavItem(
-            label: 'Calculator',
-            icon: Icons.calculate_outlined,
-            activeIcon: Icons.calculate,
-          ),
-          BottomNavItem(
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey,
+        items: [
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.person), label: 'Profile'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.calculate), label: 'Calculator'),
+          BottomNavigationBarItem(
+            icon: Opacity(
+              opacity: ref.watch(currentUserProvider).value?.isPro == true
+                  ? 1.0
+                  : 0.5,
+              child: const Icon(Icons.save),
+            ),
             label: 'Results',
-            icon: Icons.save_outlined,
-            activeIcon: Icons.save,
           ),
-          BottomNavItem(
+          BottomNavigationBarItem(
+            icon: Opacity(
+              opacity: ref.watch(currentUserProvider).value?.isPro == true
+                  ? 1.0
+                  : 0.5,
+              child: const Icon(Icons.grid_view),
+            ),
             label: 'Tiles',
-            icon: Icons.grid_view_outlined,
-            activeIcon: Icons.grid_view,
           ),
         ],
       ),
@@ -111,64 +134,87 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required IconData icon,
     required VoidCallback onTap,
     bool isProFeature = false,
+    bool enabled = true,
   }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    icon,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 28,
-                  ),
-                  if (isProFeature)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'PRO',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      icon,
+                      color: enabled
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
+                      size: 28,
+                    ),
+                    if (isProFeature) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: enabled
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'PRO',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
+                      if (!enabled)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Icon(
+                            Icons.lock,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: enabled ? null : Colors.grey,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: enabled ? null : Colors.grey,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -189,196 +235,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
-            clipBehavior: Clip.antiAlias,
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16.0),
-            ),
+          Semantics(
+            label: 'Home page description',
             child: Container(
+              padding: const EdgeInsets.all(12.0),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primaryContainer,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.0,
                 ),
               ),
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.white,
-                        radius: 32,
-                        child: Text(
-                          _getInitials(user.displayName ?? 'User'),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome back,',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: Colors.white70,
-                                  ),
-                            ),
-                            Text(
-                              user.displayName ?? 'User',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPro ? Icons.workspace_premium : Icons.person,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isPro ? 'Pro Account' : 'Free Account',
-                          style:
-                              Theme.of(context).textTheme.labelLarge?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (user.isTrialActive) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Pro Trial: ${user.remainingTrialDays} days remaining',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                                Text(
-                                  'Upgrade now to keep Pro features',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              context.go('/subscription');
-                            },
-                            child: const Text('Upgrade'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (user.isSubscribed && !user.isTrialActive) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.star,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Pro Subscription Active',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                                Text(
-                                  'Valid until ${user.subscriptionEndDate!.toString().substring(0, 10)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
+              child: const Text(
+                'Welcome to RoofGrid UK',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
+            ).animate().fadeIn(duration: 600.ms),
           ),
+          const SizedBox(height: 24),
+          ProfileSummaryWidget(
+            user: user,
+            isExpanded: _isProfileExpanded,
+            onToggle: () {
+              setState(() {
+                _isProfileExpanded = !_isProfileExpanded;
+              });
+            },
+          ),
+          if (_isProfileExpanded) ...[
+            const SizedBox(height: 16),
+            const ProfileManagementWidget(),
+          ],
           const SizedBox(height: 24),
           Text(
             'Roofing Calculators',
@@ -432,8 +324,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  _analytics.logEvent(name: 'view_results');
-                  context.go('/results');
+                  if (!isPro) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Upgrade to Pro to access this feature'),
+                      ),
+                    );
+                    context.go('/subscription');
+                  } else {
+                    _analytics.logEvent(name: 'view_results');
+                    context.go('/results');
+                  }
                 },
                 child: const Text('View All'),
               ),
@@ -446,9 +347,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             subtitle: 'View and manage your saved results',
             icon: Icons.save_alt,
             onTap: () {
-              _analytics.logEvent(name: 'view_results');
-              context.go('/results');
+              if (!isPro) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upgrade to Pro to access this feature'),
+                  ),
+                );
+                context.go('/subscription');
+              } else {
+                _analytics.logEvent(name: 'view_results');
+                context.go('/results');
+              }
             },
+            isProFeature: true,
+            enabled: isPro,
           ),
           const SizedBox(height: 24),
           Text(
@@ -464,10 +376,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             subtitle: 'Create and edit tile profiles',
             icon: Icons.grid_view,
             onTap: () {
-              _analytics.logEvent(name: 'manage_tiles');
-              context.go('/tiles');
+              if (!isPro) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upgrade to Pro to access this feature'),
+                  ),
+                );
+                context.go('/subscription');
+              } else {
+                _analytics.logEvent(name: 'manage_tiles');
+                context.go('/tiles');
+              }
             },
-            isProFeature: !isPro,
+            isProFeature: true,
+            enabled: isPro,
           ),
           const SizedBox(height: 24),
           Text(

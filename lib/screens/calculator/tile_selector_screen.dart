@@ -13,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 
 class TileSelectorScreen extends ConsumerStatefulWidget {
   const TileSelectorScreen({super.key});
@@ -31,6 +32,18 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   String? _dataSheetUrl;
   bool _isOnline = true;
   final TextEditingController _searchController = TextEditingController();
+
+  // Form state for Free user manual tile input
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _widthController = TextEditingController();
+  final TextEditingController _minGaugeController = TextEditingController();
+  final TextEditingController _maxGaugeController = TextEditingController();
+  final TextEditingController _minSpacingController = TextEditingController();
+  final TextEditingController _maxSpacingController = TextEditingController();
+  final TextEditingController _leftHandTileWidthController =
+      TextEditingController();
+  bool _crossBonded = false;
+  TileSlateType _materialType = TileSlateType.unknown;
 
   @override
   void initState() {
@@ -57,6 +70,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _heightController.dispose();
+    _widthController.dispose();
+    _minGaugeController.dispose();
+    _maxGaugeController.dispose();
+    _minSpacingController.dispose();
+    _maxSpacingController.dispose();
+    _leftHandTileWidthController.dispose();
     super.dispose();
   }
 
@@ -97,6 +117,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                 ),
             ],
           ),
+          drawer: const MainDrawer(),
           body: user.isPro
               ? _buildProUserContent(user)
               : _buildFreeUserContent(user),
@@ -140,9 +161,9 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                 ),
               ),
               child: const Text(
-                'Step 1, Choose your Tile or Slate to get started.',
+                'Step 1, choose your tile or slate',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -534,11 +555,34 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   }
 
   Widget _buildFreeUserContent(UserModel user) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Semantics(
+            label: 'Step 1 description',
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.0,
+                ),
+              ),
+              child: const Text(
+                'Step 1, Choose your Tile or Slate to get started.',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ).animate().fadeIn(duration: 600.ms),
+          ),
+          const SizedBox(height: 16),
           Text(
             'Manual Tile Input (Free User)',
             style: Theme.of(context)
@@ -557,24 +601,49 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
 
   Widget _buildManualTileInputs(UserModel user) {
     final formKey = GlobalKey<FormState>();
-    final heightController = TextEditingController();
-    final widthController = TextEditingController();
-    final minGaugeController = TextEditingController();
-    final maxGaugeController = TextEditingController();
-    final minSpacingController = TextEditingController();
-    final maxSpacingController = TextEditingController();
 
     return Form(
       key: formKey,
       child: Column(
         children: [
           Semantics(
+            label: 'Material Type',
+            child: DropdownButtonFormField<TileSlateType>(
+              value: _materialType,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message: 'The type of tile material (e.g., Natural Slate).',
+                  child: const Text('Material Type *'),
+                ),
+                border: const OutlineInputBorder(),
+              ),
+              items: TileSlateType.values.map((type) {
+                return DropdownMenuItem(
+                  value: type,
+                  child: Text(_getTileSlateTypeDisplayName(type)),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _materialType = value);
+                }
+              },
+              validator: (value) =>
+                  value == null ? 'Material type is required' : null,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
             label: 'Tile Height or Length in millimeters',
             child: TextFormField(
-              controller: heightController,
-              decoration: const InputDecoration(
-                labelText: 'Tile Height/Length (mm) *',
-                border: OutlineInputBorder(),
+              controller: _heightController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The total height or length of the tile in millimeters (e.g., 500 mm).',
+                  child: const Text('Tile Height/Length (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
@@ -584,10 +653,14 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Semantics(
             label: 'Tile Cover Width in millimeters',
             child: TextFormField(
-              controller: widthController,
-              decoration: const InputDecoration(
-                labelText: 'Tile Cover Width (mm) *',
-                border: OutlineInputBorder(),
+              controller: _widthController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The effective width of the tile after overlap in millimeters (e.g., 250 mm).',
+                  child: const Text('Tile Cover Width (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
@@ -597,10 +670,14 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Semantics(
             label: 'Minimum Gauge in millimeters',
             child: TextFormField(
-              controller: minGaugeController,
-              decoration: const InputDecoration(
-                labelText: 'Min Gauge (mm) *',
-                border: OutlineInputBorder(),
+              controller: _minGaugeController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The minimum batten spacing in millimeters (e.g., 195 mm).',
+                  child: const Text('Min Gauge (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
@@ -610,10 +687,14 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Semantics(
             label: 'Maximum Gauge in millimeters',
             child: TextFormField(
-              controller: maxGaugeController,
-              decoration: const InputDecoration(
-                labelText: 'Max Gauge (mm) *',
-                border: OutlineInputBorder(),
+              controller: _maxGaugeController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The maximum batten spacing in millimeters (e.g., 210 mm).',
+                  child: const Text('Max Gauge (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
@@ -623,10 +704,14 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Semantics(
             label: 'Minimum Spacing in millimeters',
             child: TextFormField(
-              controller: minSpacingController,
-              decoration: const InputDecoration(
-                labelText: 'Min Spacing (mm) *',
-                border: OutlineInputBorder(),
+              controller: _minSpacingController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The minimum side overlap between tiles in millimeters (e.g., 1 mm).',
+                  child: const Text('Min Spacing (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
@@ -636,13 +721,58 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Semantics(
             label: 'Maximum Spacing in millimeters',
             child: TextFormField(
-              controller: maxSpacingController,
-              decoration: const InputDecoration(
-                labelText: 'Max Spacing (mm) *',
-                border: OutlineInputBorder(),
+              controller: _maxSpacingController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The maximum side overlap between tiles in millimeters (e.g., 5 mm).',
+                  child: const Text('Max Spacing (mm) *'),
+                ),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            label: 'Left Hand Tile Width in millimeters',
+            child: TextFormField(
+              controller: _leftHandTileWidthController,
+              decoration: InputDecoration(
+                label: Tooltip(
+                  message:
+                      'The width of the left-hand tile in millimeters, if applicable (e.g., 125 mm). Optional.',
+                  child: const Text('Left Hand Tile Width (mm)'),
+                ),
+                border: const OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value != null && value.isNotEmpty) {
+                  if (double.tryParse(value) == null) {
+                    return 'Invalid number';
+                  }
+                }
+                return null;
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            label: 'Cross Bonded',
+            child: CheckboxListTile(
+              title: Tooltip(
+                message:
+                    'Check if the tile is cross-bonded (e.g., alternating overlaps).',
+                child: const Text('Cross Bonded'),
+              ),
+              value: _crossBonded,
+              onChanged: (value) {
+                setState(() {
+                  _crossBonded = value ?? false;
+                });
+              },
             ),
           ),
           const SizedBox(height: 16),
@@ -655,7 +785,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                     id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
                     name: 'Temporary Tile',
                     manufacturer: 'Manual Input',
-                    materialType: TileSlateType.unknown,
+                    materialType: _materialType,
                     description: 'Manually entered tile specifications',
                     isPublic: false,
                     isApproved: false,
@@ -663,18 +793,28 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                     createdAt: DateTime.now(),
                     updatedAt: DateTime.now(),
                     slateTileHeight:
-                        double.tryParse(heightController.text) ?? 0,
-                    tileCoverWidth: double.tryParse(widthController.text) ?? 0,
-                    minGauge: double.tryParse(minGaugeController.text) ?? 0,
-                    maxGauge: double.tryParse(maxGaugeController.text) ?? 0,
-                    minSpacing: double.tryParse(minSpacingController.text) ?? 0,
-                    maxSpacing: double.tryParse(maxSpacingController.text) ?? 0,
-                    defaultCrossBonded: false,
+                        double.tryParse(_heightController.text) ?? 0,
+                    tileCoverWidth: double.tryParse(_widthController.text) ?? 0,
+                    minGauge: double.tryParse(_minGaugeController.text) ?? 0,
+                    maxGauge: double.tryParse(_maxGaugeController.text) ?? 0,
+                    minSpacing:
+                        double.tryParse(_minSpacingController.text) ?? 0,
+                    maxSpacing:
+                        double.tryParse(_maxSpacingController.text) ?? 0,
+                    leftHandTileWidth:
+                        _leftHandTileWidthController.text.isNotEmpty
+                            ? double.tryParse(_leftHandTileWidthController.text)
+                            : null,
+                    defaultCrossBonded: _crossBonded,
                   );
                   ref.read(calculatorProvider.notifier).setTile(tempTile);
                   context.go('/calculator/main');
                 }
               },
+              style: ElevatedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
               child: const Text('Confirm'),
             ),
           ),
@@ -781,9 +921,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Tile Name',
                       child: TextFormField(
                         controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Tile Name *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The name of the tile (e.g., Standard Slate).',
+                            child: const Text('Tile Name *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         validator: (value) =>
                             value?.isEmpty ?? true ? 'Name is required' : null,
@@ -794,9 +938,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Material Type',
                       child: DropdownButtonFormField<TileSlateType>(
                         value: materialType,
-                        decoration: const InputDecoration(
-                          labelText: 'Material Type *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The type of tile material (e.g., Natural Slate).',
+                            child: const Text('Material Type *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         items: TileSlateType.values.map((type) {
                           return DropdownMenuItem(
@@ -816,9 +964,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Manufacturer',
                       child: TextFormField(
                         controller: manufacturerController,
-                        decoration: const InputDecoration(
-                          labelText: 'Manufacturer *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The manufacturer of the tile (e.g., Generic).',
+                            child: const Text('Manufacturer *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         validator: (value) => value?.isEmpty ?? true
                             ? 'Manufacturer is required'
@@ -830,9 +982,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Description',
                       child: TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'A brief description of the tile (optional).',
+                            child: const Text('Description'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         maxLines: 2,
                       ),
@@ -842,8 +998,12 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Height or Length in millimeters',
                       child: TextFormField(
                         controller: heightController,
-                        decoration: const InputDecoration(
-                          labelText: 'Height/Length (mm) *',
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The total height or length of the tile in millimeters (e.g., 500 mm).',
+                            child: const Text('Height/Length (mm) *'),
+                          ),
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
@@ -861,9 +1021,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Cover Width in millimeters',
                       child: TextFormField(
                         controller: widthController,
-                        decoration: const InputDecoration(
-                          labelText: 'Cover Width (mm) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The effective width of the tile after overlap in millimeters (e.g., 250 mm).',
+                            child: const Text('Cover Width (mm) *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
@@ -880,9 +1044,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Minimum Gauge in millimeters',
                       child: TextFormField(
                         controller: minGaugeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Min Gauge (mm) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The minimum batten spacing in millimeters (e.g., 195 mm).',
+                            child: const Text('Min Gauge (mm) *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
@@ -899,9 +1067,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Maximum Gauge in millimeters',
                       child: TextFormField(
                         controller: maxGaugeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Max Gauge (mm) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The maximum batten spacing in millimeters (e.g., 210 mm).',
+                            child: const Text('Max Gauge (mm) *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
@@ -918,9 +1090,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Minimum Spacing in millimeters',
                       child: TextFormField(
                         controller: minSpacingController,
-                        decoration: const InputDecoration(
-                          labelText: 'Min Spacing (mm) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The minimum side overlap between tiles in millimeters (e.g., 1 mm).',
+                            child: const Text('Min Spacing (mm) *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
@@ -937,9 +1113,13 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                       label: 'Maximum Spacing in millimeters',
                       child: TextFormField(
                         controller: maxSpacingController,
-                        decoration: const InputDecoration(
-                          labelText: 'Max Spacing (mm) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The maximum side overlap between tiles in millimeters (e.g., 5 mm).',
+                            child: const Text('Max Spacing (mm) *'),
+                          ),
+                          border: const OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
@@ -953,9 +1133,37 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                     ),
                     const SizedBox(height: 8),
                     Semantics(
+                      label: 'Left Hand Tile Width in millimeters',
+                      child: TextFormField(
+                        controller: leftHandTileWidthController,
+                        decoration: InputDecoration(
+                          label: Tooltip(
+                            message:
+                                'The width of the left-hand tile in millimeters, if applicable (e.g., 125 mm). Optional.',
+                            child: const Text('Left Hand Tile Width (mm)'),
+                          ),
+                          border: const OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            if (double.tryParse(value) == null) {
+                              return 'Invalid number';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Semantics(
                       label: 'Cross Bonded',
                       child: CheckboxListTile(
-                        title: const Text('Cross Bonded'),
+                        title: Tooltip(
+                          message:
+                              'Check if the tile is cross-bonded (e.g., alternating overlaps).',
+                          child: const Text('Cross Bonded'),
+                        ),
                         value: crossBonded,
                         onChanged: (value) {
                           setState(() {
@@ -964,28 +1172,6 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         },
                       ),
                     ),
-                    if (crossBonded) ...[
-                      const SizedBox(height: 8),
-                      Semantics(
-                        label: 'Left Hand Tile Width in millimeters',
-                        child: TextFormField(
-                          controller: leftHandTileWidthController,
-                          decoration: const InputDecoration(
-                            labelText: 'Left Hand Tile Width (mm)',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            if (value != null &&
-                                value.isNotEmpty &&
-                                double.tryParse(value) == null) {
-                              return 'Invalid number';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -1105,11 +1291,11 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                         maxGauge: double.parse(maxGaugeController.text),
                         minSpacing: double.parse(minSpacingController.text),
                         maxSpacing: double.parse(maxSpacingController.text),
+                        leftHandTileWidth:
+                            leftHandTileWidthController.text.isNotEmpty
+                                ? double.parse(leftHandTileWidthController.text)
+                                : null,
                         defaultCrossBonded: crossBonded,
-                        leftHandTileWidth: crossBonded &&
-                                leftHandTileWidthController.text.isNotEmpty
-                            ? double.parse(leftHandTileWidthController.text)
-                            : null,
                         isPublic: isEditing ? tile!.isPublic : false,
                         isApproved: isEditing ? tile!.isApproved : false,
                         createdById: user.id,
@@ -1160,7 +1346,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   String _getTileSlateTypeDisplayName(TileSlateType type) {
     switch (type) {
       case TileSlateType.slate:
-        return 'Natural Slate';
+        return 'Slate';
       case TileSlateType.fibreCementSlate:
         return 'Fibre Cement Slate';
       case TileSlateType.interlockingTile:

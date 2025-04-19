@@ -42,16 +42,23 @@ class SplashScreen extends ConsumerWidget {
       );
     });
 
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            FlutterLogo(size: 100), // Replace with your app's logo
-            SizedBox(height: 16),
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
+            Semantics(
+              label: 'RoofGrid UK logo',
+              child: Image.asset(
+                'assets/images/logo/logo-square-600.png',
+                width: 150,
+                height: 150,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text(
               'RoofGrid UK',
               style: TextStyle(
                 fontSize: 24,

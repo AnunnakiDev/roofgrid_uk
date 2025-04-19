@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 
 class ProfileManagementWidget extends ConsumerStatefulWidget {
   const ProfileManagementWidget({super.key});
@@ -24,6 +26,7 @@ class _ProfileManagementWidgetState
   String? _photoURL;
   File? _imageFile;
   bool _isLoading = false;
+  final _analytics = FirebaseAnalytics.instance;
 
   @override
   void initState() {
@@ -71,8 +74,21 @@ class _ProfileManagementWidgetState
           'lastUpdated': FieldValue.serverTimestamp(),
         });
 
+        // Log analytics event
+        await _analytics.logEvent(
+          name: 'update_profile',
+          parameters: {
+            'user_id': user.id,
+            'updated_fields': [
+              if (_displayNameController.text != user.displayName)
+                'displayName',
+              if (_phoneController.text != user.phone) 'phone',
+              if (_imageFile != null) 'photoURL',
+            ].join(','),
+          },
+        );
+
         // Email updates are handled via Firebase Auth, which requires re-authentication
-        // For simplicity, we'll notify the user to re-authenticate for email changes
         if (_emailController.text != user.email) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -92,6 +108,13 @@ class _ProfileManagementWidgetState
       } finally {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _signOut() async {
+    await ref.read(authProvider.notifier).signOut();
+    if (mounted) {
+      context.go('/auth/login');
     }
   }
 
@@ -139,21 +162,25 @@ class _ProfileManagementWidgetState
                     Positioned(
                       bottom: 0,
                       right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.camera_alt, color: Colors.white),
-                        onPressed: () async {
-                          final result = await FilePicker.platform
-                              .pickFiles(type: FileType.image);
-                          if (result != null &&
-                              result.files.single.path != null) {
-                            setState(() {
-                              _imageFile = File(result.files.single.path!);
-                            });
-                          }
-                        },
-                        style: IconButton.styleFrom(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
+                      child: Semantics(
+                        label: 'Upload profile picture',
+                        child: IconButton(
+                          icon:
+                              const Icon(Icons.camera_alt, color: Colors.white),
+                          onPressed: () async {
+                            final result = await FilePicker.platform
+                                .pickFiles(type: FileType.image);
+                            if (result != null &&
+                                result.files.single.path != null) {
+                              setState(() {
+                                _imageFile = File(result.files.single.path!);
+                              });
+                            }
+                          },
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -162,39 +189,73 @@ class _ProfileManagementWidgetState
               ),
               const SizedBox(height: 16),
               // Display Name
-              TextFormField(
-                controller: _displayNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Display Name',
-                  border: OutlineInputBorder(),
+              Semantics(
+                label: 'Display name field',
+                child: TextFormField(
+                  controller: _displayNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Display Name',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your display name';
+                    }
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your display name';
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 12),
-              // Email (read-only with note)
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  hintText: 'Email updates require re-authentication',
-                ),
-                readOnly: true,
+              // Email (read-only with sign-out option)
+              Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      label: 'Email field (read-only)',
+                      child: TextFormField(
+                        controller: _emailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
+                          hintText: 'Email updates require re-authentication',
+                        ),
+                        readOnly: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Semantics(
+                    label: 'Sign out to update email',
+                    child: TextButton(
+                      onPressed: _signOut,
+                      child: const Text('Sign Out'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               // Phone Number
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  border: OutlineInputBorder(),
+              Semantics(
+                label: 'Phone number field',
+                child: TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      if (value.length < 10) {
+                        return 'Phone number must be at least 10 digits';
+                      }
+                      if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
+                        return 'Phone number must contain only digits';
+                      }
+                    }
+                    return null;
+                  },
                 ),
-                keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 16),
               // Subscription Status
@@ -237,16 +298,22 @@ class _ProfileManagementWidgetState
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => context.go('/subscription'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: user.isPro
-                            ? Colors.grey
-                            : Theme.of(context).colorScheme.primary,
+                    Semantics(
+                      label:
+                          user.isPro ? 'Manage subscription' : 'Upgrade to Pro',
+                      child: ElevatedButton(
+                        onPressed: () => context.go('/subscription'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: user.isPro
+                              ? Colors.grey
+                              : Theme.of(context).colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                        ),
+                        child: Text(user.isPro
+                            ? 'Manage Subscription'
+                            : 'Upgrade to Pro'),
                       ),
-                      child: Text(user.isPro
-                          ? 'Manage Subscription'
-                          : 'Upgrade to Pro'),
                     ),
                   ],
                 ),
@@ -255,9 +322,18 @@ class _ProfileManagementWidgetState
               Center(
                 child: _isLoading
                     ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                        onPressed: _updateProfile,
-                        child: const Text('Update Profile'),
+                    : Semantics(
+                        label: 'Update profile button',
+                        child: ElevatedButton(
+                          onPressed: _updateProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                          ),
+                          child: const Text('Update Profile'),
+                        ),
                       ),
               ),
             ],
