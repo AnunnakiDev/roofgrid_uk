@@ -164,6 +164,14 @@ class TileModel {
     );
   }
 
+  factory TileModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data == null) {
+      throw Exception('Tile data not found for ID: ${doc.id}');
+    }
+    return TileModel.fromJson(data);
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

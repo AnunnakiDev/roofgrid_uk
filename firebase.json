@@ -34,18 +34,24 @@
       "port": 9500
     }
   },
-  "hosting": {
-    "public": "build/web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
+
+    "hosting": [
       {
-        "source": "**",
-        "destination": "/index.html"
+        "target": "roofgriduk-f2f56",
+        "public": "build/web",
+        "ignore": [
+          "firebase.json",
+          "**/.*",
+          "**/node_modules/**"
+        ],
+              "rewrites": [
+                {
+                  "source": "**",
+                  "destination": "/index.html"
+                }
+              ]
+            }
+          ]
       }
-    ]
-  }
-}
+    
+  

@@ -1,0 +1,5 @@
+cd D:\Projects\roofgrid_uk
+flutter clean
+flutter pub get
+flutter build web --release
+firebase deploy --only hosting

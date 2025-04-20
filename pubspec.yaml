@@ -35,6 +35,11 @@ dependencies:
   hive_flutter: ^1.1.0
   connectivity_plus: ^6.0.5
   flutter_stripe: ^11.5.0
+  fl_chart: ^0.68.0
+  csv: ^6.0.0
+  syncfusion_flutter_charts: ^29.1.38
+  flutter_colorpicker: ^1.1.0
+  # Added for color picker
 
 dependency_overrides:
   fake_async: ^1.3.3

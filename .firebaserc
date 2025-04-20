@@ -3,6 +3,17 @@
     "default": "roofgriduk-f2f56",
     "roofgrid": "roofgriduk-f2f56"
   },
-  "targets": {},
+  "targets": {
+    "roofgriduk-f2f56": {
+      "hosting": {
+        "roofgrid-uk-12756": [
+          "roofgrid-uk-12756"
+        ],
+        "roofgriduk-f2f56": [
+          "roofgriduk-f2f56"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

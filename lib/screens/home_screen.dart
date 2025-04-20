@@ -3,11 +3,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/theme_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/profile_management_widget.dart';
 import 'package:roofgrid_uk/widgets/profile_summary_widget.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/foundation.dart';
+
+// Background isolate for analytics logging
+Future<void> _logAnalyticsEvent(Map<String, dynamic> event) async {
+  await FirebaseAnalytics.instance.logEvent(
+    name: event['name'],
+    parameters: event['parameters'],
+  );
+}
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -21,8 +32,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isProfileExpanded = false;
 
   Future<void> _signOut() async {
+    await compute(_logAnalyticsEvent, {
+      'name': 'sign_out',
+      'parameters': null,
+    });
     await ref.read(authProvider.notifier).signOut();
-    await _analytics.logEvent(name: 'sign_out');
     if (mounted) {
       context.go('/auth/login');
     }
@@ -31,21 +45,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeScreen = screenWidth >= 600;
+
+    // Watch themeProvider to get the current theme mode
+    final isDarkMode = ref.watch(themeProvider).themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RoofGrid UK'),
+        title: Text(
+          'RoofGrid UK',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Sign out',
+          Row(
+            children: [
+              Icon(
+                isDarkMode ? Icons.wb_sunny : Icons.nightlight_round,
+                color: isDarkMode ? Colors.yellow[200] : Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Toggle theme to ${isDarkMode ? "light" : "dark"} mode',
+                child: Switch(
+                  value: isDarkMode,
+                  onChanged: (value) {
+                    ref.read(themeProvider.notifier).toggleTheme(value);
+                  },
+                  activeColor: Theme.of(context).colorScheme.primary,
+                  inactiveThumbColor: Colors.grey,
+                  inactiveTrackColor: Colors.grey.withOpacity(0.5),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: _signOut,
+                tooltip: 'Sign out',
+              ),
+            ],
           ),
         ],
       ),
       drawer: const MainDrawer(),
       body: userAsync.when(
-        data: (user) => _buildHomeContent(context, user),
+        data: (user) => _buildHomeContent(context, user, isLargeScreen),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(
           child: Text(
@@ -56,66 +100,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0, // Highlight Profile tab
-        onTap: (index) {
-          if (index == 0) context.go('/home'); // Profile
-          if (index == 1) context.go('/calculator'); // Calculator
-          if (index == 2) {
-            // Results
-            final user = ref.read(currentUserProvider).value;
-            if (user?.isPro != true) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Upgrade to Pro to access this feature'),
-                ),
-              );
-              context.go('/subscription');
-            } else {
-              context.go('/results');
-            }
-          }
-          if (index == 3) {
-            // Tiles
-            final user = ref.read(currentUserProvider).value;
-            if (user?.isPro != true) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Upgrade to Pro to access this feature'),
-                ),
-              );
-              context.go('/subscription');
-            } else {
-              context.go('/tiles');
-            }
-          }
+      bottomNavigationBar: Consumer(
+        builder: (context, ref, child) {
+          final user = ref.watch(currentUserProvider).value;
+          return BottomNavigationBar(
+            currentIndex: 0,
+            onTap: (index) {
+              if (index == 0) context.go('/home');
+              if (index == 1) context.go('/calculator');
+              if (index == 2) {
+                if (user?.isPro != true) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  context.go('/results');
+                }
+              }
+              if (index == 3) {
+                if (user?.isPro != true) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  context.go('/tiles');
+                }
+              }
+            },
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Colors.grey,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.calculate),
+                label: 'Calculator',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.save),
+                label: 'Results',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.grid_view),
+                label: 'Tiles',
+              ),
+            ],
+          );
         },
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Colors.grey,
-        items: [
-          const BottomNavigationBarItem(
-              icon: Icon(Icons.person), label: 'Profile'),
-          const BottomNavigationBarItem(
-              icon: Icon(Icons.calculate), label: 'Calculator'),
-          BottomNavigationBarItem(
-            icon: Opacity(
-              opacity: ref.watch(currentUserProvider).value?.isPro == true
-                  ? 1.0
-                  : 0.5,
-              child: const Icon(Icons.save),
-            ),
-            label: 'Results',
-          ),
-          BottomNavigationBarItem(
-            icon: Opacity(
-              opacity: ref.watch(currentUserProvider).value?.isPro == true
-                  ? 1.0
-                  : 0.5,
-              child: const Icon(Icons.grid_view),
-            ),
-            label: 'Tiles',
-          ),
-        ],
       ),
     );
   }
@@ -135,21 +174,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required VoidCallback onTap,
     bool isProFeature = false,
     bool enabled = true,
+    required int index,
+    bool isCalculator = false,
   }) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        constraints: BoxConstraints(
+          minHeight: isCalculator ? 110 : 100,
         ),
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.2)
+                  : Colors.black.withOpacity(0.1),
+              blurRadius: 5,
+              offset: const Offset(2, 2),
+            ),
+            BoxShadow(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.3),
+              blurRadius: 5,
+              offset: const Offset(-2, -2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: isCalculator
+              ? const EdgeInsets.all(16)
+              : const EdgeInsets.all(12),
+          child: Opacity(
+            opacity: enabled ? 1.0 : 0.5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
@@ -158,7 +224,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: enabled
                           ? Theme.of(context).colorScheme.primary
                           : Colors.grey,
-                      size: 28,
+                      size: isCalculator ? 32 : 28,
                     ),
                     if (isProFeature) ...[
                       Padding(
@@ -178,10 +244,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             'PRO',
                             style: Theme.of(context)
                                 .textTheme
-                                .labelSmall
+                                .labelLarge
                                 ?.copyWith(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
                                 ),
                           ),
                         ),
@@ -198,30 +264,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: enabled ? null : Colors.grey,
-                      ),
-                ),
                 const SizedBox(height: 4),
                 Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: enabled ? null : Colors.grey,
-                      ),
+                  title,
+                  style: isCalculator
+                      ? Theme.of(context).textTheme.titleMedium
+                      : Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                ),
+                const SizedBox(height: 4),
+                Flexible(
+                  child: Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: isCalculator ? 13 : 12,
+                        ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
-    );
+    )
+        .animate()
+        .slideY(
+          begin: isCalculator ? 0.7 : 0.5,
+          end: 0,
+          duration: 400.ms,
+          delay: (100 * index).ms,
+          curve: Curves.easeOut,
+        )
+        .fadeIn(
+          duration: 400.ms,
+          delay: (100 * index).ms,
+        )
+        .scale(
+          begin:
+              isCalculator ? const Offset(0.85, 0.85) : const Offset(0.9, 0.9),
+          end: const Offset(1, 1),
+          duration: 400.ms,
+          curve: Curves.easeOut,
+        )
+        .then()
+        .scale(
+          begin: const Offset(1, 1),
+          end: const Offset(1.05, 1.05),
+          duration: 200.ms,
+          curve: Curves.easeOut,
+        );
   }
 
-  Widget _buildHomeContent(BuildContext context, UserModel? user) {
+  Widget _buildHomeContent(
+      BuildContext context, UserModel? user, bool isLargeScreen) {
     if (user == null) {
       return const Center(
         child: Text('User data not found. Please sign in again.'),
@@ -229,187 +327,188 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     final isPro = user.isPro;
+    final sectionSpacing = isLargeScreen ? 32.0 : 24.0;
+    final padding =
+        isLargeScreen ? const EdgeInsets.all(24.0) : const EdgeInsets.all(12.0);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(
-            label: 'Home page description',
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.0,
-                ),
-              ),
-              child: const Text(
-                'Welcome to RoofGrid UK',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ).animate().fadeIn(duration: 600.ms),
-          ),
-          const SizedBox(height: 24),
-          ProfileSummaryWidget(
-            user: user,
-            isExpanded: _isProfileExpanded,
-            onToggle: () {
-              setState(() {
-                _isProfileExpanded = !_isProfileExpanded;
-              });
+          Consumer(
+            builder: (context, ref, child) {
+              return Column(
+                children: [
+                  ProfileSummaryWidget(
+                    user: user,
+                    isExpanded: _isProfileExpanded,
+                    onToggle: () {
+                      setState(() {
+                        _isProfileExpanded = !_isProfileExpanded;
+                      });
+                    },
+                  ).animate().slideY(
+                        begin: _isProfileExpanded ? -0.2 : 0.2,
+                        end: 0,
+                        duration: 400.ms,
+                        curve: Curves.easeOut,
+                      ),
+                  if (_isProfileExpanded) ...[
+                    SizedBox(height: sectionSpacing),
+                    const ProfileManagementWidget().animate().fadeIn(
+                          duration: 400.ms,
+                          delay: 100.ms,
+                        ),
+                  ],
+                ],
+              );
             },
           ),
-          if (_isProfileExpanded) ...[
-            const SizedBox(height: 16),
-            const ProfileManagementWidget(),
-          ],
-          const SizedBox(height: 24),
+          SizedBox(height: sectionSpacing),
           Text(
             'Roofing Calculators',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: _buildFeatureCard(
-                  context,
-                  title: 'Vertical',
-                  subtitle: 'Batten Gauge',
-                  icon: Icons.straighten,
-                  onTap: () {
-                    _analytics.logEvent(
-                        name: 'open_calculator',
-                        parameters: {'type': 'vertical'});
-                    context.go('/calculator');
-                  },
+                child: Semantics(
+                  label: 'Tap to calculate batten gauge',
+                  child: _buildFeatureCard(
+                    context,
+                    title: 'Vertical',
+                    subtitle: 'Batten Gauge',
+                    icon: Icons.straighten,
+                    index: 0,
+                    onTap: () {
+                      compute(_logAnalyticsEvent, {
+                        'name': 'open_calculator',
+                        'parameters': {'type': 'vertical'},
+                      });
+                      context.go('/calculator');
+                    },
+                    isCalculator: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildFeatureCard(
-                  context,
-                  title: 'Horizontal',
-                  subtitle: 'Marking Out',
-                  icon: Icons.auto_awesome_mosaic,
-                  onTap: () {
-                    _analytics.logEvent(
-                        name: 'open_calculator',
-                        parameters: {'type': 'horizontal'});
-                    context.go('/calculator');
-                  },
+                child: Semantics(
+                  label: 'Tap to calculate marking out',
+                  child: _buildFeatureCard(
+                    context,
+                    title: 'Horizontal',
+                    subtitle: 'Marking Out',
+                    icon: Icons.auto_awesome_mosaic,
+                    index: 1,
+                    onTap: () {
+                      compute(_logAnalyticsEvent, {
+                        'name': 'open_calculator',
+                        'parameters': {'type': 'horizontal'},
+                      });
+                      context.go('/calculator');
+                    },
+                    isCalculator: true,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Saved Results',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (!isPro) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Upgrade to Pro to access this feature'),
-                      ),
-                    );
-                    context.go('/subscription');
-                  } else {
-                    _analytics.logEvent(name: 'view_results');
-                    context.go('/results');
-                  }
-                },
-                child: const Text('View All'),
-              ),
-            ],
+          SizedBox(height: sectionSpacing),
+          Text(
+            'Saved Results',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
-          _buildFeatureCard(
-            context,
-            title: 'Saved Calculations',
-            subtitle: 'View and manage your saved results',
-            icon: Icons.save_alt,
-            onTap: () {
-              if (!isPro) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                context.go('/subscription');
-              } else {
-                _analytics.logEvent(name: 'view_results');
-                context.go('/results');
-              }
-            },
-            isProFeature: true,
-            enabled: isPro,
+          Semantics(
+            label: 'Tap to view saved calculations',
+            child: _buildFeatureCard(
+              context,
+              title: 'Saved Calculations',
+              subtitle: 'View and manage your saved results',
+              icon: Icons.save_alt,
+              index: 2,
+              onTap: () {
+                if (!isPro) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  compute(_logAnalyticsEvent, {
+                    'name': 'view_results',
+                    'parameters': null,
+                  });
+                  context.go('/results');
+                }
+              },
+              isProFeature: true,
+              enabled: isPro,
+            ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: sectionSpacing),
           Text(
             'Tile Management',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
-          _buildFeatureCard(
-            context,
-            title: 'Manage Tiles',
-            subtitle: 'Create and edit tile profiles',
-            icon: Icons.grid_view,
-            onTap: () {
-              if (!isPro) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                context.go('/subscription');
-              } else {
-                _analytics.logEvent(name: 'manage_tiles');
-                context.go('/tiles');
-              }
-            },
-            isProFeature: true,
-            enabled: isPro,
+          Semantics(
+            label: 'Tap to manage tiles',
+            child: _buildFeatureCard(
+              context,
+              title: 'Manage Tiles',
+              subtitle: 'Create and edit tile profiles',
+              icon: Icons.grid_view,
+              index: 3,
+              onTap: () {
+                if (!isPro) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  compute(_logAnalyticsEvent, {
+                    'name': 'manage_tiles',
+                    'parameters': null,
+                  });
+                  context.go('/tiles');
+                }
+              },
+              isProFeature: true,
+              enabled: isPro,
+            ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: sectionSpacing),
           Text(
             'Help & Support',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
-          _buildFeatureCard(
-            context,
-            title: 'Support',
-            subtitle: 'Get help and contact support',
-            icon: Icons.help_outline,
-            onTap: () {
-              _analytics.logEvent(name: 'open_support');
-              context.go('/support/contact');
-            },
+          Semantics(
+            label: 'Tap to get help and support',
+            child: _buildFeatureCard(
+              context,
+              title: 'Support',
+              subtitle: 'Get help and contact support',
+              icon: Icons.help_outline,
+              index: 4,
+              onTap: () {
+                compute(_logAnalyticsEvent, {
+                  'name': 'open_support',
+                  'parameters': null,
+                });
+                context.go('/support/contact');
+              },
+            ),
           ),
-          const SizedBox(height: 32),
+          SizedBox(height: sectionSpacing),
         ],
       ),
     );
