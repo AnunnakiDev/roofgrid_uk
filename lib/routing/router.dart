@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/screens/auth/login_screen.dart';
 import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
 import 'package:roofgrid_uk/screens/auth/register_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
 import 'package:roofgrid_uk/screens/home_screen.dart';
 import 'package:roofgrid_uk/screens/splash_screen.dart';
-import 'package:roofgrid_uk/screens/admin_dashboard_screen.dart';
+import 'package:roofgrid_uk/screens/admin/admin_dashboard_screen.dart';
+import 'package:roofgrid_uk/screens/admin/admin_stats_screen.dart';
+import 'package:roofgrid_uk/screens/admin/user_management_screen.dart';
+import 'package:roofgrid_uk/screens/admin/admin_tile_management_screen.dart';
 import 'package:roofgrid_uk/screens/support/faq_screen.dart';
 import 'package:roofgrid_uk/screens/support/legal_screen.dart';
 import 'package:roofgrid_uk/screens/support/contact_screen.dart';
@@ -19,6 +23,7 @@ import 'package:roofgrid_uk/screens/tile_management_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
 import 'package:roofgrid_uk/screens/subscription/success_page.dart';
 import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
+import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -70,7 +75,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/home';
       }
 
-      if (isLoggedIn && state.uri.path == '/admin') {
+      // Restrict access to all /admin routes for non-admins
+      if (isLoggedIn && state.uri.path.startsWith('/admin')) {
         final user = ref.read(currentUserProvider).value;
         if (user == null) {
           print("User not loaded, redirecting to /home");
@@ -79,9 +85,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (user.role != UserRole.admin) {
           await FirebaseAnalytics.instance.logEvent(
             name: 'access_denied',
-            parameters: {'route': '/admin', 'role': user.role.toString()},
+            parameters: {'route': state.uri.path, 'role': user.role.toString()},
           );
-          print("Access denied for /admin, redirecting to /home");
+          print("Access denied for ${state.uri.path}, redirecting to /home");
           return '/home';
         }
       }
@@ -124,10 +130,59 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/calculator/tile-select',
         builder: (context, state) => const TileSelectorScreen(),
+        routes: [
+          GoRoute(
+            path: 'add-tile',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return AddTileWidget(
+                userRole: extra?['userRole'] as UserRole,
+                userId: extra?['userId'] as String,
+                onTileCreated:
+                    extra?['onTileCreated'] as void Function(TileModel)?,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/admin',
         builder: (context, state) => const AdminDashboardScreen(),
+        routes: [
+          GoRoute(
+            path: 'users',
+            builder: (context, state) => const UserManagementScreen(),
+          ),
+          GoRoute(
+            path: 'tiles',
+            builder: (context, state) => const AdminTileManagementScreen(),
+          ),
+          GoRoute(
+            path: 'stats',
+            builder: (context, state) => const AdminStatsScreen(),
+          ),
+          GoRoute(
+            path: 'add-tile',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return AddTileWidget(
+                userRole: extra?['userRole'] as UserRole,
+                userId: extra?['userId'] as String,
+              );
+            },
+          ),
+          GoRoute(
+            path: 'edit-tile/:tileId',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return AddTileWidget(
+                userRole: extra?['userRole'] as UserRole,
+                userId: extra?['userId'] as String,
+                tile: extra?['tile'] as TileModel,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/support/faq',
@@ -160,6 +215,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tiles',
         builder: (context, state) => const TileManagementScreen(),
+        routes: [
+          GoRoute(
+            path: 'add-tile',
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return AddTileWidget(
+                userRole: extra?['userRole'] as UserRole,
+                userId: extra?['userId'] as String,
+              );
+            },
+          ),
+        ],
       ),
     ],
     errorBuilder: (context, state) {

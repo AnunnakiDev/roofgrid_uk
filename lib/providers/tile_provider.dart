@@ -61,6 +61,11 @@ class TileService {
     }
   }
 
+  Future<void> saveToDefaultTiles(TileModel tile) async {
+    // Save tile in the main tiles collection: tiles/$tileId
+    await _firestore.collection('tiles').doc(tile.id).set(tile.toJson());
+  }
+
   Future<List<TileModel>> fetchUserTiles(String userId) async {
     print('Fetching user tiles for userId: $userId'); // Debug log
     final snapshot = await _firestore
