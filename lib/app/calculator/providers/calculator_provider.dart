@@ -1,5 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
+import 'package:roofgrid_uk/app/calculator/services/calculation_service.dart';
+import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/services/hive_service.dart';
 import '../../../models/calculator/horizontal_calculation_input.dart';
 import '../../../models/calculator/horizontal_calculation_result.dart';
 import '../../../models/calculator/vertical_calculation_input.dart';
@@ -77,10 +81,34 @@ class CalculatorState {
 }
 
 class CalculatorNotifier extends StateNotifier<CalculatorState> {
-  CalculatorNotifier() : super(CalculatorState());
+  final CalculationService _calculationService;
+  final String? _userId;
+  final HiveService _hiveService = HiveService();
+  final Ref _ref;
+
+  CalculatorNotifier(this._calculationService, this._userId, this._ref)
+      : super(CalculatorState()) {
+    _loadLastSelectedTile();
+  }
+
+  void _loadLastSelectedTile() {
+    if (_userId != null) {
+      // Fix: Get the actual UserModel from the provider
+      final user = _ref.read(currentUserProvider).value;
+      if (user != null && (user.isPro || user.isAdmin)) {
+        final lastTile = _hiveService.getLastSelectedTile();
+        if (lastTile != null) {
+          state = state.copyWith(selectedTile: lastTile);
+        }
+      }
+    }
+  }
 
   void setTile(TileModel tile) {
     state = state.copyWith(selectedTile: tile).clearResults();
+    if (_userId != null) {
+      _hiveService.saveLastSelectedTile(tile);
+    }
   }
 
   void setGutterOverhang(double value) {
@@ -107,70 +135,200 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
     state = state.copyWith(crossBonded: value).clearResults();
   }
 
-  Future<void> calculateVertical(List<double> rafterHeights) async {
+  Future<Map<String, dynamic>?> calculateVertical(
+      List<double> rafterHeights) async {
+    debugPrint('Starting calculateVertical in CalculatorNotifier');
     if (state.selectedTile == null) {
+      debugPrint('No tile selected');
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
       );
-      return;
+      return null;
+    }
+
+    if (_userId == null) {
+      debugPrint('User not authenticated');
+      state = state.copyWith(
+        errorMessage: 'User not authenticated',
+      );
+      return null;
     }
 
     state = state.copyWith(isLoading: true, errorMessage: null);
 
-    try {
-      final input = VerticalCalculationInput(
-        rafterHeights: rafterHeights,
-        gutterOverhang: state.gutterOverhang,
-        useDryRidge: state.useDryRidge,
-      );
+    final input = VerticalCalculationInput(
+      rafterHeights: rafterHeights,
+      gutterOverhang: state.gutterOverhang,
+      useDryRidge: state.useDryRidge,
+    );
 
-      final result = VerticalCalculationService.calculateVertical(
-        input: input,
-        materialType: state.selectedTile!.materialTypeString,
-        slateTileHeight: state.selectedTile!.slateTileHeight,
-        maxGauge: state.selectedTile!.maxGauge,
-        minGauge: state.selectedTile!.minGauge,
-      );
-      state = state.copyWith(verticalResult: result, isLoading: false);
-    } catch (e) {
-      state = state.copyWith(
-        errorMessage: e.toString(),
-        isLoading: false,
-      );
-    }
+    debugPrint('Calling VerticalCalculationService.calculateVertical');
+    final result = VerticalCalculationService.calculateVertical(
+      input: input,
+      materialType: state.selectedTile!.materialTypeString,
+      slateTileHeight: state.selectedTile!.slateTileHeight,
+      maxGauge: state.selectedTile!.maxGauge,
+      minGauge: state.selectedTile!.minGauge,
+    );
+    debugPrint('Result from calculateVertical: $result');
+
+    // Prepare calculation data
+    final calculationId =
+        'calc_${_userId}_${DateTime.now().millisecondsSinceEpoch}';
+    final inputsMap = {
+      'rafterHeights': rafterHeights
+          .asMap()
+          .entries
+          .map((entry) => {
+                'label': 'Rafter ${entry.key + 1}',
+                'value': entry.value,
+              })
+          .toList(),
+      'gutterOverhang': state.gutterOverhang,
+      'useDryRidge': state.useDryRidge,
+    };
+
+    final resultMap = {
+      'totalCourses': result.totalCourses,
+      'ridgeOffset': result.ridgeOffset,
+      'underEaveBatten': result.underEaveBatten,
+      'eaveBatten': result.eaveBatten,
+      'firstBatten': result.firstBatten,
+      'cutCourse': result.cutCourse,
+      'gauge': result.gauge,
+      'splitGauge': result.splitGauge,
+      'warning': result.warning,
+    };
+
+    final tileMap = {
+      'id': state.selectedTile!.id,
+      'name': state.selectedTile!.name,
+      'materialType': state.selectedTile!.materialTypeString,
+      'tileCoverWidth': state.selectedTile!.tileCoverWidth,
+      'slateTileHeight': state.selectedTile!.slateTileHeight,
+      'minGauge': state.selectedTile!.minGauge,
+      'maxGauge': state.selectedTile!.maxGauge,
+      'minSpacing': state.selectedTile!.minSpacing,
+      'maxSpacing': state.selectedTile!.maxSpacing,
+      'defaultCrossBonded': state.selectedTile!.defaultCrossBonded,
+      'leftHandTileWidth': state.selectedTile!.leftHandTileWidth,
+    };
+
+    // Update state with the result, even if there's a warning
+    state = state.copyWith(
+      verticalResult: result,
+      isLoading: false,
+      errorMessage: result.warning,
+    );
+    debugPrint('State updated with verticalResult: ${state.verticalResult}');
+
+    debugPrint('Returning result map from calculateVertical');
+    return {
+      'id': calculationId,
+      'inputs': inputsMap,
+      'outputs': resultMap,
+      'tile': tileMap,
+    };
   }
 
-  Future<void> calculateHorizontal(List<double> widths) async {
+  Future<Map<String, dynamic>?> calculateHorizontal(List<double> widths) async {
+    debugPrint('Starting calculateHorizontal in CalculatorNotifier');
     if (state.selectedTile == null) {
+      debugPrint('No tile selected');
       state = state.copyWith(
         errorMessage: 'Please select a tile before calculating',
       );
-      return;
+      return null;
+    }
+
+    if (_userId == null) {
+      debugPrint('User not authenticated');
+      state = state.copyWith(
+        errorMessage: 'User not authenticated',
+      );
+      return null;
     }
 
     state = state.copyWith(isLoading: true, errorMessage: null);
 
-    try {
-      final input = HorizontalCalculationInput(
-        widths: widths,
-        tileCoverWidth: state.selectedTile!.tileCoverWidth,
-        minSpacing: state.selectedTile!.minSpacing,
-        maxSpacing: state.selectedTile!.maxSpacing,
-        useDryVerge: state.useDryVerge,
-        abutmentSide: state.abutmentSide,
-        useLHTile: state.useLHTile,
-        lhTileWidth: state.selectedTile!.leftHandTileWidth ?? 0,
-        crossBonded: state.crossBonded,
-      );
+    final input = HorizontalCalculationInput(
+      widths: widths,
+      tileCoverWidth: state.selectedTile!.tileCoverWidth,
+      minSpacing: state.selectedTile!.minSpacing,
+      maxSpacing: state.selectedTile!.maxSpacing,
+      useDryVerge: state.useDryVerge,
+      abutmentSide: state.abutmentSide,
+      useLHTile: state.useLHTile,
+      lhTileWidth: state.selectedTile!.leftHandTileWidth ?? 0,
+      crossBonded: state.crossBonded,
+    );
 
-      final result = HorizontalCalculationService.calculateHorizontal(input);
-      state = state.copyWith(horizontalResult: result, isLoading: false);
-    } catch (e) {
-      state = state.copyWith(
-        errorMessage: e.toString(),
-        isLoading: false,
-      );
-    }
+    debugPrint('Calling HorizontalCalculationService.calculateHorizontal');
+    final result = HorizontalCalculationService.calculateHorizontal(input);
+    debugPrint('Result from calculateHorizontal: $result');
+
+    // Prepare calculation data
+    final calculationId =
+        'calc_${_userId}_${DateTime.now().millisecondsSinceEpoch}';
+    final inputsMap = {
+      'widths': widths
+          .asMap()
+          .entries
+          .map((entry) => {
+                'label': 'Width ${entry.key + 1}',
+                'value': entry.value,
+              })
+          .toList(),
+      'useDryVerge': state.useDryVerge,
+      'abutmentSide': state.abutmentSide,
+      'useLHTile': state.useLHTile,
+      'crossBonded': state.crossBonded,
+    };
+
+    final resultMap = {
+      'solution': result.solution,
+      'newWidth': result.newWidth,
+      'lhOverhang': result.lhOverhang,
+      'rhOverhang': result.rhOverhang,
+      'cutTile': result.cutTile,
+      'firstMark': result.firstMark,
+      'secondMark': result.secondMark,
+      'marks': result.marks,
+      'splitMarks': result.splitMarks,
+      'actualSpacing': result.actualSpacing,
+      'warning': result.warning,
+    };
+
+    final tileMap = {
+      'id': state.selectedTile!.id,
+      'name': state.selectedTile!.name,
+      'materialType': state.selectedTile!.materialTypeString,
+      'tileCoverWidth': state.selectedTile!.tileCoverWidth,
+      'slateTileHeight': state.selectedTile!.slateTileHeight,
+      'minGauge': state.selectedTile!.minGauge,
+      'maxGauge': state.selectedTile!.maxGauge,
+      'minSpacing': state.selectedTile!.minSpacing,
+      'maxSpacing': state.selectedTile!.maxSpacing,
+      'defaultCrossBonded': state.selectedTile!.defaultCrossBonded,
+      'leftHandTileWidth': state.selectedTile!.leftHandTileWidth,
+    };
+
+    // Update state with the result, even if there's a warning
+    state = state.copyWith(
+      horizontalResult: result,
+      isLoading: false,
+      errorMessage: result.warning,
+    );
+    debugPrint(
+        'State updated with horizontalResult: ${state.horizontalResult}');
+
+    debugPrint('Returning result map from calculateHorizontal');
+    return {
+      'id': calculationId,
+      'inputs': inputsMap,
+      'outputs': resultMap,
+      'tile': tileMap,
+    };
   }
 
   void clearResults() {
@@ -178,9 +336,18 @@ class CalculatorNotifier extends StateNotifier<CalculatorState> {
   }
 }
 
+// Provider for CalculationService
+final calculationServiceProvider = Provider<CalculationService>((ref) {
+  return CalculationService();
+});
+
+// Provider for CalculatorNotifier, injecting userId
 final calculatorProvider =
     StateNotifierProvider<CalculatorNotifier, CalculatorState>((ref) {
-  return CalculatorNotifier();
+  final userId = ref.watch(currentUserProvider).value?.id;
+  final calculationService = ref.watch(calculationServiceProvider);
+  // Fix: Pass the ref to the CalculatorNotifier
+  return CalculatorNotifier(calculationService, userId, ref);
 });
 
 // Provider for default tiles (for free users)
@@ -227,7 +394,7 @@ final defaultTilesProvider = Provider<List<TileModel>>((ref) {
     ),
     TileModel(
       id: 'default-concrete-tile',
-      name: 'Standard Concrete Tile',
+      name: 'Test Tile 2',
       manufacturer: 'Generic',
       materialType: TileSlateType.concreteTile,
       description: 'Standard 420x330mm concrete tile',

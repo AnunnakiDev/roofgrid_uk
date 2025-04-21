@@ -9,6 +9,8 @@ class HorizontalCalculationResult {
   final int? secondMark;
   final String marks;
   final String? splitMarks;
+  final int? actualSpacing; // Added field
+  final String? warning; // Added field
 
   const HorizontalCalculationResult({
     required this.width,
@@ -21,6 +23,8 @@ class HorizontalCalculationResult {
     this.secondMark,
     required this.marks,
     this.splitMarks,
+    this.actualSpacing,
+    this.warning,
   });
 
   factory HorizontalCalculationResult.fromJson(Map<String, dynamic> json) {
@@ -35,6 +39,8 @@ class HorizontalCalculationResult {
       secondMark: json['2nd Mark'] as int?,
       marks: json['Marks'] as String,
       splitMarks: json['Split Marks'] as String?,
+      actualSpacing: json['actualSpacing'] as int?,
+      warning: json['warning'] as String?,
     );
   }
 
@@ -50,6 +56,8 @@ class HorizontalCalculationResult {
       if (secondMark != null) '2nd Mark': secondMark,
       'Marks': marks,
       if (splitMarks != null) 'Split Marks': splitMarks,
+      if (actualSpacing != null) 'actualSpacing': actualSpacing,
+      if (warning != null) 'warning': warning,
     };
   }
 }

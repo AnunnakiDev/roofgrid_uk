@@ -8,13 +8,20 @@ class HorizontalCalculationService {
   /// Performs the horizontal tile spacing calculation
   static HorizontalCalculationResult calculateHorizontal(
       HorizontalCalculationInput inputs) {
-    // Validate inputs
+    // Step 1: Validate inputs
     if (inputs.widths.isEmpty || inputs.widths.any((w) => w < 500)) {
-      throw Exception(
-          'Width values must be at least 500mm to calculate a valid horizontal solution.');
+      return HorizontalCalculationResult(
+        width: inputs.widths.isNotEmpty ? inputs.widths[0].round() : 0,
+        solution: 'Invalid',
+        newWidth: 0,
+        firstMark: 0,
+        marks: 'N/A',
+        warning:
+            'Width values must be at least 500mm to calculate a valid horizontal solution.',
+      );
     }
 
-    // Step 1: Initialize
+    // Step 2: Initialize
     int overhangLeft = inputs.useDryVerge == 'YES' ? 40 : 50;
     int overhangRight = inputs.useDryVerge == 'YES' ? 40 : 50;
     final int minOverhang = inputs.useDryVerge == 'YES' ? 20 : 25;
@@ -43,19 +50,19 @@ class HorizontalCalculationService {
 
     final int setSize = inputs.tileCoverWidth > 300 ? 2 : 3;
 
-    // Step 2: Calculate desired total width
+    // Step 3: Calculate desired total width
     final List<int> desiredTotalWidths = inputs.widths
         .map((width) =>
             (width + overhangLeft + overhangRight - widthReduction).round())
         .toList();
     final int maxDesiredTotalWidth = desiredTotalWidths.reduce(max);
 
-    // Step 3: Adjust for LH tile
+    // Step 4: Adjust for LH tile
     final int remainingWidth = useLHTile == 'YES'
         ? maxDesiredTotalWidth - inputs.lhTileWidth.round()
         : maxDesiredTotalWidth;
 
-    // Step 4: Find min and max tile counts
+    // Step 5: Find min and max tile counts
     final double maxCoverWidth = inputs.tileCoverWidth + inputs.maxSpacing;
     final double minCoverWidth = inputs.tileCoverWidth + inputs.minSpacing;
 
@@ -67,7 +74,7 @@ class HorizontalCalculationService {
       maxTileCount += 1;
     }
 
-    // Step 5: Test each tile count for full tiles
+    // Step 6: Test each tile count for full tiles
     dynamic solution;
     int tilesWide = 0;
 
@@ -165,7 +172,7 @@ class HorizontalCalculationService {
       break;
     }
 
-    // Step 6: Split Sets (if full tiles fail)
+    // Step 7: Split Sets (if full tiles fail)
     if (solution == null) {
       for (int n1 = 1; n1 <= tilesWide - 2; n1++) {
         final int n2 = (tilesWide - 1) - n1;
@@ -289,7 +296,7 @@ class HorizontalCalculationService {
       }
     }
 
-    // Step 7: Cut Tile (if split sets fail)
+    // Step 8: Cut Tile (if split sets fail)
     if (solution == null) {
       final int maxTotalWidth = desiredTotalWidths.reduce(max);
       int actualSpacing = inputs.maxSpacing.round();
@@ -417,10 +424,17 @@ class HorizontalCalculationService {
       solution = {'type': 'cut', 'widthResults': widthResultsCut};
     }
 
-    // Step 8: Verify solution exists
+    // Step 9: Verify solution exists
     if (solution == null) {
-      throw Exception(
-          'Unable to compute a horizontal solution. Please check your inputs: ensure widths are valid and tile specifications (tile cover width, min/max spacing) are appropriate.');
+      return HorizontalCalculationResult(
+        width: inputs.widths[0].round(),
+        solution: 'Invalid',
+        newWidth: 0,
+        firstMark: 0,
+        marks: 'N/A',
+        warning:
+            'Unable to compute a horizontal solution. Please check your inputs: ensure widths are valid and tile specifications (tile cover width, min/max spacing) are appropriate.',
+      );
     }
 
     // Create result object
@@ -451,6 +465,7 @@ class HorizontalCalculationService {
       splitMarks: solutionType == 'split'
           ? '${result['sets1']} sets of $setSize @ ${result['adjustedMarks1']}'
           : null,
+      actualSpacing: result['actualSpacing'] as int,
     );
   }
 }

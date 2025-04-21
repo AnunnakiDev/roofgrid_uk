@@ -8,7 +8,7 @@ part of 'saved_result.dart';
 
 class SavedResultAdapter extends TypeAdapter<SavedResult> {
   @override
-  final int typeId = 5;
+  final int typeId = 6;
 
   @override
   SavedResult read(BinaryReader reader) {
@@ -17,7 +17,6 @@ class SavedResultAdapter extends TypeAdapter<SavedResult> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return SavedResult(
-      fields[10] as String,
       id: fields[0] as String,
       userId: fields[1] as String,
       projectName: fields[2] as String,
@@ -34,7 +33,7 @@ class SavedResultAdapter extends TypeAdapter<SavedResult> {
   @override
   void write(BinaryWriter writer, SavedResult obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -54,9 +53,7 @@ class SavedResultAdapter extends TypeAdapter<SavedResult> {
       ..writeByte(8)
       ..write(obj.createdAt)
       ..writeByte(9)
-      ..write(obj.updatedAt)
-      ..writeByte(10)
-      ..write(obj.title);
+      ..write(obj.updatedAt);
   }
 
   @override

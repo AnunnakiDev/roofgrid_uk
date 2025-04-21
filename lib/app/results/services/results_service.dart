@@ -30,11 +30,11 @@ class ResultsService {
     if (query.isEmpty) return results;
 
     return results.where((result) {
-      final titleMatch =
+      final projectNameMatch =
           result.projectName.toLowerCase().contains(query.toLowerCase());
       final typeMatch =
           result.type.toString().toLowerCase().contains(query.toLowerCase());
-      return titleMatch || typeMatch;
+      return projectNameMatch || typeMatch;
     }).toList();
   }
 
@@ -72,7 +72,7 @@ class ResultsService {
         .doc(result.id)
         .update({
       'inputs': inputs,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
 
     return true;
@@ -86,7 +86,7 @@ class ResultsService {
         .doc(result.id)
         .update({
       'projectName': newName,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
 
     return true;
