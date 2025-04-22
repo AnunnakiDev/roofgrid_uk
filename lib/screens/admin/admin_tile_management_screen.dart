@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/widgets/custom_expansion_tile.dart';
 import 'package:roofgrid_uk/widgets/header_widget.dart';
+import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -22,24 +22,13 @@ class AdminTileManagementScreen extends ConsumerStatefulWidget {
 class _AdminTileManagementScreenState
     extends ConsumerState<AdminTileManagementScreen> {
   List<TileModel> _defaultTiles = [];
-  List<TileModel> _filteredDefaultTiles = [];
   List<Map<String, dynamic>> _pendingTiles = [];
-  List<Map<String, dynamic>> _filteredPendingTiles = [];
   bool _isLoadingTiles = true;
-  String _searchQuery = '';
-  String _searchField = 'Name'; // Default search field
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchTiles();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchTiles() async {
@@ -56,7 +45,6 @@ class _AdminTileManagementScreenState
       _defaultTiles = defaultTilesSnapshot.docs
           .map((doc) => TileModel.fromFirestore(doc))
           .toList();
-      _filteredDefaultTiles = List.from(_defaultTiles);
 
       // Fetch pending user-submitted tiles
       final pendingTilesSnapshot = await FirebaseFirestore.instance
@@ -81,7 +69,6 @@ class _AdminTileManagementScreenState
           });
         }
       }
-      _filteredPendingTiles = List.from(_pendingTiles);
 
       setState(() {
         _isLoadingTiles = false;
@@ -231,49 +218,6 @@ class _AdminTileManagementScreenState
     await _fetchTiles();
   }
 
-  void _filterTiles(String query) {
-    setState(() {
-      _searchQuery = query;
-      if (_searchQuery.isEmpty) {
-        _filteredDefaultTiles = List.from(_defaultTiles);
-        _filteredPendingTiles = List.from(_pendingTiles);
-      } else {
-        final queryLower = _searchQuery.toLowerCase();
-        // Filter default tiles
-        _filteredDefaultTiles = _defaultTiles.where((tile) {
-          switch (_searchField) {
-            case 'Name':
-              return tile.name.toLowerCase().contains(queryLower);
-            case 'Manufacturer':
-              return tile.manufacturer.toLowerCase().contains(queryLower);
-            case 'Material Type':
-              return tile.materialTypeString.toLowerCase().contains(queryLower);
-            default:
-              return false;
-          }
-        }).toList();
-
-        // Filter pending tiles
-        _filteredPendingTiles = _pendingTiles.where((tileData) {
-          final tile = tileData['tile'] as TileModel;
-          final userEmail = tileData['userEmail'] as String;
-          switch (_searchField) {
-            case 'Name':
-              return tile.name.toLowerCase().contains(queryLower);
-            case 'Manufacturer':
-              return tile.manufacturer.toLowerCase().contains(queryLower);
-            case 'Material Type':
-              return tile.materialTypeString.toLowerCase().contains(queryLower);
-            case 'User Email':
-              return userEmail.toLowerCase().contains(queryLower);
-            default:
-              return false;
-          }
-        }).toList();
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
@@ -295,54 +239,79 @@ class _AdminTileManagementScreenState
                 children: [
                   const HeaderWidget(title: 'Admin Dashboard: Tile Management'),
                   const SizedBox(height: 16),
-                  _buildSearchBar(),
+                  _buildButtonRow(user),
                   const SizedBox(height: 16),
                   const Text(
                     'Default Tiles',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  _buildButtonRow(user),
-                  const SizedBox(height: 16),
-                  _filteredDefaultTiles.isEmpty
-                      ? const Center(child: Text('No default tiles found'))
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _filteredDefaultTiles.length,
-                          itemBuilder: (context, index) {
-                            final tile = _filteredDefaultTiles[index];
-                            return _buildTileCard(
-                              tile: tile,
-                              index: index,
-                              isPending: false,
-                              user: user,
-                            );
-                          },
-                        ),
+                  TileSelectorWidget(
+                    tiles: _defaultTiles,
+                    user: user!,
+                    showAddTileButton: false,
+                    onTileSelected: (tile) {
+                      context.go(
+                        '/admin/edit-tile/${tile.id}',
+                        extra: {
+                          'userRole': user.role,
+                          'userId': user.id,
+                          'tile': tile,
+                        },
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Pending Approvals',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  _filteredPendingTiles.isEmpty
+                  _pendingTiles.isEmpty
                       ? const Center(
                           child: Text('No pending tiles for approval'))
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _filteredPendingTiles.length,
-                          itemBuilder: (context, index) {
-                            final tileData = _filteredPendingTiles[index];
-                            final tile = tileData['tile'] as TileModel;
-                            return _buildTileCard(
-                              tile: tile,
-                              index: index,
-                              isPending: true,
-                              userId: tileData['userId'],
-                              userEmail: tileData['userEmail'],
-                              user: user,
+                      : TileSelectorWidget(
+                          tiles: _pendingTiles
+                              .map((tileData) => tileData['tile'] as TileModel)
+                              .toList(),
+                          user: user,
+                          showAddTileButton: false,
+                          onTileSelected: (tile) {
+                            final tileData = _pendingTiles
+                                .firstWhere((data) => data['tile'] == tile);
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title:
+                                    Text('Manage Pending Tile: ${tile.name}'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('User ID: ${tileData['userId']}'),
+                                    Text(
+                                        'User Email: ${tileData['userEmail']}'),
+                                  ],
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => _approveTile(
+                                        tile, tileData['userId'] as String),
+                                    child: const Text('Approve',
+                                        style: TextStyle(color: Colors.green)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _denyTile(
+                                        tile, tileData['userId'] as String),
+                                    child: const Text('Deny',
+                                        style: TextStyle(color: Colors.red)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('Cancel'),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -350,127 +319,6 @@ class _AdminTileManagementScreenState
               ),
             ),
     );
-  }
-
-  Widget _buildSearchBar() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return isSmallScreen
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _searchController,
-                onChanged: _filterTiles,
-                decoration: InputDecoration(
-                  hintText: 'Search by $_searchField',
-                  hintStyle: const TextStyle(fontSize: 14),
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              _searchQuery = '';
-                              _searchController.clear();
-                              _filterTiles('');
-                            });
-                          },
-                          tooltip: 'Clear search',
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30.0),
-                    borderSide: BorderSide(
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-                ),
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              DropdownButton<String>(
-                value: _searchField,
-                isExpanded: true,
-                onChanged: (value) {
-                  setState(() {
-                    _searchField = value!;
-                    _searchQuery = '';
-                    _searchController.clear();
-                    _filterTiles('');
-                  });
-                },
-                items: ['Name', 'Manufacturer', 'Material Type', 'User Email']
-                    .map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value, style: const TextStyle(fontSize: 14)),
-                  );
-                }).toList(),
-              ),
-            ],
-          )
-        : Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _filterTiles,
-                  decoration: InputDecoration(
-                    hintText: 'Search by $_searchField',
-                    hintStyle: const TextStyle(fontSize: 14),
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              setState(() {
-                                _searchQuery = '';
-                                _searchController.clear();
-                                _filterTiles('');
-                              });
-                            },
-                            tooltip: 'Clear search',
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30.0),
-                      borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-                  ),
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: _searchField,
-                onChanged: (value) {
-                  setState(() {
-                    _searchField = value!;
-                    _searchQuery = '';
-                    _searchController.clear();
-                    _filterTiles('');
-                  });
-                },
-                items: ['Name', 'Manufacturer', 'Material Type', 'User Email']
-                    .map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value, style: const TextStyle(fontSize: 14)),
-                  );
-                }).toList(),
-              ),
-            ],
-          );
   }
 
   Widget _buildButtonRow(UserModel? user) {
@@ -554,188 +402,5 @@ class _AdminTileManagementScreenState
               ),
             ],
           );
-  }
-
-  Widget _buildTileCard({
-    required TileModel tile,
-    required int index,
-    required bool isPending,
-    String? userId,
-    String? userEmail,
-    UserModel? user,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.2)
-                : Colors.black.withOpacity(0.1),
-            blurRadius: 5,
-            offset: const Offset(2, 2),
-          ),
-          BoxShadow(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.1)
-                : Colors.white.withOpacity(0.3),
-            blurRadius: 5,
-            offset: const Offset(-2, -2),
-          ),
-        ],
-      ),
-      child: CustomExpansionTile(
-        leading: tile.image != null && tile.image!.isNotEmpty
-            ? CircleAvatar(
-                backgroundImage: NetworkImage(tile.image!),
-                radius: 24,
-                onBackgroundImageError: (exception, stackTrace) =>
-                    const Icon(Icons.broken_image),
-              )
-            : CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                radius: 24,
-                child: Text(
-                  tile.name[0].toUpperCase(),
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-        title: Text(
-          tile.name,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 16),
-        ),
-        subtitle: Text(
-          '${tile.materialTypeString} | ${tile.manufacturer}',
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isPending) ...[
-              IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () {
-                  if (user != null) {
-                    context.go(
-                      '/admin/edit-tile/${tile.id}',
-                      extra: {
-                        'userRole': user.role,
-                        'userId': user.id,
-                        'tile': tile,
-                      },
-                    );
-                  }
-                },
-                tooltip: 'Edit Tile',
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => _deleteTile(tile.id),
-                tooltip: 'Delete Tile',
-              ),
-            ] else ...[
-              IconButton(
-                icon: const Icon(Icons.check, color: Colors.green),
-                onPressed: () => _approveTile(tile, userId!),
-                tooltip: 'Approve Tile',
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.red),
-                onPressed: () => _denyTile(tile, userId!),
-                tooltip: 'Deny Tile',
-              ),
-            ],
-          ],
-        ),
-        animationIndex: index,
-        children: [
-          Text(
-            'Tile Details',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          _infoRow('Material Type', tile.materialTypeString),
-          _infoRow('Manufacturer', tile.manufacturer),
-          _infoRow('Description', tile.description),
-          Row(
-            children: [
-              Expanded(
-                  child:
-                      _infoRow('Height/Length', '${tile.slateTileHeight} mm')),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: _infoRow('Cover Width', '${tile.tileCoverWidth} mm')),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(child: _infoRow('Min Gauge', '${tile.minGauge} mm')),
-              const SizedBox(width: 8),
-              Expanded(child: _infoRow('Max Gauge', '${tile.maxGauge} mm')),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(child: _infoRow('Min Spacing', '${tile.minSpacing} mm')),
-              const SizedBox(width: 8),
-              Expanded(child: _infoRow('Max Spacing', '${tile.maxSpacing} mm')),
-            ],
-          ),
-          _infoRow('Cross Bonded', tile.defaultCrossBonded ? 'Yes' : 'No'),
-          if (tile.leftHandTileWidth != null && tile.leftHandTileWidth! > 0)
-            _infoRow('Left Hand Tile Width', '${tile.leftHandTileWidth} mm'),
-          if (tile.dataSheet != null && tile.dataSheet!.isNotEmpty)
-            _infoRow('Data Sheet', tile.dataSheet!),
-          if (tile.image != null && tile.image!.isNotEmpty)
-            _infoRow('Image URL', tile.image!),
-          if (isPending) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Submitted By',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            _infoRow('User ID', userId!),
-            _infoRow('User Email', userEmail!),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12),
-              textAlign: TextAlign.end,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

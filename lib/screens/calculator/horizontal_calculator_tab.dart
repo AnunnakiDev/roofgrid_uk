@@ -144,7 +144,6 @@ class HorizontalCalculatorTabState
   @override
   Widget build(BuildContext context) {
     final calcState = ref.watch(calculatorProvider);
-    final selectedTile = calcState.selectedTile;
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
     final padding = isLargeScreen ? 24.0 : 16.0;
@@ -155,32 +154,7 @@ class HorizontalCalculatorTabState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'Selected Tile: ${selectedTile?.name ?? "None"}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: fontSize,
-                      ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (widget.canAccessDatabase)
-                Semantics(
-                  label: 'Edit selected tile',
-                  child: TextButton(
-                    onPressed: () => context.go('/calculator/tile-select'),
-                    child: Text(
-                      'Edit Tile',
-                      style: TextStyle(fontSize: fontSize - 2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          // Removed duplicate "Selected Tile" row; it's now handled by CalculatorScreen
           const SizedBox(height: 16),
           Text(
             'Options',

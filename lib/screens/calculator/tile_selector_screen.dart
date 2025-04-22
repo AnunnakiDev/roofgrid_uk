@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,13 +6,12 @@ import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
+import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:roofgrid_uk/widgets/main_drawer.dart';
 
 class TileSelectorScreen extends ConsumerStatefulWidget {
   const TileSelectorScreen({super.key});
@@ -23,27 +21,7 @@ class TileSelectorScreen extends ConsumerStatefulWidget {
 }
 
 class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
-  String _searchQuery = '';
-  TileSlateType? _selectedFilter;
-  bool _isLoading = false;
-  File? _imageFile;
-  File? _dataSheetFile;
-  String? _imageUrl;
-  String? _dataSheetUrl;
   bool _isOnline = true;
-  final TextEditingController _searchController = TextEditingController();
-
-  // Form state for Free user manual tile input
-  final TextEditingController _heightController = TextEditingController();
-  final TextEditingController _widthController = TextEditingController();
-  final TextEditingController _minGaugeController = TextEditingController();
-  final TextEditingController _maxGaugeController = TextEditingController();
-  final TextEditingController _minSpacingController = TextEditingController();
-  final TextEditingController _maxSpacingController = TextEditingController();
-  final TextEditingController _leftHandTileWidthController =
-      TextEditingController();
-  bool _crossBonded = false;
-  TileSlateType _materialType = TileSlateType.unknown;
 
   @override
   void initState() {
@@ -68,24 +46,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    _heightController.dispose();
-    _widthController.dispose();
-    _minGaugeController.dispose();
-    _maxGaugeController.dispose();
-    _minSpacingController.dispose();
-    _maxSpacingController.dispose();
-    _leftHandTileWidthController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final userAsync = ref.watch(currentUserProvider);
 
-    // Early check for authentication state to prevent provider calls
     if (!authState.isAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.go('/auth/login');
@@ -105,17 +69,16 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Select Tile'),
-            actions: [
-              if (user.isPro)
-                Semantics(
-                  label: 'Create new tile',
-                  child: IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: () => _showEditTileDialog(context, null),
-                    tooltip: 'Create New Tile',
-                  ),
+            leading: Builder(
+              builder: (context) => Semantics(
+                label: 'Open navigation drawer',
+                child: IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Open navigation drawer',
                 ),
-            ],
+              ),
+            ),
           ),
           drawer: const MainDrawer(),
           body: user.isPro
@@ -143,414 +106,102 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
     final TileModel? initialTile = extra?['tile'] as TileModel?;
 
     final tilesAsync = ref.watch(allAvailableTilesProvider(user.id));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Semantics(
-            label: 'Step 1 description',
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.0,
-                ),
-              ),
-              child: const Text(
-                'Step 1, choose your tile or slate',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ).animate().fadeIn(duration: 600.ms),
-          ),
-        ),
-        _buildSearchBar(),
-        _buildFilterChips(),
-        Expanded(
-          child: tilesAsync.when(
-            data: (tiles) {
-              if (_isOnline) {
-                final tilesBox = Hive.box<TileModel>('tilesBox');
-                for (var tile in tiles) {
-                  tilesBox.put(tile.id, tile);
-                }
-              }
-              if (!_isOnline) {
-                final tilesBox = Hive.box<TileModel>('tilesBox');
-                tiles = tilesBox.values.toList();
-              }
-              final filteredTiles = tiles.where((tile) {
-                final matchesSearch = tile.name
-                        .toLowerCase()
-                        .contains(_searchQuery.toLowerCase()) ||
-                    tile.manufacturer
-                        .toLowerCase()
-                        .contains(_searchQuery.toLowerCase());
-                final matchesFilter = _selectedFilter == null ||
-                    tile.materialType == _selectedFilter;
-                return matchesSearch && matchesFilter;
-              }).toList();
-              if (initialTile != null) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _showEditTileDialog(context, initialTile);
-                });
-              }
-              return ListView.builder(
-                itemCount: filteredTiles.length,
-                itemBuilder: (context, index) {
-                  final tile = filteredTiles[index];
-                  return _buildTileCard(tile, user);
-                },
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) {
-              if (error is UnauthenticatedException) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  context.go('/auth/login');
-                });
-                return const Center(
-                    child: Text('Please log in to access this feature'));
-              }
-              final tilesBox = Hive.box<TileModel>('tilesBox');
-              final tiles = tilesBox.values.toList();
-              if (tiles.isNotEmpty) {
-                return _buildTileList(tiles, user);
-              }
-              return Center(
-                child: Text(
-                  'Error loading tiles: $error',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Semantics(
-        label: 'Search tiles',
-        child: TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'Search by name or manufacturer',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      setState(() {
-                        _searchQuery = '';
-                        _searchController.clear();
-                      });
+    return tilesAsync.when(
+      data: (tiles) {
+        if (_isOnline) {
+          final tilesBox = Hive.box<TileModel>('tilesBox');
+          for (var tile in tiles) {
+            tilesBox.put(tile.id, tile);
+          }
+        }
+        if (!_isOnline) {
+          final tilesBox = Hive.box<TileModel>('tilesBox');
+          tiles = tilesBox.values.toList();
+        }
+        if (initialTile != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              showDialog(
+                context: context,
+                builder: (context) => Dialog(
+                  child: AddTileWidget(
+                    userRole: user.role,
+                    userId: user.id,
+                    tile: initialTile,
+                    onTileCreated: (updatedTile) {
+                      Navigator.pop(context);
+                      context.pop(
+                          updatedTile); // Use go_router's pop to return the result
                     },
-                    tooltip: 'Clear search',
-                  )
-                : null,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30.0),
-              borderSide:
-                  BorderSide(color: Theme.of(context).colorScheme.primary),
-            ),
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surface,
-            contentPadding:
-                const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: TileSlateType.values.map<Widget>((type) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Semantics(
-                label: 'Filter by ${_getTileSlateTypeDisplayName(type)}',
-                child: FilterChip(
-                  label: Text(_getTileSlateTypeDisplayName(type)),
-                  selected: _selectedFilter == type,
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedFilter = selected ? type : null;
-                    });
-                  },
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20.0),
-                    side: BorderSide(
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
-                  selectedColor:
-                      Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                  labelStyle: TextStyle(
-                    color: _selectedFilter == type
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTileList(List<TileModel> tiles, UserModel user) {
-    final filteredTiles = tiles.where((tile) {
-      final matchesSearch = tile.name
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ||
-          tile.manufacturer.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesFilter =
-          _selectedFilter == null || tile.materialType == _selectedFilter;
-      return matchesSearch && matchesFilter;
-    }).toList();
-    return ListView.builder(
-      itemCount: filteredTiles.length,
-      itemBuilder: (context, index) {
-        final tile = filteredTiles[index];
-        return _buildTileCard(tile, user);
+              );
+            } catch (e) {
+              debugPrint('Error showing edit tile dialog: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error editing tile: $e'),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ),
+              );
+            }
+          });
+        }
+        return TileSelectorWidget(
+          tiles: tiles,
+          user: user,
+          onTileSelected: (tile) {
+            try {
+              context.pop(tile); // Use go_router's pop to return the result
+            } catch (e) {
+              debugPrint('Error returning selected tile: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error selecting tile: $e'),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ),
+              );
+            }
+          },
+        );
       },
-    );
-  }
-
-  Widget _buildTileCard(TileModel tile, UserModel user) {
-    String placeholderImagePath;
-    switch (tile.materialType) {
-      case TileSlateType.slate:
-        placeholderImagePath = 'assets/images/tiles/natural_slate';
-        break;
-      case TileSlateType.fibreCementSlate:
-        placeholderImagePath = 'assets/images/tiles/fibre_cement_slate';
-        break;
-      case TileSlateType.interlockingTile:
-        placeholderImagePath = 'assets/images/tiles/interlocking_tile';
-        break;
-      case TileSlateType.plainTile:
-        placeholderImagePath = 'assets/images/tiles/plain_tile';
-        break;
-      case TileSlateType.concreteTile:
-        placeholderImagePath = 'assets/images/tiles/concrete_tile';
-        break;
-      case TileSlateType.pantile:
-        placeholderImagePath = 'assets/images/tiles/pantile';
-        break;
-      case TileSlateType.unknown:
-      default:
-        placeholderImagePath = 'assets/images/tiles/unknown_type';
-        break;
-    }
-
-    // Try PNG first, then JPG
-    Widget placeholderImage() {
-      try {
-        return Image.asset(
-          '$placeholderImagePath.png',
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Image.asset(
-              '$placeholderImagePath.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Image.asset(
-                  'assets/images/tiles/unknown_type.png',
-                  fit: BoxFit.cover,
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) {
+        if (error is UnauthenticatedException) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            context.go('/auth/login');
+          });
+          return const Center(
+              child: Text('Please log in to access this feature'));
+        }
+        final tilesBox = Hive.box<TileModel>('tilesBox');
+        final tiles = tilesBox.values.toList();
+        if (tiles.isNotEmpty) {
+          return TileSelectorWidget(
+            tiles: tiles,
+            user: user,
+            onTileSelected: (tile) {
+              try {
+                context.pop(tile); // Use go_router's pop to return the result
+              } catch (e) {
+                debugPrint('Error returning selected tile: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error selecting tile: $e'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
                 );
-              },
-            );
-          },
+              }
+            },
+          );
+        }
+        return Center(
+          child: Text(
+            'Error loading tiles: $error',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         );
-      } catch (e) {
-        return Image.asset(
-          'assets/images/tiles/unknown_type.png',
-          fit: BoxFit.cover,
-        );
-      }
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-      child: ExpansionTile(
-        leading: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8.0),
-            color: Colors.grey[200],
-          ),
-          child: tile.image != null && tile.image!.isNotEmpty
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: Image.network(
-                    tile.image!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        placeholderImage(),
-                  ),
-                )
-              : ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: placeholderImage(),
-                ),
-        ),
-        title: Text(
-          tile.name,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _getTileSlateTypeDisplayName(tile.materialType),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              'Max Gauge: ${tile.maxGauge} mm | Cover Width: ${tile.tileCoverWidth} mm',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Semantics(
-              label: 'Edit tile ${tile.name}',
-              child: ElevatedButton(
-                onPressed: () => _showEditTileDialog(context, tile),
-                child: const Text('Edit'),
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  textStyle: Theme.of(context).textTheme.labelMedium,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Semantics(
-              label: 'Select tile ${tile.name}',
-              child: ElevatedButton(
-                onPressed: () {
-                  ref.read(calculatorProvider.notifier).setTile(tile);
-                  context.go('/calculator/main');
-                },
-                child: const Text('Select'),
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  textStyle: Theme.of(context).textTheme.labelMedium,
-                ),
-              ),
-            ),
-          ],
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                _infoRow('Material Type',
-                    _getTileSlateTypeDisplayName(tile.materialType)),
-                _infoRow('Manufacturer', tile.manufacturer),
-                _infoRow('Description', tile.description),
-                _infoRow('Height/Length', '${tile.slateTileHeight} mm'),
-                _infoRow('Cover Width', '${tile.tileCoverWidth} mm'),
-                _infoRow('Min Gauge', '${tile.minGauge} mm'),
-                _infoRow('Max Gauge', '${tile.maxGauge} mm'),
-                _infoRow('Min Spacing', '${tile.minSpacing} mm'),
-                _infoRow('Max Spacing', '${tile.maxSpacing} mm'),
-                _infoRow(
-                    'Cross Bonded', tile.defaultCrossBonded ? 'Yes' : 'No'),
-                if (tile.leftHandTileWidth != null &&
-                    tile.leftHandTileWidth! > 0)
-                  _infoRow(
-                      'Left Hand Tile Width', '${tile.leftHandTileWidth} mm'),
-                if (tile.dataSheet != null && tile.dataSheet!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Data Sheet',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Semantics(
-                          label: 'View data sheet for ${tile.name}',
-                          child: TextButton(
-                            onPressed: () => _launchURL(tile.dataSheet!),
-                            child: const Text('View'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn();
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.end,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+      },
     );
   }
 
@@ -560,264 +211,69 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(
-            label: 'Step 1 description',
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.0,
-                ),
-              ),
-              child: const Text(
-                'Step 1, Choose your Tile or Slate to get started.',
-                style: TextStyle(
-                  fontSize: 16,
+          Text(
+            'Tile Selection',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ).animate().fadeIn(duration: 600.ms),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Manual Tile Input (Free User)',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue.shade800),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Manual Tile Input',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade900,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'As a free user, you can manually input tile details. Upgrade to Pro to access our full tile database.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                Semantics(
+                  label: 'Add New Tile',
+                  child: ElevatedButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => Dialog(
+                          child: AddTileWidget(
+                            userRole: user.role,
+                            userId: user.id,
+                            onTileCreated: (newTile) {
+                              Navigator.pop(context);
+                              context.pop(newTile); // Return the new tile
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('Add New Tile'),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          _buildManualTileInputs(user),
           const SizedBox(height: 24),
           _buildUpgradeToProBox(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildManualTileInputs(UserModel user) {
-    final formKey = GlobalKey<FormState>();
-
-    return Form(
-      key: formKey,
-      child: Column(
-        children: [
-          Semantics(
-            label: 'Material Type',
-            child: DropdownButtonFormField<TileSlateType>(
-              value: _materialType,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message: 'The type of tile material (e.g., Natural Slate).',
-                  child: const Text('Material Type *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              items: TileSlateType.values.map((type) {
-                return DropdownMenuItem(
-                  value: type,
-                  child: Text(_getTileSlateTypeDisplayName(type)),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _materialType = value);
-                }
-              },
-              validator: (value) =>
-                  value == null ? 'Material type is required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Tile Height or Length in millimeters',
-            child: TextFormField(
-              controller: _heightController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The total height or length of the tile in millimeters (e.g., 500 mm).',
-                  child: const Text('Tile Height/Length (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Tile Cover Width in millimeters',
-            child: TextFormField(
-              controller: _widthController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The effective width of the tile after overlap in millimeters (e.g., 250 mm).',
-                  child: const Text('Tile Cover Width (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Minimum Gauge in millimeters',
-            child: TextFormField(
-              controller: _minGaugeController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The minimum batten spacing in millimeters (e.g., 195 mm).',
-                  child: const Text('Min Gauge (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Maximum Gauge in millimeters',
-            child: TextFormField(
-              controller: _maxGaugeController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The maximum batten spacing in millimeters (e.g., 210 mm).',
-                  child: const Text('Max Gauge (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Minimum Spacing in millimeters',
-            child: TextFormField(
-              controller: _minSpacingController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The minimum side overlap between tiles in millimeters (e.g., 1 mm).',
-                  child: const Text('Min Spacing (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Maximum Spacing in millimeters',
-            child: TextFormField(
-              controller: _maxSpacingController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The maximum side overlap between tiles in millimeters (e.g., 5 mm).',
-                  child: const Text('Max Spacing (mm) *'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Left Hand Tile Width in millimeters',
-            child: TextFormField(
-              controller: _leftHandTileWidthController,
-              decoration: InputDecoration(
-                label: Tooltip(
-                  message:
-                      'The width of the left-hand tile in millimeters, if applicable (e.g., 125 mm). Optional.',
-                  child: const Text('Left Hand Tile Width (mm)'),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value != null && value.isNotEmpty) {
-                  if (double.tryParse(value) == null) {
-                    return 'Invalid number';
-                  }
-                }
-                return null;
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Cross Bonded',
-            child: CheckboxListTile(
-              title: Tooltip(
-                message:
-                    'Check if the tile is cross-bonded (e.g., alternating overlaps).',
-                child: const Text('Cross Bonded'),
-              ),
-              value: _crossBonded,
-              onChanged: (value) {
-                setState(() {
-                  _crossBonded = value ?? false;
-                });
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          Semantics(
-            label: 'Confirm tile specifications',
-            child: ElevatedButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  final tempTile = TileModel(
-                    id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-                    name: 'Temporary Tile',
-                    manufacturer: 'Manual Input',
-                    materialType: _materialType,
-                    description: 'Manually entered tile specifications',
-                    isPublic: false,
-                    isApproved: false,
-                    createdById: user.id,
-                    createdAt: DateTime.now(),
-                    updatedAt: DateTime.now(),
-                    slateTileHeight:
-                        double.tryParse(_heightController.text) ?? 0,
-                    tileCoverWidth: double.tryParse(_widthController.text) ?? 0,
-                    minGauge: double.tryParse(_minGaugeController.text) ?? 0,
-                    maxGauge: double.tryParse(_maxGaugeController.text) ?? 0,
-                    minSpacing:
-                        double.tryParse(_minSpacingController.text) ?? 0,
-                    maxSpacing:
-                        double.tryParse(_maxSpacingController.text) ?? 0,
-                    leftHandTileWidth:
-                        _leftHandTileWidthController.text.isNotEmpty
-                            ? double.tryParse(_leftHandTileWidthController.text)
-                            : null,
-                    defaultCrossBonded: _crossBonded,
-                  );
-                  ref.read(calculatorProvider.notifier).setTile(tempTile);
-                  context.go('/calculator/main');
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Confirm'),
-            ),
-          ),
         ],
       ),
     );
@@ -863,519 +319,5 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
         ],
       ),
     );
-  }
-
-  void _showEditTileDialog(BuildContext context, TileModel? tile) {
-    final isEditing = tile != null;
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: tile?.name ?? '');
-    final manufacturerController =
-        TextEditingController(text: tile?.manufacturer ?? '');
-    final descriptionController =
-        TextEditingController(text: tile?.description ?? '');
-    final heightController =
-        TextEditingController(text: tile?.slateTileHeight.toString() ?? '');
-    final widthController =
-        TextEditingController(text: tile?.tileCoverWidth.toString() ?? '');
-    final minGaugeController =
-        TextEditingController(text: tile?.minGauge.toString() ?? '');
-    final maxGaugeController =
-        TextEditingController(text: tile?.maxGauge.toString() ?? '');
-    final minSpacingController =
-        TextEditingController(text: tile?.minSpacing.toString() ?? '');
-    final maxSpacingController =
-        TextEditingController(text: tile?.maxSpacing.toString() ?? '');
-    final leftHandTileWidthController =
-        TextEditingController(text: tile?.leftHandTileWidth?.toString() ?? '');
-    TileSlateType materialType = tile?.materialType ?? TileSlateType.slate;
-    bool crossBonded = tile?.defaultCrossBonded ?? false;
-    _imageFile = null;
-    _dataSheetFile = null;
-    _imageUrl = tile?.image;
-    _dataSheetUrl = tile?.dataSheet;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            isEditing ? 'Edit Tile' : 'Create New Tile',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          content: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.9,
-              minWidth: 300,
-            ),
-            child: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Semantics(
-                      label: 'Tile Name',
-                      child: TextFormField(
-                        controller: nameController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The name of the tile (e.g., Standard Slate).',
-                            child: const Text('Tile Name *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                            value?.isEmpty ?? true ? 'Name is required' : null,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Material Type',
-                      child: DropdownButtonFormField<TileSlateType>(
-                        value: materialType,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The type of tile material (e.g., Natural Slate).',
-                            child: const Text('Material Type *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        items: TileSlateType.values.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text(_getTileSlateTypeDisplayName(type)),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => materialType = value);
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Manufacturer',
-                      child: TextFormField(
-                        controller: manufacturerController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The manufacturer of the tile (e.g., Generic).',
-                            child: const Text('Manufacturer *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        validator: (value) => value?.isEmpty ?? true
-                            ? 'Manufacturer is required'
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Description',
-                      child: TextFormField(
-                        controller: descriptionController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'A brief description of the tile (optional).',
-                            child: const Text('Description'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        maxLines: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Height or Length in millimeters',
-                      child: TextFormField(
-                        controller: heightController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The total height or length of the tile in millimeters (e.g., 500 mm).',
-                            child: const Text('Height/Length (mm) *'),
-                          ),
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Height is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Cover Width in millimeters',
-                      child: TextFormField(
-                        controller: widthController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The effective width of the tile after overlap in millimeters (e.g., 250 mm).',
-                            child: const Text('Cover Width (mm) *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Width is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Minimum Gauge in millimeters',
-                      child: TextFormField(
-                        controller: minGaugeController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The minimum batten spacing in millimeters (e.g., 195 mm).',
-                            child: const Text('Min Gauge (mm) *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Min gauge is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Maximum Gauge in millimeters',
-                      child: TextFormField(
-                        controller: maxGaugeController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The maximum batten spacing in millimeters (e.g., 210 mm).',
-                            child: const Text('Max Gauge (mm) *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Max gauge is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Minimum Spacing in millimeters',
-                      child: TextFormField(
-                        controller: minSpacingController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The minimum side overlap between tiles in millimeters (e.g., 1 mm).',
-                            child: const Text('Min Spacing (mm) *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Min spacing is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Maximum Spacing in millimeters',
-                      child: TextFormField(
-                        controller: maxSpacingController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The maximum side overlap between tiles in millimeters (e.g., 5 mm).',
-                            child: const Text('Max Spacing (mm) *'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value?.isEmpty ?? true)
-                            return 'Max spacing is required';
-                          if (double.tryParse(value!) == null)
-                            return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Left Hand Tile Width in millimeters',
-                      child: TextFormField(
-                        controller: leftHandTileWidthController,
-                        decoration: InputDecoration(
-                          label: Tooltip(
-                            message:
-                                'The width of the left-hand tile in millimeters, if applicable (e.g., 125 mm). Optional.',
-                            child: const Text('Left Hand Tile Width (mm)'),
-                          ),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value != null && value.isNotEmpty) {
-                            if (double.tryParse(value) == null) {
-                              return 'Invalid number';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Cross Bonded',
-                      child: CheckboxListTile(
-                        title: Tooltip(
-                          message:
-                              'Check if the tile is cross-bonded (e.g., alternating overlaps).',
-                          child: const Text('Cross Bonded'),
-                        ),
-                        value: crossBonded,
-                        onChanged: (value) {
-                          setState(() {
-                            crossBonded = value ?? false;
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _imageFile != null
-                                ? 'Image: ${_imageFile!.path.split('/').last}'
-                                : _imageUrl != null
-                                    ? 'Image: ${_imageUrl!.split('/').last}'
-                                    : 'No image selected',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        Semantics(
-                          label: 'Upload tile image',
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final result = await FilePicker.platform
-                                  .pickFiles(type: FileType.image);
-                              if (result != null &&
-                                  result.files.single.path != null) {
-                                setState(() {
-                                  _imageFile = File(result.files.single.path!);
-                                });
-                              }
-                            },
-                            child: const Text('Upload Image'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _dataSheetFile != null
-                                ? 'DataSheet: ${_dataSheetFile!.path.split('/').last}'
-                                : _dataSheetUrl != null
-                                    ? 'DataSheet: ${_dataSheetUrl!.split('/').last}'
-                                    : 'No datasheet selected',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        Semantics(
-                          label: 'Upload tile datasheet',
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final result =
-                                  await FilePicker.platform.pickFiles(
-                                type: FileType.custom,
-                                allowedExtensions: ['pdf'],
-                              );
-                              if (result != null &&
-                                  result.files.single.path != null) {
-                                setState(() {
-                                  _dataSheetFile =
-                                      File(result.files.single.path!);
-                                });
-                              }
-                            },
-                            child: const Text('Upload DataSheet (PDF)'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            Semantics(
-              label: isEditing ? 'Update tile' : 'Create tile',
-              child: TextButton(
-                onPressed: () async {
-                  if (formKey.currentState!.validate()) {
-                    if (!_isOnline) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text(
-                                'Cannot save tile offline. Please connect to the internet.')),
-                      );
-                      return;
-                    }
-                    setState(() => _isLoading = true);
-                    try {
-                      final tileService = ref.read(tileServiceProvider);
-                      final user = ref.read(currentUserProvider).value!;
-                      if (_imageFile != null) {
-                        final storageRef = FirebaseStorage.instance.ref().child(
-                            'tiles/${user.id}/${_imageFile!.path.split('/').last}');
-                        await storageRef.putFile(_imageFile!);
-                        _imageUrl = await storageRef.getDownloadURL();
-                      }
-                      if (_dataSheetFile != null) {
-                        final storageRef = FirebaseStorage.instance.ref().child(
-                            'tiles/${user.id}/${_dataSheetFile!.path.split('/').last}');
-                        await storageRef.putFile(_dataSheetFile!);
-                        _dataSheetUrl = await storageRef.getDownloadURL();
-                      }
-                      final newTile = TileModel(
-                        id: isEditing
-                            ? tile!.id
-                            : 'personal_${DateTime.now().millisecondsSinceEpoch}',
-                        name: nameController.text,
-                        manufacturer: manufacturerController.text,
-                        description: descriptionController.text,
-                        materialType: materialType,
-                        slateTileHeight: double.parse(heightController.text),
-                        tileCoverWidth: double.parse(widthController.text),
-                        minGauge: double.parse(minGaugeController.text),
-                        maxGauge: double.parse(maxGaugeController.text),
-                        minSpacing: double.parse(minSpacingController.text),
-                        maxSpacing: double.parse(maxSpacingController.text),
-                        leftHandTileWidth:
-                            leftHandTileWidthController.text.isNotEmpty
-                                ? double.parse(leftHandTileWidthController.text)
-                                : null,
-                        defaultCrossBonded: crossBonded,
-                        isPublic: isEditing ? tile!.isPublic : false,
-                        isApproved: isEditing ? tile!.isApproved : false,
-                        createdById: user.id,
-                        createdAt: isEditing ? tile!.createdAt : DateTime.now(),
-                        updatedAt: DateTime.now(),
-                        image: _imageUrl,
-                        dataSheet: _dataSheetUrl,
-                      );
-                      if (isEditing) {
-                        await tileService.updateTile(newTile);
-                      } else {
-                        await tileService.createTile(newTile);
-                      }
-                      final tilesBox = Hive.box<TileModel>('tilesBox');
-                      await tilesBox.put(newTile.id, newTile);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text(
-                                isEditing ? 'Tile updated' : 'Tile created')),
-                      );
-                      ref.invalidate(allAvailableTilesProvider(user.id));
-                      Navigator.pop(context);
-                      context.go('/tiles');
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error saving tile: $e')),
-                      );
-                    } finally {
-                      setState(() => _isLoading = false);
-                    }
-                  }
-                },
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(isEditing ? 'Update' : 'Create'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getTileSlateTypeDisplayName(TileSlateType type) {
-    switch (type) {
-      case TileSlateType.slate:
-        return 'Slate';
-      case TileSlateType.fibreCementSlate:
-        return 'Fibre Cement Slate';
-      case TileSlateType.interlockingTile:
-        return 'Interlocking Tile';
-      case TileSlateType.plainTile:
-        return 'Plain Tile';
-      case TileSlateType.concreteTile:
-        return 'Concrete Tile';
-      case TileSlateType.pantile:
-        return 'Pantile';
-      case TileSlateType.unknown:
-        return 'Unknown Type';
-    }
-  }
-
-  Future<void> _launchURL(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open URL')),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid URL')),
-      );
-    }
   }
 }

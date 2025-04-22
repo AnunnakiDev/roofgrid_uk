@@ -83,17 +83,24 @@ class CalculatorState {
 class CalculatorNotifier extends StateNotifier<CalculatorState> {
   final CalculationService _calculationService;
   final String? _userId;
-  final HiveService _hiveService = HiveService();
+  final HiveService _hiveService;
   final Ref _ref;
 
   CalculatorNotifier(this._calculationService, this._userId, this._ref)
-      : super(CalculatorState()) {
+      : _hiveService = _ref.read(hiveServiceProvider),
+        super(CalculatorState()) {
+    // Delay initialization until HiveService is ready
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // Wait for HiveService initialization to complete
+    await _ref.read(hiveServiceInitializerProvider.future);
     _loadLastSelectedTile();
   }
 
   void _loadLastSelectedTile() {
     if (_userId != null) {
-      // Fix: Get the actual UserModel from the provider
       final user = _ref.read(currentUserProvider).value;
       if (user != null && (user.isPro || user.isAdmin)) {
         final lastTile = _hiveService.getLastSelectedTile();
@@ -346,70 +353,5 @@ final calculatorProvider =
     StateNotifierProvider<CalculatorNotifier, CalculatorState>((ref) {
   final userId = ref.watch(currentUserProvider).value?.id;
   final calculationService = ref.watch(calculationServiceProvider);
-  // Fix: Pass the ref to the CalculatorNotifier
   return CalculatorNotifier(calculationService, userId, ref);
-});
-
-// Provider for default tiles (for free users)
-final defaultTilesProvider = Provider<List<TileModel>>((ref) {
-  final now = DateTime.now();
-  return [
-    TileModel(
-      id: 'default-slate',
-      name: 'Standard Slate',
-      manufacturer: 'Generic',
-      materialType: TileSlateType.slate,
-      description: 'Standard 500x250mm natural slate',
-      isPublic: true,
-      isApproved: true,
-      createdById: 'system',
-      createdAt: now,
-      updatedAt: now,
-      slateTileHeight: 500, // mm
-      minGauge: 100, // mm
-      maxGauge: 200, // mm
-      tileCoverWidth: 225, // mm
-      minSpacing: 3, // mm
-      maxSpacing: 5, // mm
-      defaultCrossBonded: true,
-    ),
-    TileModel(
-      id: 'default-plain-tile',
-      name: 'Standard Plain Tile',
-      manufacturer: 'Generic',
-      materialType: TileSlateType.plainTile,
-      description: 'Standard 265x165mm clay plain tile',
-      isPublic: true,
-      isApproved: true,
-      createdById: 'system',
-      createdAt: now,
-      updatedAt: now,
-      slateTileHeight: 265, // mm
-      minGauge: 85, // mm
-      maxGauge: 115, // mm
-      tileCoverWidth: 165, // mm
-      minSpacing: 0, // mm
-      maxSpacing: 2, // mm
-      defaultCrossBonded: false,
-    ),
-    TileModel(
-      id: 'default-concrete-tile',
-      name: 'Test Tile 2',
-      manufacturer: 'Generic',
-      materialType: TileSlateType.concreteTile,
-      description: 'Standard 420x330mm concrete tile',
-      isPublic: true,
-      isApproved: true,
-      createdById: 'system',
-      createdAt: now,
-      updatedAt: now,
-      slateTileHeight: 420, // mm
-      minGauge: 310, // mm
-      maxGauge: 345, // mm
-      tileCoverWidth: 300, // mm
-      minSpacing: 2, // mm
-      maxSpacing: 4, // mm
-      defaultCrossBonded: false,
-    ),
-  ];
 });

@@ -48,7 +48,22 @@ class SavedResult {
     required this.updatedAt,
   });
 
-  // Add fromJson for Firestore deserialization
+  // Add this helper method to the SavedResult class
+  static List<Map<String, dynamic>> _safeParseList(dynamic rawList) {
+    if (rawList == null) return [];
+    if (rawList is! List) return [];
+
+    return List<Map<String, dynamic>>.from(rawList.map((item) {
+      if (item is Map<String, dynamic>) {
+        return item;
+      } else if (item is Map) {
+        return Map<String, dynamic>.from(item);
+      }
+      return {'label': 'Unknown', 'value': 0.0};
+    }));
+  }
+
+  // Update fromJson method to use the safe parser
   factory SavedResult.fromJson(Map<String, dynamic> json) {
     return SavedResult(
       id: json['id'] as String,

@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
+import 'package:roofgrid_uk/services/hive_service.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -50,16 +51,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _storage = const FlutterSecureStorage();
-  // Hive box for user data
+  final Ref _ref;
+  final HiveService _hiveService;
   late final Box<UserModel> _userBox;
   // Toggle reCAPTCHA for development (set to false for emulator testing)
   final bool _isRecaptchaEnabled = false;
-  final Ref _ref;
 
-  AuthNotifier(this._ref) : super(const AuthState()) {
-    // Open Hive box for user data
-    _userBox = Hive.box<UserModel>('userBox');
-
+  AuthNotifier(this._ref)
+      : _hiveService = _ref.read(hiveServiceProvider),
+        super(const AuthState()) {
     // Listen to auth state changes to keep the state in sync
     _auth.authStateChanges().listen((User? user) {
       if (user == null) {
@@ -73,12 +73,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
         print("Auth state changed: User logged in, UID: ${user.uid}");
       }
     });
+
+    // Initialize Hive box access safely after construction
+    _initializeHiveAccess();
+  }
+
+  // Add this new method for safe Hive initialization
+  Future<void> _initializeHiveAccess() async {
+    try {
+      // Wait for HiveService initialization to complete
+      await _ref.read(hiveServiceInitializerProvider.future);
+      _userBox = _hiveService.userBox;
+      print("HiveService userBox accessed successfully in AuthNotifier");
+    } catch (e) {
+      print("Error initializing Hive access in AuthNotifier: $e");
+      // Don't rethrow - we'll handle the error gracefully
+    }
   }
 
   Future<bool> login(String email, String password, String captchaToken,
       {bool rememberMe = false}) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+      print("Starting login with email: $email, rememberMe: $rememberMe");
 
       // Simulate CAPTCHA verification during development
       if (_isRecaptchaEnabled) {
@@ -92,6 +109,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             error:
                 'CAPTCHA verification failed: ${result.data['message'] ?? ''}',
           );
+          print("CAPTCHA verification failed: ${result.data['message']}");
           return false;
         }
       } else {
@@ -102,6 +120,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: email,
         password: password,
       );
+      print("Firebase sign-in successful, UID: ${userCredential.user?.uid}");
+
       if (rememberMe) {
         final token = await userCredential.user?.getIdToken();
         if (token != null) {
@@ -147,7 +167,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userCredential.user?.uid,
         isLoading: false,
       );
-      print("Login successful, UID: ${userCredential.user?.uid}");
+      print(
+          "Login successful, updated state: isAuthenticated=${state.isAuthenticated}, userId=${state.userId}");
       return true;
     } on FirebaseFunctionsException catch (e) {
       state = state.copyWith(
@@ -179,9 +200,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> signInWithGoogle() async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+      print("Starting Google Sign-In");
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         state = state.copyWith(isLoading: false);
+        print("Google Sign-In cancelled by user");
         return false; // User cancelled
       }
       final GoogleSignInAuthentication googleAuth =
@@ -191,6 +214,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         idToken: googleAuth.idToken,
       );
       final userCredential = await _auth.signInWithCredential(credential);
+      print(
+          "Google Sign-In successful with Firebase, UID: ${userCredential.user?.uid}");
       await _analytics.logLogin(loginMethod: 'google');
 
       // Set user role to free by default for Google Sign-In users
@@ -230,7 +255,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userCredential.user?.uid,
         isLoading: false,
       );
-      print("Google Sign-In successful, UID: ${userCredential.user?.uid}");
+      print(
+          "Google Sign-In completed, updated state: isAuthenticated=${state.isAuthenticated}, userId=${state.userId}");
       return true;
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
@@ -238,6 +264,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: mapFirebaseError(e.code),
         isLoading: false,
       );
+      print(
+          "FirebaseAuthException during Google Sign-In: ${e.code}, ${e.message}");
       return false;
     } catch (e) {
       state = state.copyWith(
@@ -245,6 +273,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: 'An unexpected error occurred.',
         isLoading: false,
       );
+      print("Unexpected error during Google Sign-In: $e");
       return false;
     }
   }
@@ -252,33 +281,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> resetPassword(String email) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+      print("Starting password reset for email: $email");
       final connectivityResult = await Connectivity().checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
         state = state.copyWith(
           isLoading: false,
           error: 'No internet connection. Please try again when online.',
         );
+        print("Password reset failed: No internet connection");
         return false;
       }
 
       await _auth.sendPasswordResetEmail(email: email);
       await _analytics.logEvent(name: 'password_reset');
       state = state.copyWith(isLoading: false);
+      print("Password reset email sent successfully");
       return true;
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(error: mapFirebaseError(e.code), isLoading: false);
+      print(
+          "FirebaseAuthException during password reset: ${e.code}, ${e.message}");
       return false;
     } catch (e) {
       state = state.copyWith(
         error: 'An unexpected error occurred.',
         isLoading: false,
       );
+      print("Unexpected error during password reset: $e");
       return false;
     }
   }
 
   Future<void> signOut() async {
     try {
+      print("Starting sign-out process");
       await _storage.delete(key: 'auth_token');
       await _userBox
           .delete(_auth.currentUser?.uid); // Remove user data from Hive
@@ -286,7 +322,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _googleSignIn.signOut();
       await _analytics.logEvent(name: 'sign_out');
       state = const AuthState();
-      print("User signed out");
+      print(
+          "User signed out successfully, updated state: isAuthenticated=${state.isAuthenticated}");
     } catch (e) {
       state = state.copyWith(error: 'Failed to sign out: $e');
       print("Sign out error: $e");
@@ -299,12 +336,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ) async {
     try {
       state = state.copyWith(isLoading: true, error: null);
+      print("Starting user creation with email: $email");
       final connectivityResult = await Connectivity().checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
         state = state.copyWith(
           isLoading: false,
           error: 'No internet connection. Please try again when online.',
         );
+        print("User creation failed: No internet connection");
         return false;
       }
 
@@ -354,7 +393,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userCredential.user?.uid,
         isLoading: false,
       );
-      print("User created, UID: ${userCredential.user?.uid}");
+      print(
+          "User creation successful, updated state: isAuthenticated=${state.isAuthenticated}, userId=${state.userId}");
       return true;
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
@@ -362,6 +402,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: mapFirebaseError(e.code),
         isLoading: false,
       );
+      print(
+          "FirebaseAuthException during user creation: ${e.code}, ${e.message}");
       return false;
     } catch (e) {
       state = state.copyWith(
@@ -369,6 +411,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: 'An unexpected error occurred.',
         isLoading: false,
       );
+      print("Unexpected error during user creation: $e");
       return false;
     }
   }
@@ -382,11 +425,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
           error:
               'No internet connection. Profile update requires online access.');
+      print("Profile update failed: No internet connection");
       return;
     }
 
     final user = _auth.currentUser;
     if (user != null) {
+      print(
+          "Updating user profile for UID: ${user.uid}, displayName: $displayName, photoURL: $photoURL");
       await user.updateDisplayName(displayName);
       await user.updatePhotoURL(photoURL);
       await _firestore.collection('users').doc(user.uid).update({
@@ -402,6 +448,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await _userBox.put(user.uid, userModel);
         print("User profile updated in Hive: ${userModel.id}");
       }
+    } else {
+      print("Profile update failed: No user logged in");
     }
   }
 
@@ -413,6 +461,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isLoading: false,
           error: 'No internet connection. Upgrade requires online access.',
         );
+        print("Upgrade to Pro failed: No internet connection");
         return false;
       }
 
@@ -420,6 +469,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
         state = state.copyWith(isLoading: false, error: 'No user logged in.');
+        print("Upgrade to Pro failed: No user logged in");
         return false;
       }
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
@@ -441,9 +491,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       await _analytics.logEvent(name: 'upgrade_to_pro');
       state = state.copyWith(isLoading: false);
+      print("Upgrade to Pro successful for UID: $userId");
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to upgrade: $e');
+      print("Error during upgrade to Pro: $e");
       return false;
     }
   }
@@ -454,7 +506,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Check connectivity
       final connectivityResult = await Connectivity().checkConnectivity();
       bool isOnline = connectivityResult != ConnectivityResult.none;
-      final tilesBox = Hive.box<TileModel>('tilesBox');
 
       if (isOnline) {
         // Fetch tiles from Firestore if online
@@ -464,7 +515,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               'Default tiles already initialized in Firestore, syncing to Hive...');
           for (var doc in existingTiles.docs) {
             final tile = TileModel.fromJson(doc.data());
-            await tilesBox.put(tile.id, tile);
+            await _hiveService.tilesBox.put(tile.id, tile);
           }
           return;
         }
@@ -552,16 +603,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
           }, SetOptions(merge: true));
 
           // Store in Hive
-          await tilesBox.put(tile.id, tile);
+          await _hiveService.tilesBox.put(tile.id, tile);
         }
 
         await _analytics.logEvent(
           name: 'initialize_default_tiles',
           parameters: {'tile_count': defaultTiles.length},
         );
+        print("Default tiles initialized successfully");
       } else {
         print("Offline: Checking Hive for default tiles");
-        if (tilesBox.isEmpty) {
+        if (_hiveService.tilesBox.isEmpty) {
           print("No tiles found in Hive while offline");
         }
       }
@@ -601,7 +653,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             isAuthenticated: true,
             userId: _auth.currentUser!.uid,
           );
-          print("Persistent login successful, UID: ${_auth.currentUser!.uid}");
+          print(
+              "Persistent login successful, UID: ${_auth.currentUser!.uid}, updated state: isAuthenticated=${state.isAuthenticated}");
           return true;
         }
       }
@@ -666,6 +719,7 @@ final authStateStreamProvider = StreamProvider<UserModel?>((ref) {
 final currentUserProvider = StreamProvider<UserModel?>((ref) {
   final authState = ref.watch(authProvider);
   if (authState.userId == null) {
+    print("Current user provider: No user ID, returning null");
     return Stream.value(null);
   }
 
@@ -673,7 +727,8 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
   return Stream.fromFuture(Connectivity().checkConnectivity())
       .asyncExpand((connectivityResult) {
     bool isOnline = connectivityResult != ConnectivityResult.none;
-    final userBox = Hive.box<UserModel>('userBox');
+    final hiveService = ref.read(hiveServiceProvider);
+    final userBox = hiveService.userBox;
 
     if (isOnline) {
       // Fetch from Firestore if online with retry mechanism
@@ -681,17 +736,23 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
         if (snapshot.exists) {
           final userModel = UserModel.fromFirestore(snapshot);
           userBox.put(authState.userId!, userModel); // Update Hive
+          print(
+              "Current user provider: Fetched user from Firestore, UID: ${userModel.id}");
           return userModel;
         }
+        print("Current user provider: User document not found in Firestore");
         return null;
       }).handleError((error) {
         print("Error fetching user from Firestore: $error");
         // Fallback to Hive if Firestore fails
-        return userBox.get(authState.userId);
+        final userModel = userBox.get(authState.userId);
+        print(
+            "Current user provider: Falling back to Hive, user: ${userModel?.id}");
+        return Stream.value(userModel);
       });
     } else {
       // Use Hive if offline
-      print("Offline: Fetching user from Hive");
+      print("Current user provider: Offline, fetching user from Hive");
       final userModel = userBox.get(authState.userId);
       return Stream.value(userModel);
     }
@@ -722,7 +783,9 @@ Stream<DocumentSnapshot> _fetchUserWithRetry(String userId) async* {
     } catch (e) {
       print("Error fetching user document, attempt $attempt/$maxAttempts: $e");
       if (attempt == maxAttempts) {
-        rethrow;
+        // Emit the error to the stream and let the consumer handle it
+        throw Exception(
+            'Failed to load user data after $maxAttempts attempts: $e');
       }
       await Future.delayed(delay);
     }

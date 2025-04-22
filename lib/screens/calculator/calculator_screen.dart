@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
@@ -12,7 +13,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:roofgrid_uk/services/hive_service.dart';
 
 // Define a class to hold vertical inputs
 class VerticalInputs {
@@ -72,24 +73,69 @@ class HorizontalInputs {
   }
 }
 
-class CalculatorScreen extends ConsumerStatefulWidget {
+class CalculatorScreen extends ConsumerWidget {
   final SavedResult? savedResult; // Optional parameter for editing
 
   const CalculatorScreen({super.key, this.savedResult});
 
   @override
-  ConsumerState<CalculatorScreen> createState() => _CalculatorScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final userAsync = ref.watch(currentUserProvider);
+
+    if (!authState.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        print("User not authenticated, redirecting to /auth/login");
+        context.go('/auth/login');
+      });
+      return const Scaffold(
+        body: Center(child: Text('Please log in to access this feature')),
+      );
+    }
+
+    return userAsync.when(
+      data: (user) => CalculatorContent(
+        user: user,
+        savedResult: savedResult,
+      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, stackTrace) => Scaffold(
+        body: Center(
+          child: Text(
+            'Error loading user data: $error',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
+class CalculatorContent extends ConsumerStatefulWidget {
+  final UserModel? user;
+  final SavedResult? savedResult;
+
+  const CalculatorContent({
+    super.key,
+    required this.user,
+    this.savedResult,
+  });
+
+  @override
+  ConsumerState<CalculatorContent> createState() => _CalculatorContentState();
+}
+
+class _CalculatorContentState extends ConsumerState<CalculatorContent>
     with TickerProviderStateMixin {
   late TabController _tabController;
   bool _isVertical = true;
   bool _isOnline = true;
+  bool _hasRedirectedToTileSelect = false; // Flag to prevent repeated redirects
   final GlobalKey<VerticalCalculatorTabState> _verticalTabKey = GlobalKey();
   final GlobalKey<HorizontalCalculatorTabState> _horizontalTabKey = GlobalKey();
-  late VerticalInputs _verticalInputs;
-  late HorizontalInputs _horizontalInputs;
 
   @override
   void initState() {
@@ -97,42 +143,10 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    // Initialize inputs based on savedResult if present
+    // Initialize tab based on savedResult, if present
     if (widget.savedResult != null) {
-      final inputs = widget.savedResult!.inputs;
-      if (widget.savedResult!.type == CalculationType.vertical) {
-        _isVertical = true;
-        _tabController.index = 0;
-        _verticalInputs = VerticalInputs(
-          rafterHeights:
-              (inputs['vertical_inputs']?['rafterHeights'] as List<dynamic>?)
-                      ?.map<Map<String, dynamic>>(
-                          (item) => Map<String, dynamic>.from(item as Map))
-                      .toList() ??
-                  [],
-          gutterOverhang: inputs['vertical_inputs']?['gutterOverhang'] ?? 50.0,
-          useDryRidge: inputs['vertical_inputs']?['useDryRidge'] ?? 'NO',
-        );
-        _horizontalInputs = HorizontalInputs();
-      } else {
-        _isVertical = false;
-        _tabController.index = 1;
-        _horizontalInputs = HorizontalInputs(
-          widths: (inputs['horizontal_inputs']?['widths'] as List<dynamic>?)
-                  ?.map<Map<String, dynamic>>(
-                      (item) => Map<String, dynamic>.from(item as Map))
-                  .toList() ??
-              [],
-          useDryVerge: inputs['horizontal_inputs']?['useDryVerge'] ?? 'NO',
-          abutmentSide: inputs['horizontal_inputs']?['abutmentSide'] ?? 'NONE',
-          useLHTile: inputs['horizontal_inputs']?['useLHTile'] ?? 'NO',
-          crossBonded: inputs['horizontal_inputs']?['crossBonded'] ?? 'NO',
-        );
-        _verticalInputs = VerticalInputs();
-      }
-    } else {
-      _verticalInputs = VerticalInputs();
-      _horizontalInputs = HorizontalInputs();
+      _isVertical = widget.savedResult!.type == CalculationType.vertical;
+      _tabController.index = _isVertical ? 0 : 1;
     }
 
     // Check initial connectivity
@@ -173,255 +187,375 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
-    final userAsync = ref.watch(currentUserProvider);
-    final calculatorState = ref.watch(calculatorProvider);
+    // Handle null user case
+    if (widget.user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        print("User data not found, redirecting to /auth/login");
+        context.go('/auth/login');
+      });
+      return const Scaffold(
+        body: Center(child: Text('User data not found. Please sign in again.')),
+      );
+    }
+
+    final user = widget.user!; // Safe to use non-null user now
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
     final padding = isLargeScreen ? 24.0 : 16.0;
 
-    if (!authState.isAuthenticated) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.go('/auth/login');
+    // Redirect to tile selection if not already done
+    if (!_hasRedirectedToTileSelect) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final selectedTile = await context.push('/calculator/tile-select');
+          if (selectedTile != null && selectedTile is TileModel) {
+            print("Tile selected: ${selectedTile.name}");
+            ref.read(calculatorProvider.notifier).setTile(selectedTile);
+          } else {
+            debugPrint('No tile selected or invalid tile data returned');
+            // Optionally, redirect back to home if no tile is selected
+            context.go('/home');
+          }
+        } catch (e) {
+          debugPrint('Error selecting tile: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error selecting tile: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          context.go('/home');
+        }
       });
-      return const Scaffold(
-        body: Center(child: Text('Please log in to access this feature')),
-      );
+      setState(() {
+        _hasRedirectedToTileSelect = true;
+      });
     }
 
-    // Display error message if present
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (calculatorState.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(calculatorState.errorMessage!),
-            backgroundColor: Theme.of(context).colorScheme.error,
+    // Display error message if present using a Consumer for errorMessage only
+    return Consumer(
+      builder: (context, ref, child) {
+        final errorMessage =
+            ref.watch(calculatorProvider.select((state) => state.errorMessage));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (errorMessage != null) {
+            print("Showing error message: $errorMessage");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+            ref.read(calculatorProvider.notifier).clearResults();
+          }
+        });
+        return child!;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.savedResult != null
+              ? 'Edit Calculation: ${widget.savedResult!.projectName}'
+              : 'Roofing Calculator'),
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.straighten),
+                text: 'Vertical',
+                iconMargin: EdgeInsets.only(bottom: 4),
+              ),
+              Tab(
+                icon: Icon(Icons.grid_4x4),
+                text: 'Horizontal',
+                iconMargin: EdgeInsets.only(bottom: 4),
+              ),
+            ],
           ),
-        );
-        // Clear the error message after displaying
-        ref.read(calculatorProvider.notifier).clearResults();
-      }
-    });
-
-    return userAsync.when(
-      data: (user) => _buildScaffold(context, user, padding),
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, stackTrace) => Scaffold(
-        body: Center(
-          child: Text(
-            'Error loading user data: $error',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScaffold(BuildContext context, UserModel? user, double padding) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.savedResult != null
-            ? 'Edit Calculation: ${widget.savedResult!.projectName}'
-            : 'Roofing Calculator'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.straighten),
-              text: 'Vertical',
-              iconMargin: EdgeInsets.only(bottom: 4),
+          leading: Builder(
+            builder: (context) => Semantics(
+              label: 'Open navigation drawer',
+              child: IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  print("Opening navigation drawer");
+                  Scaffold.of(context).openDrawer();
+                },
+                tooltip: 'Open navigation drawer',
+              ),
             ),
-            Tab(
-              icon: Icon(Icons.grid_4x4),
-              text: 'Horizontal',
-              iconMargin: EdgeInsets.only(bottom: 4),
+          ),
+          actions: [
+            Semantics(
+              label: 'Show calculator information',
+              child: IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => _showCalculatorInfo(context),
+                tooltip: 'Show calculator information',
+              ),
             ),
           ],
         ),
-        leading: Builder(
-          builder: (context) => Semantics(
-            label: 'Open navigation drawer',
-            child: IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-              tooltip: 'Open navigation drawer',
+        drawer: const MainDrawer(),
+        body: _buildCalculatorContent(context, user, padding),
+        bottomNavigationBar: BottomNavBar(
+          currentIndex: 1, // Highlight Calculator tab
+          onTap: (index) {
+            if (index == 0) {
+              print("Navigating to /home from bottom navigation");
+              context.go('/home');
+            }
+            if (index == 1) {
+              print(
+                  "Navigating to /home from bottom navigation (profile redirect)");
+              context.go('/home');
+            }
+            if (index == 2) {
+              // Tiles
+              if (user.isPro != true) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upgrade to Pro to access this feature'),
+                  ),
+                );
+                print("User not Pro, redirecting to /subscription");
+                context.go('/subscription');
+              } else {
+                print("Navigating to /tiles from bottom navigation");
+                context.go('/tiles');
+              }
+            }
+            if (index == 3) {
+              // Results
+              if (user.isPro != true) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upgrade to Pro to access this feature'),
+                  ),
+                );
+                print("User not Pro, redirecting to /subscription");
+                context.go('/subscription');
+              } else {
+                print("Navigating to /results from bottom navigation");
+                context.go('/results');
+              }
+            }
+          },
+          items: [
+            const BottomNavItem(
+              label: 'Home',
+              icon: Icons.home,
+              activeIcon: Icons.home_filled,
             ),
-          ),
+            const BottomNavItem(
+              label: 'Profile',
+              icon: Icons.person,
+              activeIcon: Icons.person,
+            ),
+            BottomNavItem(
+              label: 'Tiles',
+              icon: Icons.grid_view,
+              activeIcon: Icons.grid_view,
+              tooltip: user.isPro ? 'Tiles' : 'Upgrade to Pro to access tiles',
+            ),
+            BottomNavItem(
+              label: 'Results',
+              icon: Icons.save,
+              activeIcon: Icons.save,
+              tooltip: user.isPro
+                  ? 'Saved Results'
+                  : 'Upgrade to Pro to access saved results',
+            ),
+          ],
         ),
-        actions: [
-          Semantics(
-            label: 'Show calculator information',
-            child: IconButton(
-              icon: const Icon(Icons.info_outline),
-              onPressed: () => _showCalculatorInfo(context),
-              tooltip: 'Show calculator information',
-            ),
-          ),
-        ],
-      ),
-      drawer: const MainDrawer(),
-      body: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(padding),
-            child: Semantics(
-              label: 'Step 2 description',
-              child: Container(
-                padding: const EdgeInsets.all(12.0),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8.0),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 1.0,
-                  ),
-                ),
-                child: const Text(
-                  'Step 2, enter your measurements',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ).animate().fadeIn(duration: 600.ms),
-            ),
-          ),
-          Expanded(
-            child: _buildCalculatorContent(context, user, padding),
-          ),
-          Padding(
-            padding: EdgeInsets.all(padding),
-            child: _buildCalculateButton(user),
-          ),
-        ],
-      ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: 1, // Highlight Calculator tab
-        onTap: (index) {
-          if (index == 0) context.go('/home'); // Home
-          if (index == 1)
-            context.go('/home'); // Profile (redirects to home for now)
-          if (index == 2) {
-            // Tiles
-            if (user?.isPro != true) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Upgrade to Pro to access this feature'),
-                ),
-              );
-              context.go('/subscription');
-            } else {
-              context.go('/tiles');
-            }
-          }
-          if (index == 3) {
-            // Results
-            if (user?.isPro != true) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Upgrade to Pro to access this feature'),
-                ),
-              );
-              context.go('/subscription');
-            } else {
-              context.go('/results');
-            }
-          }
-        },
-        items: [
-          const BottomNavItem(
-            label: 'Home',
-            icon: Icons.home,
-            activeIcon: Icons.home_filled,
-          ),
-          const BottomNavItem(
-            label: 'Profile',
-            icon: Icons.person,
-            activeIcon: Icons.person,
-          ),
-          BottomNavItem(
-            label: 'Tiles',
-            icon: Icons.grid_view,
-            activeIcon: Icons.grid_view,
-            tooltip: user?.isPro == true
-                ? 'Tiles'
-                : 'Upgrade to Pro to access tiles',
-          ),
-          BottomNavItem(
-            label: 'Results',
-            icon: Icons.save,
-            activeIcon: Icons.save,
-            tooltip: user?.isPro == true
-                ? 'Saved Results'
-                : 'Upgrade to Pro to access saved results',
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildCalculatorContent(
-      BuildContext context, UserModel? user, double padding) {
-    if (user == null) {
-      return const Center(
-          child: Text('User data not found. Please sign in again.'));
-    }
-
+      BuildContext context, UserModel user, double padding) {
     final canUseMultipleRafts = user.isPro;
     final canUseAdvancedOptions = user.isPro;
     final canExport = user.isPro;
     final canAccessDatabase = user.isPro;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeScreen = screenWidth >= 600;
+    final fontSize = isLargeScreen ? 16.0 : 14.0;
 
-    return TabBarView(
-      controller: _tabController,
+    return Column(
       children: [
-        VerticalCalculatorTab(
-          key: _verticalTabKey,
-          user: user,
-          canUseMultipleRafters: canUseMultipleRafts,
-          canUseAdvancedOptions: canUseAdvancedOptions,
-          canExport: canExport,
-          canAccessDatabase: canAccessDatabase,
-          initialInputs: _verticalInputs,
-          onInputsChanged: (inputs) {
-            setState(() {
-              _verticalInputs = inputs;
-            });
-          },
-          saveResultCallback: (calculationData, type) => _saveResult(
-            user,
-            calculationData,
-            type,
+        Padding(
+          padding: EdgeInsets.all(padding),
+          child: Semantics(
+            label: 'Step 2 description',
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.0,
+                ),
+              ),
+              child: const Text(
+                'Step 2, enter your measurements',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ).animate().fadeIn(duration: 600.ms),
           ),
         ),
-        HorizontalCalculatorTab(
-          key: _horizontalTabKey,
-          user: user,
-          canUseMultipleWidths: canUseMultipleRafts,
-          canUseAdvancedOptions: canUseAdvancedOptions,
-          canExport: canExport,
-          canAccessDatabase: canAccessDatabase,
-          initialInputs: _horizontalInputs,
-          onInputsChanged: (inputs) {
-            setState(() {
-              _horizontalInputs = inputs;
-            });
-          },
-          saveResultCallback: (calculationData, type) => _saveResult(
-            user,
-            calculationData,
-            type,
+        Padding(
+          padding: EdgeInsets.all(padding),
+          child: Consumer(
+            builder: (context, ref, child) {
+              final selectedTile = ref.watch(
+                  calculatorProvider.select((state) => state.selectedTile));
+              print(
+                  "Rebuilding selected tile row, selectedTile: ${selectedTile?.name}");
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Selected Tile: ${selectedTile?.name ?? "None"}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: fontSize,
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (canAccessDatabase)
+                    Semantics(
+                      label: 'Edit selected tile',
+                      child: TextButton(
+                        onPressed: () async {
+                          try {
+                            final selectedTile =
+                                await context.push('/calculator/tile-select');
+                            if (selectedTile != null &&
+                                selectedTile is TileModel) {
+                              print("Tile selected: ${selectedTile.name}");
+                              ref
+                                  .read(calculatorProvider.notifier)
+                                  .setTile(selectedTile);
+                            } else {
+                              debugPrint(
+                                  'No tile selected or invalid tile data returned');
+                            }
+                          } catch (e) {
+                            debugPrint('Error selecting tile: $e');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error selecting tile: $e'),
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.error,
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(
+                          'Edit Tile',
+                          style: TextStyle(fontSize: fontSize - 2),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              VerticalCalculatorTab(
+                key: _verticalTabKey,
+                user: user,
+                canUseMultipleRafters: canUseMultipleRafts,
+                canUseAdvancedOptions: canUseAdvancedOptions,
+                canExport: canExport,
+                canAccessDatabase: canAccessDatabase,
+                initialInputs: widget.savedResult != null &&
+                        widget.savedResult!.type == CalculationType.vertical
+                    ? VerticalInputs(
+                        rafterHeights: (widget
+                                        .savedResult!.inputs['vertical_inputs']
+                                    ?['rafterHeights'] as List<dynamic>?)
+                                ?.map((item) => item as Map<String, dynamic>)
+                                .toList() ??
+                            [],
+                        gutterOverhang: widget.savedResult!
+                                .inputs['vertical_inputs']?['gutterOverhang'] ??
+                            50.0,
+                        useDryRidge: widget.savedResult!
+                                .inputs['vertical_inputs']?['useDryRidge'] ??
+                            'NO',
+                      )
+                    : VerticalInputs(),
+                onInputsChanged: (_) {
+                  // No-op: We no longer need to update parent state
+                },
+                saveResultCallback: (calculationData, type) => _saveResult(
+                  user,
+                  calculationData,
+                  type,
+                ),
+              ),
+              HorizontalCalculatorTab(
+                key: _horizontalTabKey,
+                user: user,
+                canUseMultipleWidths: canUseMultipleRafts,
+                canUseAdvancedOptions: canUseAdvancedOptions,
+                canExport: canExport,
+                canAccessDatabase: canAccessDatabase,
+                initialInputs: widget.savedResult != null &&
+                        widget.savedResult!.type == CalculationType.horizontal
+                    ? HorizontalInputs(
+                        widths: (widget.savedResult!.inputs['horizontal_inputs']
+                                    ?['widths'] as List<dynamic>?)
+                                ?.map((item) => item as Map<String, dynamic>)
+                                .toList() ??
+                            [],
+                        useDryVerge: widget.savedResult!
+                                .inputs['horizontal_inputs']?['useDryVerge'] ??
+                            'NO',
+                        abutmentSide: widget.savedResult!
+                                .inputs['horizontal_inputs']?['abutmentSide'] ??
+                            'NONE',
+                        useLHTile: widget.savedResult!
+                                .inputs['horizontal_inputs']?['useLHTile'] ??
+                            'NO',
+                        crossBonded: widget.savedResult!
+                                .inputs['horizontal_inputs']?['crossBonded'] ??
+                            'NO',
+                      )
+                    : HorizontalInputs(),
+                onInputsChanged: (_) {
+                  // No-op: We no longer need to update parent state
+                },
+                saveResultCallback: (calculationData, type) => _saveResult(
+                  user,
+                  calculationData,
+                  type,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.all(padding),
+          child: _buildCalculateButton(user),
         ),
       ],
     );
   }
 
-  Widget _buildCalculateButton(UserModel? user) {
+  Widget _buildCalculateButton(UserModel user) {
     return Semantics(
       label: 'Calculate results',
       child: Container(
@@ -511,7 +645,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
     );
   }
 
-  void _calculateVertical(UserModel? user) async {
+  void _calculateVertical(UserModel user) async {
     debugPrint('Starting _calculateVertical');
     final verticalTabState = _verticalTabKey.currentState;
     if (verticalTabState == null) {
@@ -539,7 +673,7 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
     }
   }
 
-  void _calculateHorizontal(UserModel? user) async {
+  void _calculateHorizontal(UserModel user) async {
     debugPrint('Starting _calculateHorizontal');
     final horizontalTabState = _horizontalTabKey.currentState;
     if (horizontalTabState == null) {
@@ -569,9 +703,20 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
 
   Future<void> _saveResult(
       UserModel user, Map<String, dynamic> calculationData, String type) async {
-    // Collect inputs from both tabs
-    final verticalInputs = _verticalTabKey.currentState?.inputs ?? {};
-    final horizontalInputs = _horizontalTabKey.currentState?.inputs ?? {};
+    // Wait for HiveService initialization to complete
+    await ref.read(hiveServiceInitializerProvider.future);
+
+    // Collect inputs directly from the tabs
+    final verticalInputs = type == 'vertical'
+        ? _verticalTabKey.currentState?.inputs ?? {}
+        : _horizontalTabKey.currentState != null
+            ? _horizontalTabKey.currentState!.inputs
+            : {};
+    final horizontalInputs = type == 'horizontal'
+        ? _horizontalTabKey.currentState?.inputs ?? {}
+        : _verticalTabKey.currentState != null
+            ? _verticalTabKey.currentState!.inputs
+            : {};
 
     // Combine inputs based on the type of calculation
     Map<String, dynamic> combinedInputs = {};
@@ -643,7 +788,8 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen>
       await ref.read(resultsServiceProvider).saveResult(user.id, savedResult);
 
       // Save to Hive for offline caching
-      final resultsBox = Hive.box<SavedResult>('resultsBox');
+      final hiveService = ref.read(hiveServiceProvider);
+      final resultsBox = hiveService.resultsBox;
       debugPrint('Saving result to Hive: ${savedResult.id}');
       try {
         await resultsBox.put(savedResult.id, savedResult);

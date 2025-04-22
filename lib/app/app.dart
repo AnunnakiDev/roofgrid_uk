@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:roofgrid_uk/app/theme/app_theme.dart';
-import 'package:roofgrid_uk/routing/router.dart';
+import 'package:roofgrid_uk/routing/router.dart' as router;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 
@@ -9,7 +9,8 @@ class RoofGridApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    final authState = ref
+        .watch(authProvider); // Changed from authStateProvider to authProvider
 
     return MaterialApp.router(
       title: 'RoofGrid UK',
@@ -17,7 +18,7 @@ class RoofGridApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
-      routerConfig: AppRouter.router(authState),
+      routerConfig: router.getRouter(authState),
     );
   }
 }

@@ -10,15 +10,7 @@ import 'package:roofgrid_uk/widgets/profile_summary_widget.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/foundation.dart';
-
-// Background isolate for analytics logging
-Future<void> _logAnalyticsEvent(Map<String, dynamic> event) async {
-  await FirebaseAnalytics.instance.logEvent(
-    name: event['name'],
-    parameters: event['parameters'],
-  );
-}
+import 'package:firebase_core/firebase_core.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -31,11 +23,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _analytics = FirebaseAnalytics.instance;
   bool _isProfileExpanded = false;
 
+  Future<void> _logAnalyticsEvent(String name,
+      [Map<String, Object>? parameters]) async {
+    try {
+      // Ensure Firebase is initialized before logging
+      await Firebase.initializeApp();
+      await _analytics.logEvent(
+        name: name,
+        parameters: parameters,
+      );
+    } catch (e) {
+      debugPrint('Failed to log analytics event "$name": $e');
+    }
+  }
+
   Future<void> _signOut() async {
-    await compute(_logAnalyticsEvent, {
-      'name': 'sign_out',
-      'parameters': null,
-    });
+    await _logAnalyticsEvent('sign_out');
     await ref.read(authProvider.notifier).signOut();
     if (mounted) {
       context.go('/auth/login');
@@ -384,10 +387,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     icon: Icons.straighten,
                     index: 0,
                     onTap: () {
-                      compute(_logAnalyticsEvent, {
-                        'name': 'open_calculator',
-                        'parameters': {'type': 'vertical'},
-                      });
+                      _logAnalyticsEvent(
+                          'open_calculator', {'type': 'vertical'});
                       context.go('/calculator');
                     },
                     isCalculator: true,
@@ -405,10 +406,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     icon: Icons.auto_awesome_mosaic,
                     index: 1,
                     onTap: () {
-                      compute(_logAnalyticsEvent, {
-                        'name': 'open_calculator',
-                        'parameters': {'type': 'horizontal'},
-                      });
+                      _logAnalyticsEvent(
+                          'open_calculator', {'type': 'horizontal'});
                       context.go('/calculator');
                     },
                     isCalculator: true,
@@ -440,10 +439,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   );
                   context.go('/subscription');
                 } else {
-                  compute(_logAnalyticsEvent, {
-                    'name': 'view_results',
-                    'parameters': null,
-                  });
+                  _logAnalyticsEvent('view_results');
                   context.go('/results');
                 }
               },
@@ -474,10 +470,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   );
                   context.go('/subscription');
                 } else {
-                  compute(_logAnalyticsEvent, {
-                    'name': 'manage_tiles',
-                    'parameters': null,
-                  });
+                  _logAnalyticsEvent('manage_tiles');
                   context.go('/tiles');
                 }
               },
@@ -500,10 +493,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               icon: Icons.help_outline,
               index: 4,
               onTap: () {
-                compute(_logAnalyticsEvent, {
-                  'name': 'open_support',
-                  'parameters': null,
-                });
+                _logAnalyticsEvent('open_support');
                 context.go('/support/contact');
               },
             ),
