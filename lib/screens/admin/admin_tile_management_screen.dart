@@ -146,8 +146,7 @@ class _AdminTileManagementScreenState
             minSpacing: double.tryParse(row[8]?.toString() ?? '0') ?? 0,
             maxSpacing: double.tryParse(row[9]?.toString() ?? '0') ?? 0,
             defaultCrossBonded: row[10]?.toString().toLowerCase() == 'true',
-            leftHandTileWidth:
-                double.tryParse(row[11]?.toString() ?? '') ?? null,
+            leftHandTileWidth: double.tryParse(row[11]?.toString() ?? ''),
             dataSheet: row[12]?.toString(),
             image: row[13]?.toString(),
           );

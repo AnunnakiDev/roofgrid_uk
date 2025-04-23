@@ -5,13 +5,11 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
-import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 class TileSelectorScreen extends ConsumerStatefulWidget {
   const TileSelectorScreen({super.key});

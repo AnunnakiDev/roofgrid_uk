@@ -67,6 +67,31 @@ class SavedResultAdapter extends TypeAdapter<SavedResult> {
           typeId == other.typeId;
 }
 
+class DateTimeAdapterAdapter extends TypeAdapter<DateTimeAdapter> {
+  @override
+  final int typeId = 5;
+
+  @override
+  DateTimeAdapter read(BinaryReader reader) {
+    return DateTimeAdapter();
+  }
+
+  @override
+  void write(BinaryWriter writer, DateTimeAdapter obj) {
+    writer.writeByte(0);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DateTimeAdapterAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
 class CalculationTypeAdapter extends TypeAdapter<CalculationType> {
   @override
   final int typeId = 4;
@@ -78,6 +103,8 @@ class CalculationTypeAdapter extends TypeAdapter<CalculationType> {
         return CalculationType.vertical;
       case 1:
         return CalculationType.horizontal;
+      case 2:
+        return CalculationType.combined;
       default:
         return CalculationType.vertical;
     }
@@ -91,6 +118,9 @@ class CalculationTypeAdapter extends TypeAdapter<CalculationType> {
         break;
       case CalculationType.horizontal:
         writer.writeByte(1);
+        break;
+      case CalculationType.combined:
+        writer.writeByte(2);
         break;
     }
   }

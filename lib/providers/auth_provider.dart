@@ -10,7 +10,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
 
 class AuthState {

@@ -359,9 +359,7 @@ class RoofResultPainter extends CustomPainter {
       // Draw regular battens
       for (int j = 1; j <= regularBattens; j++) {
         final y = startY +
-            ((rafters[0]['value'] as num) -
-                    (firstBatten as num) -
-                    gaugeDistance * j) *
+            ((rafters[0]['value'] as num) - (firstBatten) - gaugeDistance * j) *
                 scaleFactor;
         canvas.drawLine(
           Offset(startX, y),

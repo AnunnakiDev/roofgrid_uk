@@ -24,7 +24,7 @@ class TileManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isOnline = true;
 
   @override

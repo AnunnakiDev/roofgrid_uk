@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/providers/theme_provider.dart';
-import 'package:roofgrid_uk/utils/app_theme.dart';
 
 class ThemeProvider extends ConsumerWidget {
   final Widget child;

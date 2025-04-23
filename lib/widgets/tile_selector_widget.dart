@@ -446,12 +446,12 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
             const SizedBox(width: 8),
             ElevatedButton(
               onPressed: () => widget.onTileSelected(tile),
-              child: const Text('Select'),
               style: ElevatedButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 textStyle: Theme.of(context).textTheme.labelMedium,
               ),
+              child: const Text('Select'),
             ),
           ],
         ),

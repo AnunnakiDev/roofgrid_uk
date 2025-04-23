@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:roofgrid_uk/utils/app_theme.dart';
 
 // FutureProvider to handle theme initialization
 final themeInitializerProvider = FutureProvider<void>((ref) async {

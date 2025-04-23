@@ -6,7 +6,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
-import 'package:roofgrid_uk/screens/result_visualization.dart';
+import 'package:roofgrid_uk/widgets/result_visualization.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -18,7 +18,6 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
   final bool canAccessDatabase;
   final HorizontalInputs initialInputs;
   final void Function(HorizontalInputs) onInputsChanged;
-  final Future<void> Function(Map<String, dynamic>, String) saveResultCallback;
 
   const HorizontalCalculatorTab({
     super.key,
@@ -29,7 +28,6 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
     required this.canAccessDatabase,
     required this.initialInputs,
     required this.onInputsChanged,
-    required this.saveResultCallback,
   });
 
   @override
@@ -45,11 +43,7 @@ class HorizontalCalculatorTabState
   late String _useLHTile;
   late String _crossBonded;
   bool _isOnline = true;
-  final GlobalKey _resultsKey = GlobalKey(); // For auto-scrolling
-  List<Map<String, dynamic>> _inputs = []; // Store inputs after calculation
-  Map<String, dynamic>?
-      _lastCalculationData; // Store last calculation for saving
-  List<Color> _widthColors = []; // Colors for each width
+  List<Color> _widthColors = [];
 
   @override
   void initState() {
@@ -143,7 +137,6 @@ class HorizontalCalculatorTabState
 
   @override
   Widget build(BuildContext context) {
-    final calcState = ref.watch(calculatorProvider);
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
     final padding = isLargeScreen ? 24.0 : 16.0;
@@ -154,7 +147,6 @@ class HorizontalCalculatorTabState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Removed duplicate "Selected Tile" row; it's now handled by CalculatorScreen
           const SizedBox(height: 16),
           Text(
             'Options',
@@ -195,10 +187,6 @@ class HorizontalCalculatorTabState
           const SizedBox(height: 8),
           ..._buildWidthInputs(fontSize),
           if (!widget.canUseMultipleWidths) _buildProFeaturePrompt(fontSize),
-          if (calcState.horizontalResult != null)
-            _buildResultsCard(calcState, fontSize),
-          if (calcState.errorMessage != null)
-            _buildErrorMessage(calcState.errorMessage!, fontSize),
         ],
       ),
     );
@@ -535,321 +523,6 @@ class HorizontalCalculatorTabState
     );
   }
 
-  Widget _buildResultsCard(CalculatorState calcState, double fontSize) {
-    final result = calcState.horizontalResult!;
-    final widths = _inputs; // Use stored inputs
-
-    // Create a temporary SavedResult for visualization with color mapping
-    final tempSavedResult = SavedResult(
-      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      userId: widget.user.id,
-      projectName: 'Temporary Result',
-      type: CalculationType.horizontal,
-      timestamp: DateTime.now(),
-      inputs: {
-        'widths': _inputs,
-        'useDryVerge': _useDryVerge,
-        'abutmentSide': _abutmentSide,
-        'useLHTile': _useLHTile,
-        'crossBonded': _crossBonded,
-        'widthColors':
-            _widthColors.map((color) => color.value.toString()).toList(),
-      },
-      outputs: result.toJson(),
-      tile: calcState.selectedTile?.toJson() ?? {},
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    return Card(
-      key: _resultsKey, // For auto-scrolling
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Horizontal Calculation Results',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: fontSize,
-                      ),
-                ),
-                Text(
-                  result.solution,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: fontSize,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(),
-            // Text Results
-            if (widths.length <= 1) ...[
-              // Single width, display directly
-              _buildSingleResult(result, fontSize),
-            ] else ...[
-              // Multiple widths, use PageView for swipeable results
-              SizedBox(
-                height: 300, // Adjust based on content
-                child: PageView.builder(
-                  itemCount: widths.length,
-                  itemBuilder: (context, index) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _widthColors[index].withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: _widthColors[index]),
-                          ),
-                          child: Text(
-                            _widthNames[index],
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: _widthColors[index],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildSingleResult(result, fontSize),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            // Visualization as Thumbnail
-            GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => Dialog(
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 3.0,
-                      child: ResultVisualization(result: tempSavedResult),
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ResultVisualization(result: tempSavedResult),
-              ),
-            ),
-            if (result.warning != null)
-              Container(
-                margin: const EdgeInsets.only(top: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        result.warning!,
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Semantics(
-                  label: 'Share Calculation',
-                  child: OutlinedButton(
-                    onPressed: widget.canExport
-                        ? () {}
-                        : null, // TODO: Implement share
-                    child: Text(
-                      'Share',
-                      style: TextStyle(fontSize: fontSize - 2),
-                    ),
-                  ),
-                ),
-                if (widget.user.isPro)
-                  Semantics(
-                    label: 'Save Calculation Result',
-                    child: ElevatedButton(
-                      onPressed: _lastCalculationData != null
-                          ? () => _promptSaveResult(
-                              _lastCalculationData!, 'horizontal')
-                          : null,
-                      child: const Text('Save Result'),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn();
-  }
-
-  void _promptSaveResult(Map<String, dynamic> calculationData, String type) {
-    final TextEditingController projectNameController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save Calculation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Would you like to save this calculation result?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: projectNameController,
-              decoration: const InputDecoration(
-                labelText: 'Project Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context), // Skip saving
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (projectNameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a project name'),
-                  ),
-                );
-                return;
-              }
-              final updatedCalculationData =
-                  Map<String, dynamic>.from(calculationData);
-              updatedCalculationData['projectName'] =
-                  projectNameController.text.trim();
-              await widget.saveResultCallback(updatedCalculationData, type);
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSingleResult(
-      HorizontalCalculationResult result, double fontSize) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 3,
-      children: [
-        _resultItem('Width', '${result.width} mm', fontSize),
-        _resultItem('New Width', '${result.newWidth} mm', fontSize),
-        if (result.lhOverhang != null)
-          _resultItem('LH Overhang', '${result.lhOverhang} mm', fontSize),
-        if (result.rhOverhang != null)
-          _resultItem('RH Overhang', '${result.rhOverhang} mm', fontSize),
-        if (result.cutTile != null)
-          _resultItem('Cut Tile', '${result.cutTile} mm', fontSize),
-        _resultItem('First Mark', '${result.firstMark} mm', fontSize),
-        if (result.secondMark != null)
-          _resultItem('Second Mark', '${result.secondMark} mm', fontSize),
-        _resultItem('Marks', result.marks, fontSize),
-        if (result.splitMarks != null)
-          _resultItem('Split Marks', result.splitMarks!, fontSize),
-      ],
-    );
-  }
-
-  Widget _resultItem(String label, String value, double fontSize) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 1,
-          child: Text(
-            '$label:',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 1,
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 18),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorMessage(String message, double fontSize) {
-    return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onErrorContainer,
-                fontSize: fontSize - 2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showTrialExpirationWarning(BuildContext context) {
     final remainingDays = widget.user.remainingTrialDays;
     showDialog(
@@ -897,87 +570,4 @@ class HorizontalCalculatorTabState
     });
     _updateParentInputs();
   }
-
-  Future<Map<String, dynamic>?> calculate() async {
-    debugPrint('Starting calculate in HorizontalCalculatorTab');
-    final calculatorState = ref.read(calculatorProvider);
-    debugPrint('Selected tile: ${calculatorState.selectedTile?.name}');
-    if (calculatorState.selectedTile == null) {
-      debugPrint('No tile selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a tile first')),
-      );
-      return null;
-    }
-
-    final List<double> widths = [];
-    final displayCount =
-        widget.canUseMultipleWidths ? _widthControllers.length : 1;
-
-    for (int i = 0; i < displayCount; i++) {
-      final widthText = _widthControllers[i].text.trim();
-      debugPrint('Width $i text: $widthText');
-      if (widthText.isEmpty) {
-        debugPrint('Empty width for width $i');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Please enter a width for ${widget.canUseMultipleWidths ? _widthNames[i] : 'the width'}',
-            ),
-          ),
-        );
-        return null;
-      }
-      final double? width = double.tryParse(widthText);
-      if (width == null) {
-        debugPrint('Invalid width value for width $i: $widthText');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Invalid width value for ${widget.canUseMultipleWidths ? _widthNames[i] : 'the width'}',
-            ),
-          ),
-        );
-        return null;
-      }
-      widths.add(width);
-    }
-
-    debugPrint('Widths: $widths');
-    final result =
-        await ref.read(calculatorProvider.notifier).calculateHorizontal(widths);
-    debugPrint('Result from calculateHorizontal in tab: $result');
-
-    // Prepare inputs to include in the saved result
-    final inputs = widths
-        .asMap()
-        .entries
-        .map((entry) => {
-              'label': _widthNames[entry.key],
-              'value': entry.value,
-            })
-        .toList();
-    setState(() {
-      _inputs = inputs; // Store inputs for display
-      _lastCalculationData = result; // Store for saving
-    });
-    _updateParentInputs();
-
-    return result;
-  }
-
-  // Getter for width names to pass to CalculatorScreen
-  List<String> get widthNames => _widthNames;
-
-  // Getter for inputs to pass to CalculatorScreen for saving
-  Map<String, dynamic> get inputs => {
-        'widths': _inputs,
-        'useDryVerge': _useDryVerge,
-        'abutmentSide': _abutmentSide,
-        'useLHTile': _useLHTile,
-        'crossBonded': _crossBonded,
-      };
-
-  // Getter for results key for auto-scrolling
-  GlobalKey get resultsKey => _resultsKey;
 }

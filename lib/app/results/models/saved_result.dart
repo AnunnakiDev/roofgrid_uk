@@ -119,8 +119,12 @@ enum CalculationType {
 
   @HiveField(1)
   horizontal,
+
+  @HiveField(2)
+  combined, // Added for combined calculations
 }
 
+@HiveType(typeId: 5)
 class DateTimeAdapter extends TypeAdapter<DateTime> {
   @override
   final int typeId = 5;

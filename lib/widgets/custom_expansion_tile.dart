@@ -68,6 +68,12 @@ class CustomExpansionTile extends StatelessWidget {
                 )
               : null,
           trailing: trailing,
+          onExpansionChanged: onExpansionChanged,
+          initiallyExpanded: initiallyExpanded,
+          iconColor: expandedIconColor ?? iconColor,
+          collapsedIconColor: iconColor,
+          backgroundColor: backgroundColor,
+          collapsedBackgroundColor: collapsedBackgroundColor,
           children: [
             Padding(
               padding: contentPadding ?? const EdgeInsets.all(16.0),
@@ -77,12 +83,6 @@ class CustomExpansionTile extends StatelessWidget {
               ),
             ),
           ],
-          onExpansionChanged: onExpansionChanged,
-          initiallyExpanded: initiallyExpanded,
-          iconColor: expandedIconColor ?? iconColor,
-          collapsedIconColor: iconColor,
-          backgroundColor: backgroundColor,
-          collapsedBackgroundColor: collapsedBackgroundColor,
         ),
       ),
     )

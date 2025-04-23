@@ -1,7 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:roofgrid_uk/app/calculator/services/horizontal_calculation_service.dart';
+import 'package:roofgrid_uk/app/calculator/services/vertical_calculation_service.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:roofgrid_uk/models/calculator/horizontal_calculation_input.dart';
+import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
+import 'package:roofgrid_uk/models/calculator/vertical_calculation_input.dart';
+import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 
 class CalculationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -12,6 +19,83 @@ class CalculationService {
     if (!_calculationsBox.isOpen) {
       Hive.openBox<Map>('calculationsBox');
     }
+  }
+
+  /// Calculates vertical batten gauge
+  Future<VerticalCalculationResult> calculateVertical({
+    required VerticalCalculationInput input,
+    required String materialType,
+    required double slateTileHeight,
+    required double maxGauge,
+    required double minGauge,
+  }) async {
+    debugPrint('CalculationService: Calculating vertical with input: $input');
+    return VerticalCalculationService.calculateVertical(
+      input: input,
+      materialType: materialType,
+      slateTileHeight: slateTileHeight,
+      maxGauge: maxGauge,
+      minGauge: minGauge,
+    );
+  }
+
+  /// Calculates horizontal tile spacing
+  Future<HorizontalCalculationResult> calculateHorizontal(
+      HorizontalCalculationInput input) async {
+    debugPrint('CalculationService: Calculating horizontal with input: $input');
+    return HorizontalCalculationService.calculateHorizontal(input);
+  }
+
+  /// Calculates both vertical and horizontal results
+  Future<Map<String, dynamic>> calculateCombined({
+    required List<double> rafterHeights,
+    required List<double> widths,
+    required String materialType,
+    required double slateTileHeight,
+    required double maxGauge,
+    required double minGauge,
+    required double tileCoverWidth,
+    required double minSpacing,
+    required double maxSpacing,
+    required double lhTileWidth,
+    required double gutterOverhang,
+    required String useDryRidge,
+    required String useDryVerge,
+    required String abutmentSide,
+    required String useLHTile,
+    required String crossBonded,
+  }) async {
+    debugPrint('CalculationService: Calculating combined results');
+    final verticalResult = await calculateVertical(
+      input: VerticalCalculationInput(
+        rafterHeights: rafterHeights,
+        gutterOverhang: gutterOverhang,
+        useDryRidge: useDryRidge,
+      ),
+      materialType: materialType,
+      slateTileHeight: slateTileHeight,
+      maxGauge: maxGauge,
+      minGauge: minGauge,
+    );
+
+    final horizontalResult = await calculateHorizontal(
+      HorizontalCalculationInput(
+        widths: widths,
+        tileCoverWidth: tileCoverWidth,
+        minSpacing: minSpacing,
+        maxSpacing: maxSpacing,
+        lhTileWidth: lhTileWidth,
+        useDryVerge: useDryVerge,
+        abutmentSide: abutmentSide,
+        useLHTile: useLHTile,
+        crossBonded: crossBonded,
+      ),
+    );
+
+    return {
+      'verticalResult': verticalResult.toJson(),
+      'horizontalResult': horizontalResult.toJson(),
+    };
   }
 
   /// Saves a calculation to Firestore and Hive
@@ -130,16 +214,14 @@ class CalculationService {
         .collection('calculations')
         .where('userId', isEqualTo: userId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => doc.data() as Map<String, dynamic>)
-            .toList());
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
   /// Fetches all calculations (for admin stats)
   Stream<List<Map<String, dynamic>>> getAllCalculations() {
-    return _firestore.collection('calculations').snapshots().map((snapshot) =>
-        snapshot.docs
-            .map((doc) => doc.data() as Map<String, dynamic>)
-            .toList());
+    return _firestore
+        .collection('calculations')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 }

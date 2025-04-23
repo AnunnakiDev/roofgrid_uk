@@ -1,140 +1,111 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/models/user_model.dart';
-import 'package:roofgrid_uk/models/tile_model.dart';
-import 'package:roofgrid_uk/screens/auth/login_screen.dart';
-import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
-import 'package:roofgrid_uk/screens/auth/register_screen.dart';
-import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
-import 'package:roofgrid_uk/screens/home_screen.dart';
-import 'package:roofgrid_uk/screens/splash_screen.dart';
 import 'package:roofgrid_uk/screens/admin/admin_dashboard_screen.dart';
 import 'package:roofgrid_uk/screens/admin/admin_stats_screen.dart';
-import 'package:roofgrid_uk/screens/admin/user_management_screen.dart';
 import 'package:roofgrid_uk/screens/admin/admin_tile_management_screen.dart';
+import 'package:roofgrid_uk/screens/admin/user_management_screen.dart';
+import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
+import 'package:roofgrid_uk/screens/auth/login_screen.dart';
+import 'package:roofgrid_uk/screens/auth/register_screen.dart';
+import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
+import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
+import 'package:roofgrid_uk/screens/home_screen.dart';
+import 'package:roofgrid_uk/screens/results/result_detail_screen.dart'; // Updated path
+import 'package:roofgrid_uk/screens/results/saved_results_screen.dart'; // Updated path
+import 'package:roofgrid_uk/screens/splash_screen.dart';
+import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
+import 'package:roofgrid_uk/screens/subscription/success_page.dart';
+import 'package:roofgrid_uk/screens/subscription_screen.dart';
+import 'package:roofgrid_uk/screens/support/contact_screen.dart';
 import 'package:roofgrid_uk/screens/support/faq_screen.dart';
 import 'package:roofgrid_uk/screens/support/legal_screen.dart';
-import 'package:roofgrid_uk/screens/support/contact_screen.dart';
-import 'package:roofgrid_uk/screens/subscription_screen.dart';
-import 'package:roofgrid_uk/screens/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/tile_management_screen.dart';
-import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
-import 'package:roofgrid_uk/screens/subscription/success_page.dart';
-import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
-import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:roofgrid_uk/widgets/result_visualization.dart'; // Updated path
 
-// Global key to access the navigator state
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
-
-final routerProvider = Provider<GoRouter>((ref) {
-  bool isRedirecting = false; // Guard against redirect loops
+final goRouterProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
-    initialLocation: '/loading',
-    redirect: (context, state) async {
-      if (isRedirecting) {
-        print("Redirect loop detected, aborting redirect");
-        return null;
+    initialLocation: '/splash',
+    redirect: (context, state) {
+      final isAuthenticated = authState.isAuthenticated;
+      final isSplash = state.matchedLocation == '/splash';
+      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+
+      print(
+          "Router redirect: matchedLocation=${state.matchedLocation}, authState.isAuthenticated=$isAuthenticated");
+
+      if (isSplash) {
+        return isAuthenticated ? '/home' : '/auth/login';
       }
-      isRedirecting = true;
 
-      try {
-        final isGoingToAuth = state.uri.path.startsWith('/auth');
-        final isLoading = state.uri.path == '/loading';
-        final isSplash = state.uri.path == '/splash';
-        final isSupport = state.uri.path.startsWith('/support');
-        final isSubscriptionRedirect =
-            state.uri.path.startsWith('/subscription') &&
-                state.uri.path != '/subscription';
-
-        // Use ref.read instead of ref.watch to avoid rebuilding the router on auth state changes
-        final authState = ref.read(authProvider);
-        print(
-            "Router redirect: matchedLocation=${state.uri.path}, authState.isAuthenticated=${authState.isAuthenticated}");
-
-        if (isLoading) {
-          print("Staying on loading screen");
-          return null;
-        }
-
-        if (isSplash) {
-          print("Redirecting from splash to loading");
-          return '/loading';
-        }
-
-        if (isSupport) {
-          print("Allowing access to support page: ${state.uri.path}");
-          return null; // Allow access to support pages for all users
-        }
-
-        if (isSubscriptionRedirect) {
-          print(
-              "Allowing access to subscription redirect pages: ${state.uri.path}");
-          return null; // Allow access to /subscription/success and /subscription/cancel
-        }
-
-        // Use authProvider state for redirect decisions
-        final isLoggedIn = authState.isAuthenticated;
-
-        if (!isLoggedIn && !isGoingToAuth) {
-          print("Redirecting to /auth/login because user is not logged in");
-          return '/auth/login';
-        }
-
-        if (isLoggedIn && isGoingToAuth) {
-          print("Redirecting to /home because user is logged in");
-          return '/home';
-        }
-
-        try {
-          await FirebaseAnalytics.instance.logScreenView(
-            screenName: state.uri.path,
-          );
-        } catch (e) {
-          print("Error logging screen view: $e");
-        }
-
-        return null;
-      } finally {
-        isRedirecting = false;
+      if (!isAuthenticated && !isAuthRoute) {
+        return '/auth/login';
       }
+
+      if (isAuthenticated && isAuthRoute) {
+        return '/home';
+      }
+
+      return null;
     },
     routes: [
       GoRoute(
-        path: '/loading',
-        builder: (context, state) {
-          // Use ref here since ProviderScope is available
-          final ref = ProviderScope.containerOf(context);
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            try {
-              final user = ref.read(currentUserProvider).value;
-              if (user != null && user.role == UserRole.admin) {
-                print("Redirecting to /admin for admin user");
-                GoRouter.of(context).go('/admin');
-              } else {
-                print("Redirecting to /home for non-admin user");
-                GoRouter.of(context).go('/home');
-              }
-            } catch (e) {
-              print("Error redirecting from loading: $e");
-              GoRouter.of(context).go('/home');
-            }
-          });
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        },
-      ),
-      GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/home',
+        builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/calculator',
+        builder: (context, state) => CalculatorScreen(
+          savedResult: state.extra as SavedResult?,
+        ),
+        routes: [
+          GoRoute(
+            path: 'tile-select',
+            builder: (context, state) => const TileSelectorScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/results',
+        builder: (context, state) => const SavedResultsScreen(),
+      ),
+      GoRoute(
+        path: '/result-detail',
+        builder: (context, state) => ResultDetailScreen(
+          result: state.extra as SavedResult,
+        ),
+      ),
+      GoRoute(
+        path: '/result-visualization',
+        builder: (context, state) => ResultVisualization(
+          result: state.extra as SavedResult,
+        ),
+      ),
+      GoRoute(
+        path: '/tiles',
+        builder: (context, state) => const TileManagementScreen(),
+      ),
+      GoRoute(
+        path: '/subscription',
+        builder: (context, state) => const SubscriptionScreen(),
+        routes: [
+          GoRoute(
+            path: 'success',
+            builder: (context, state) => const SuccessPage(),
+          ),
+          GoRoute(
+            path: 'cancel',
+            builder: (context, state) => const CancelPage(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/auth/login',
@@ -148,163 +119,39 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-      ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => child,
-        routes: [
-          GoRoute(
-            path: '/home',
-            builder: (context, state) => const HomeScreen(),
-          ),
-          GoRoute(
-            path: '/calculator',
-            builder: (context, state) => CalculatorScreen(
-              savedResult: state.extra as SavedResult?,
-            ),
-            routes: [
-              GoRoute(
-                path: 'tile-select',
-                builder: (context, state) => const TileSelectorScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'add-tile',
-                    builder: (context, state) {
-                      final extra = state.extra as Map<String, dynamic>?;
-                      return AddTileWidget(
-                        userRole: extra?['userRole'] as UserRole,
-                        userId: extra?['userId'] as String,
-                        onTileCreated: extra?['onTileCreated'] as void Function(
-                            TileModel)?,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          GoRoute(
-            path: '/calculator/main',
-            builder: (context, state) => CalculatorScreen(
-              savedResult: state.extra as SavedResult?,
-            ),
-          ),
-          GoRoute(
-            path: '/admin',
-            builder: (context, state) {
-              final ref = ProviderScope.containerOf(context);
-              final user = ref.read(currentUserProvider).value;
-              if (user == null || user.role != UserRole.admin) {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  await FirebaseAnalytics.instance.logEvent(
-                    name: 'access_denied',
-                    parameters: {
-                      'route': state.uri.path,
-                      'role': user?.role.toString() ?? 'null'
-                    },
-                  );
-                  GoRouter.of(context).go('/home');
-                });
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return const AdminDashboardScreen();
-            },
-            routes: [
-              GoRoute(
-                path: 'users',
-                builder: (context, state) => const UserManagementScreen(),
-              ),
-              GoRoute(
-                path: 'tiles',
-                builder: (context, state) => const AdminTileManagementScreen(),
-              ),
-              GoRoute(
-                path: 'stats',
-                builder: (context, state) => const AdminStatsScreen(),
-              ),
-              GoRoute(
-                path: 'add-tile',
-                builder: (context, state) {
-                  final extra = state.extra as Map<String, dynamic>?;
-                  return AddTileWidget(
-                    userRole: extra?['userRole'] as UserRole,
-                    userId: extra?['userId'] as String,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'edit-tile/:tileId',
-                builder: (context, state) {
-                  final extra = state.extra as Map<String, dynamic>?;
-                  return AddTileWidget(
-                    userRole: extra?['userRole'] as UserRole,
-                    userId: extra?['userId'] as String,
-                    tile: extra?['tile'] as TileModel,
-                  );
-                },
-              ),
-            ],
-          ),
-          GoRoute(
-            path: '/support/faq',
-            builder: (context, state) => const FaqScreen(),
-          ),
-          GoRoute(
-            path: '/support/legal',
-            builder: (context, state) => const LegalScreen(),
-          ),
-          GoRoute(
-            path: '/support/contact',
-            builder: (context, state) => const ContactScreen(),
-          ),
-          GoRoute(
-            path: '/subscription',
-            builder: (context, state) => const SubscriptionScreen(),
-          ),
-          GoRoute(
-            path: '/subscription/success',
-            builder: (context, state) => const SuccessPage(),
-          ),
-          GoRoute(
-            path: '/subscription/cancel',
-            builder: (context, state) => const CancelPage(),
-          ),
-          GoRoute(
-            path: '/results',
-            builder: (context, state) => const SavedResultsScreen(),
-          ),
-          GoRoute(
-            path: '/tiles',
-            builder: (context, state) => const TileManagementScreen(),
-            routes: [
-              GoRoute(
-                path: 'add-tile',
-                builder: (context, state) {
-                  final extra = state.extra as Map<String, dynamic>?;
-                  return AddTileWidget(
-                    userRole: extra?['userRole'] as UserRole,
-                    userId: extra?['userId'] as String,
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
+      GoRoute(
+        path: '/support/contact',
+        builder: (context, state) => const ContactScreen(),
+      ),
+      GoRoute(
+        path: '/support/faq',
+        builder: (context, state) => const FaqScreen(),
+      ),
+      GoRoute(
+        path: '/support/legal',
+        builder: (context, state) => const LegalScreen(),
+      ),
+      GoRoute(
+        path: '/admin/dashboard',
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/admin/stats',
+        builder: (context, state) => const AdminStatsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/tiles',
+        builder: (context, state) => const AdminTileManagementScreen(),
+      ),
+      GoRoute(
+        path: '/admin/users',
+        builder: (context, state) => const UserManagementScreen(),
       ),
     ],
-    errorBuilder: (context, state) {
-      print("Router error: ${state.error}");
-      return Scaffold(
-        body: Center(
-          child: Text(
-            'Route not found: ${state.uri.path}',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-          ),
-        ),
-      );
-    },
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(
+        child: Text('Error: ${state.error}'),
+      ),
+    ),
   );
 });

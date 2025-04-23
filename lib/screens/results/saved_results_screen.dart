@@ -5,7 +5,6 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
-import 'package:roofgrid_uk/app/results/services/results_service.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -287,6 +286,19 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
   }
 
   Widget _buildResultCard(SavedResult result) {
+    String typeText;
+    switch (result.type) {
+      case CalculationType.vertical:
+        typeText = 'Vertical';
+        break;
+      case CalculationType.horizontal:
+        typeText = 'Horizontal';
+        break;
+      case CalculationType.combined:
+        typeText = 'Combined (Vert + Horiz)';
+        break;
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
@@ -300,7 +312,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          'Type: ${result.type == CalculationType.vertical ? 'Vertical' : 'Horizontal'} | Saved: ${_formatDateTime(result.createdAt)}',
+          'Type: $typeText | Saved: ${_formatDateTime(result.createdAt)}',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

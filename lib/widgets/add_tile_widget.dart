@@ -384,8 +384,9 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Height is required';
-                        if (double.tryParse(value!) == null)
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),
@@ -401,8 +402,9 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Width is required';
-                        if (double.tryParse(value!) == null)
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),
@@ -421,10 +423,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value?.isEmpty ?? true)
+                        if (value?.isEmpty ?? true) {
                           return 'Min gauge is required';
-                        if (double.tryParse(value!) == null)
+                        }
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),
@@ -439,10 +443,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value?.isEmpty ?? true)
+                        if (value?.isEmpty ?? true) {
                           return 'Max gauge is required';
-                        if (double.tryParse(value!) == null)
+                        }
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),
@@ -461,10 +467,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value?.isEmpty ?? true)
+                        if (value?.isEmpty ?? true) {
                           return 'Min spacing is required';
-                        if (double.tryParse(value!) == null)
+                        }
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),
@@ -479,10 +487,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (value?.isEmpty ?? true)
+                        if (value?.isEmpty ?? true) {
                           return 'Max spacing is required';
-                        if (double.tryParse(value!) == null)
+                        }
+                        if (double.tryParse(value!) == null) {
                           return 'Invalid number';
+                        }
                         return null;
                       },
                     ),

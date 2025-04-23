@@ -1,20 +1,20 @@
-// lib/app/results/result_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
-import 'package:roofgrid_uk/screens/result_visualization.dart';
+import 'package:roofgrid_uk/widgets/result_visualization.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:screenshot/screenshot.dart';
-import 'package:roofgrid_uk/app/results/services/results_service.dart';
 
 class ResultDetailScreen extends ConsumerStatefulWidget {
-  const ResultDetailScreen({super.key});
+  final SavedResult result; // Receive result via constructor
+
+  const ResultDetailScreen({super.key, required this.result});
 
   @override
   ConsumerState<ResultDetailScreen> createState() => _ResultDetailScreenState();
@@ -26,15 +26,7 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final result = ref.watch(selectedResultProvider);
-
-    if (result == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Result Details')),
-        drawer: const MainDrawer(),
-        body: const Center(child: Text('No result selected')),
-      );
-    }
+    final result = widget.result; // Use result from constructor
 
     final isVertical = result.type == CalculationType.vertical;
     final dateFormat = DateFormat('dd MMMM yyyy, HH:mm');
@@ -415,68 +407,80 @@ Tile: ${result.tile['name'] ?? 'N/A'}
     List<Widget> inputRows = [];
 
     // Common settings
-    if (inputs['gutterOverhang'] != null) {
-      inputRows
-          .add(_infoRow('Gutter Overhang', '${inputs['gutterOverhang']} mm'));
-    }
+    if (isVertical) {
+      if (inputs['vertical_inputs'] != null) {
+        final verticalInputs =
+            inputs['vertical_inputs'] as Map<String, dynamic>;
+        if (verticalInputs['gutterOverhang'] != null) {
+          inputRows.add(_infoRow(
+              'Gutter Overhang', '${verticalInputs['gutterOverhang']} mm'));
+        }
 
-    if (inputs['useDryRidge'] != null) {
-      inputRows.add(
-          _infoRow('Dry Ridge', inputs['useDryRidge'] == 'YES' ? 'Yes' : 'No'));
-    }
+        if (verticalInputs['useDryRidge'] != null) {
+          inputRows.add(_infoRow('Dry Ridge',
+              verticalInputs['useDryRidge'] == 'YES' ? 'Yes' : 'No'));
+        }
 
-    // Vertical specific
-    if (isVertical && inputs['rafterHeights'] != null) {
-      final rafters = inputs['rafterHeights'] as List<dynamic>;
-      for (int i = 0; i < rafters.length; i++) {
-        final rafter = rafters[i];
-        inputRows.add(_buildEditableInfoRow(
-          context,
-          label: rafter['label'] ?? 'Rafter ${i + 1}',
-          value: '${rafter['value']} mm',
-          onEdit: () => _showEditLabelDialog(
-            context,
-            'Rename Rafter',
-            rafter['label'] ?? 'Rafter ${i + 1}',
-            (newLabel) =>
-                _updateInputLabel(result, 'rafterHeights', i, newLabel),
-          ),
-        ));
-      }
-    }
-
-    // Horizontal specific
-    if (!isVertical) {
-      if (inputs['widths'] != null) {
-        final widths = inputs['widths'] as List<dynamic>;
-        for (int i = 0; i < widths.length; i++) {
-          final width = widths[i];
-          inputRows.add(_buildEditableInfoRow(
-            context,
-            label: width['label'] ?? 'Width ${i + 1}',
-            value: '${width['value']} mm',
-            onEdit: () => _showEditLabelDialog(
+        if (verticalInputs['rafterHeights'] != null) {
+          final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
+          for (int i = 0; i < rafters.length; i++) {
+            final rafter = rafters[i];
+            inputRows.add(_buildEditableInfoRow(
               context,
-              'Rename Width',
-              width['label'] ?? 'Width ${i + 1}',
-              (newLabel) => _updateInputLabel(result, 'widths', i, newLabel),
-            ),
-          ));
+              label: rafter['label'] ?? 'Rafter ${i + 1}',
+              value: '${rafter['value']} mm',
+              onEdit: () => _showEditLabelDialog(
+                context,
+                'Rename Rafter',
+                rafter['label'] ?? 'Rafter ${i + 1}',
+                (newLabel) =>
+                    _updateInputLabel(result, 'rafterHeights', i, newLabel),
+              ),
+            ));
+          }
         }
       }
+    } else {
+      if (inputs['horizontal_inputs'] != null) {
+        final horizontalInputs =
+            inputs['horizontal_inputs'] as Map<String, dynamic>;
+        if (horizontalInputs['widths'] != null) {
+          final widths = horizontalInputs['widths'] as List<dynamic>;
+          for (int i = 0; i < widths.length; i++) {
+            final width = widths[i];
+            inputRows.add(_buildEditableInfoRow(
+              context,
+              label: width['label'] ?? 'Width ${i + 1}',
+              value: '${width['value']} mm',
+              onEdit: () => _showEditLabelDialog(
+                context,
+                'Rename Width',
+                width['label'] ?? 'Width ${i + 1}',
+                (newLabel) => _updateInputLabel(result, 'widths', i, newLabel),
+              ),
+            ));
+          }
+        }
 
-      if (inputs['useDryVerge'] != null) {
-        inputRows.add(_infoRow(
-            'Dry Verge', inputs['useDryVerge'] == 'YES' ? 'Yes' : 'No'));
-      }
+        if (horizontalInputs['useDryVerge'] != null) {
+          inputRows.add(_infoRow('Dry Verge',
+              horizontalInputs['useDryVerge'] == 'YES' ? 'Yes' : 'No'));
+        }
 
-      if (inputs['abutmentSide'] != null) {
-        inputRows.add(_infoRow('Abutment Side', inputs['abutmentSide']));
-      }
+        if (horizontalInputs['abutmentSide'] != null) {
+          inputRows
+              .add(_infoRow('Abutment Side', horizontalInputs['abutmentSide']));
+        }
 
-      if (inputs['useLHTile'] != null) {
-        inputRows.add(_infoRow(
-            'Left Hand Tile', inputs['useLHTile'] == 'YES' ? 'Yes' : 'No'));
+        if (horizontalInputs['useLHTile'] != null) {
+          inputRows.add(_infoRow('Left Hand Tile',
+              horizontalInputs['useLHTile'] == 'YES' ? 'Yes' : 'No'));
+        }
+
+        if (horizontalInputs['crossBonded'] != null) {
+          inputRows.add(_infoRow('Cross Bonded',
+              horizontalInputs['crossBonded'] == 'YES' ? 'Yes' : 'No'));
+        }
       }
     }
 
