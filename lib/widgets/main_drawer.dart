@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/models/user_model.dart';
 
 class MainDrawer extends ConsumerWidget {
   const MainDrawer({super.key});
@@ -34,7 +35,7 @@ class MainDrawer extends ConsumerWidget {
                   child: Image.asset(
                     'assets/images/logo/RoofGridUk-Logo-hor-250.png',
                     fit: BoxFit.contain,
-                    height: 40, // Adjusted for better fit on smaller screens
+                    height: 40,
                     width: double.infinity,
                   ),
                 ),
@@ -78,7 +79,11 @@ class MainDrawer extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            user.isPro ? 'Pro' : 'Free',
+                            user.isPro
+                                ? 'Pro'
+                                : user.role == UserRole.admin
+                                    ? 'Admin'
+                                    : 'Free',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
@@ -167,13 +172,50 @@ class MainDrawer extends ConsumerWidget {
               ),
             ],
           ),
-          ListTile(
-            leading: const Icon(Icons.admin_panel_settings),
-            title: const Text('Admin Dashboard'),
-            onTap: () {
-              context.go('/admin');
-              Navigator.pop(context);
+          userAsync.when(
+            data: (user) {
+              if (user == null || user.role != UserRole.admin) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.admin_panel_settings),
+                    title: const Text('Admin Dashboard'),
+                    onTap: () {
+                      context.go('/admin');
+                      Navigator.pop(context);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.build),
+                    title: const Text('Initialize Default Tiles (Admin)'),
+                    onTap: () async {
+                      try {
+                        await ref
+                            .read(authProvider.notifier)
+                            .initializeDefaultTilesForAdmin();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Default tiles initialized')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error initializing tiles: $e'),
+                            backgroundColor:
+                                Theme.of(context).colorScheme.error,
+                          ),
+                        );
+                      }
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
+              );
             },
+            loading: () => const SizedBox.shrink(),
+            error: (error, stackTrace) => const SizedBox.shrink(),
           ),
           ListTile(
             leading: const Icon(Icons.logout),

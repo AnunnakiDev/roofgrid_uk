@@ -1,517 +1,462 @@
 import 'package:flutter/material.dart';
+import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
+import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'dart:math';
 
-class ResultVisualization extends StatefulWidget {
-  final SavedResult result;
+class ResultVisualization extends StatelessWidget {
+  final VerticalCalculationResult? verticalResult;
+  final HorizontalCalculationResult? horizontalResult;
+  final SavedResult? savedResult;
+  final double? gutterOverhang;
 
-  const ResultVisualization({super.key, required this.result});
-
-  @override
-  State<ResultVisualization> createState() => _ResultVisualizationState();
-}
-
-class _ResultVisualizationState extends State<ResultVisualization> {
-  double _scale = 1.0;
-  Offset _offset = Offset.zero;
+  const ResultVisualization({
+    super.key,
+    this.verticalResult,
+    this.horizontalResult,
+    this.savedResult,
+    this.gutterOverhang,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onScaleUpdate: (details) {
-        setState(() {
-          _scale = (_scale * details.scale).clamp(0.5, 3.0);
-          _offset += details.focalPointDelta;
-        });
-      },
-      child: ClipRect(
-        child: CustomPaint(
-          painter: RoofResultPainter(widget.result, _scale, _offset),
-          child: Container(),
+    // Extract vertical and horizontal results from savedResult if provided
+    VerticalCalculationResult? effectiveVerticalResult = verticalResult;
+    HorizontalCalculationResult? effectiveHorizontalResult = horizontalResult;
+
+    if (savedResult != null) {
+      if (savedResult!.type == CalculationType.vertical) {
+        effectiveVerticalResult =
+            VerticalCalculationResult.fromJson(savedResult!.outputs);
+      } else if (savedResult!.type == CalculationType.horizontal) {
+        effectiveHorizontalResult =
+            HorizontalCalculationResult.fromJson(savedResult!.outputs);
+      } else if (savedResult!.type == CalculationType.combined) {
+        effectiveVerticalResult = VerticalCalculationResult.fromJson(
+            savedResult!.outputs['vertical']);
+        effectiveHorizontalResult = HorizontalCalculationResult.fromJson(
+            savedResult!.outputs['horizontal']);
+      }
+    }
+
+    if (effectiveVerticalResult == null && effectiveHorizontalResult == null) {
+      return const Center(child: Text('No results to visualize'));
+    }
+
+    return Container(
+      color: Colors.white, // White background for clarity
+      padding: const EdgeInsets.all(16.0),
+      child: CustomPaint(
+        painter: RoofPainter(
+          verticalResult: effectiveVerticalResult,
+          horizontalResult: effectiveHorizontalResult,
+          gutterOverhang: gutterOverhang,
+          primaryColor: Theme.of(context).colorScheme.primary,
+          textStyle:
+              Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 14),
         ),
+        child: Container(),
       ),
     );
   }
 }
 
-class RoofResultPainter extends CustomPainter {
-  final SavedResult result;
-  final double scale;
-  final Offset offset;
+class RoofPainter extends CustomPainter {
+  final VerticalCalculationResult? verticalResult;
+  final HorizontalCalculationResult? horizontalResult;
+  final double? gutterOverhang;
+  final Color primaryColor;
+  final TextStyle textStyle;
 
-  RoofResultPainter(this.result, this.scale, this.offset);
+  RoofPainter({
+    required this.verticalResult,
+    required this.horizontalResult,
+    this.gutterOverhang,
+    required this.primaryColor,
+    required this.textStyle,
+  });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.translate(offset.dx, offset.dy);
-    canvas.scale(scale);
-
-    // Define colors
-    final battensColor = Colors.brown.shade700;
-    final measurementsColor = Colors.blue.shade700;
-    final fasciaColor = Colors.green.shade700;
-    final ridgeColor = Colors.red.shade700;
-
-    // Define paints
-    final rafterPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final widthLinePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final battenPaint = Paint()
-      ..color = battensColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    final markPaint = Paint()
-      ..color = battensColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    final measurementPaint = Paint()
-      ..color = measurementsColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-
-    final fasciaPaint = Paint()
-      ..color = fasciaColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final ridgePaint = Paint()
-      ..color = ridgeColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    // Define text styles
-    final textStyle = TextStyle(
-      color: Colors.black87,
-      fontSize: 10 / scale,
-    );
-
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-    );
-
-    // Get data from result
-    final inputs = result.inputs;
-    final outputs = result.outputs;
-
-    // Extract rafters and widths
-    final rafterInputs =
-        (inputs['vertical_inputs']?['rafterHeights'] as List<dynamic>?) ?? [];
-    final widthInputs =
-        (inputs['horizontal_inputs']?['widths'] as List<dynamic>?) ?? [];
-
-    final rafterColors = (inputs['rafterColors'] as List<dynamic>? ?? [])
-        .asMap()
-        .map((index, colorStr) => MapEntry(
-              index,
-              Color(int.parse(colorStr)),
-            ));
-
-    final widthColors = (inputs['widthColors'] as List<dynamic>? ?? [])
-        .asMap()
-        .map((index, colorStr) => MapEntry(
-              index,
-              Color(int.parse(colorStr)),
-            ));
-
-    // If no rafters, use a default single rafter
-    final rafters = rafterInputs.isEmpty
-        ? [
-            {'label': 'Rafter 1', 'value': 5000.0},
-            {'label': 'Rafter 1', 'value': 5000.0},
-          ]
-        : rafterInputs.length == 1
-            ? [
-                rafterInputs[0],
-                rafterInputs[0] as Map<String, dynamic>,
-              ]
-            : rafterInputs;
-
-    // If no widths, use a default single width
-    final widths = widthInputs.isEmpty
-        ? [
-            {'label': 'Width 1', 'value': 4000.0},
-            {'label': 'Width 1', 'value': 4000.0},
-          ]
-        : widthInputs.length == 1
-            ? [
-                widthInputs[0],
-                widthInputs[0] as Map<String, dynamic>,
-              ]
-            : widthInputs;
-
-    // Update colors for duplicated inputs
-    final updatedRafterColors = rafters.asMap().map((index, _) => MapEntry(
-          index,
-          index < rafterColors.length
-              ? rafterColors[index] ?? Colors.grey.shade800
-              : rafterColors[0] ?? Colors.grey.shade800,
-        ));
-
-    final updatedWidthColors = widths.asMap().map((index, _) => MapEntry(
-          index,
-          index < widthColors.length
-              ? widthColors[index] ?? Colors.grey.shade800
-              : widthColors[0] ?? Colors.grey.shade800,
-        ));
-
-    // Calculate dimensions
-    final maxRafterHeight = rafters
-        .map((r) =>
-            (r['value'] as num) +
-            (inputs['vertical_inputs']?['gutterOverhang'] ?? 0.0))
-        .reduce((a, b) => a > b ? a : b);
-    final maxWidth =
-        widths.map((w) => (w['value'] as num)).reduce((a, b) => a > b ? a : b);
-
-    // Calculate scale factors to fit in view
-    final scaleFactorX = size.width / maxWidth * 0.9;
-    final scaleFactorY = size.height / maxRafterHeight * 0.9;
-    final scaleFactor =
-        scaleFactorX < scaleFactorY ? scaleFactorX : scaleFactorY;
-
-    final startX = 20.0;
-    final startY = 20.0;
-
-    // Draw widths (horizontal lines, left to right)
-    for (int i = 0; i < widths.length; i++) {
-      final width = widths[i]['value'] as num;
-      final widthColor = updatedWidthColors[i] ?? Colors.grey.shade800;
-      final y =
-          startY + i * (maxRafterHeight * scaleFactor) / (widths.length - 1);
-
-      // Draw width line
-      canvas.drawLine(
-        Offset(startX, y),
-        Offset(startX + width * scaleFactor, y),
-        widthLinePaint..color = widthColor,
-      );
-
-      // Label width
-      textPainter.text = TextSpan(
-        text: '${widths[i]['label']}: ${width}mm',
-        style: textStyle.copyWith(color: widthColor),
-      );
-      textPainter.layout();
-      textPainter.paint(
-          canvas, Offset(startX + width * scaleFactor + 5, y - 5));
-
-      // Label fascia and ridge
-      if (i == 0) {
-        // Fascia (first width)
-        canvas.drawLine(
-          Offset(startX - 5, y),
-          Offset(startX + width * scaleFactor + 5, y),
-          fasciaPaint,
-        );
-        textPainter.text = const TextSpan(
-          text: 'Fascia',
-          style: TextStyle(color: Colors.green, fontSize: 10),
-        );
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(startX - 5, y - 15));
-      }
-      if (i == widths.length - 1) {
-        // Ridge (last width)
-        canvas.drawLine(
-          Offset(startX - 5, y),
-          Offset(startX + width * scaleFactor + 5, y),
-          ridgePaint,
-        );
-        textPainter.text = const TextSpan(
-          text: 'Ridge',
-          style: TextStyle(color: Colors.red, fontSize: 10),
-        );
-        textPainter.layout();
-        textPainter.paint(
-            canvas, Offset(startX + width * scaleFactor + 5, y + 10));
-      }
+  // Helper method to parse gauge or marks strings (e.g., "30 @ 190" -> 190.0)
+  double parseMeasurement(String? measurement) {
+    if (measurement == null) return 0.0;
+    // Split the string by "@" and take the part after it
+    final parts = measurement.split('@');
+    if (parts.length < 2) {
+      // Try parsing the whole string as a fallback
+      return double.tryParse(measurement) ?? 0.0;
     }
-
-    // Draw rafters (vertical lines, bottom to top)
-    for (int i = 0; i < rafters.length; i++) {
-      final rafterHeight = rafters[i]['value'] as num;
-      final gutterOverhang =
-          inputs['vertical_inputs']?['gutterOverhang'] ?? 0.0;
-      final totalHeight = rafterHeight + gutterOverhang;
-      final rafterColor = updatedRafterColors[i] ?? Colors.grey.shade800;
-      final x = startX + i * (maxWidth * scaleFactor) / (rafters.length - 1);
-
-      // Draw rafter line
-      canvas.drawLine(
-        Offset(x, startY),
-        Offset(x, startY + totalHeight * scaleFactor),
-        rafterPaint..color = rafterColor,
-      );
-
-      // Label rafter
-      textPainter.text = TextSpan(
-        text: '${rafters[i]['label']}: ${rafterHeight}mm',
-        style: textStyle.copyWith(color: rafterColor),
-      );
-      textPainter.layout();
-      textPainter.paint(
-          canvas,
-          Offset(x - textPainter.width / 2,
-              startY + totalHeight * scaleFactor + 15));
-
-      // Draw gutter overhang if present
-      if (gutterOverhang > 0) {
-        final fasciaY = startY + rafterHeight * scaleFactor;
-        final overhangY = startY + totalHeight * scaleFactor;
-        canvas.drawLine(
-          Offset(x - 5, fasciaY),
-          Offset(x + 5, fasciaY),
-          measurementPaint,
-        );
-        canvas.drawLine(
-          Offset(x - 5, overhangY),
-          Offset(x + 5, overhangY),
-          measurementPaint,
-        );
-        textPainter.text = TextSpan(
-          text: 'Gutter: ${gutterOverhang}mm',
-          style: textStyle,
-        );
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(x + 10, (fasciaY + overhangY) / 2));
-      }
-    }
-
-    // Draw gauges (horizontal lines along rafters)
-    if (result.type == CalculationType.vertical) {
-      final firstBatten = outputs['firstBatten'];
-      final totalCourses = outputs['totalCourses'];
-      final gauge = outputs['gauge'];
-      final ridgeOffset = outputs['ridgeOffset'];
-      final eaveBatten = outputs['eaveBatten'];
-
-      // Draw eave batten if present
-      if (eaveBatten != null) {
-        for (int i = 0; i < rafters.length; i++) {
-          final rafterHeight = rafters[i]['value'] as num;
-          final x =
-              startX + i * (maxWidth * scaleFactor) / (rafters.length - 1);
-          final y = startY + (rafterHeight - (eaveBatten as num)) * scaleFactor;
-          canvas.drawLine(
-            Offset(x - 5, y),
-            Offset(x + 5, y),
-            battenPaint,
-          );
-        }
-        // Label (only once)
-        textPainter.text = TextSpan(
-          text: 'Eaves: ${eaveBatten}mm',
-          style: textStyle,
-        );
-        textPainter.layout();
-        textPainter.paint(
-            canvas,
-            Offset(
-                startX + maxWidth * scaleFactor + 10,
-                startY +
-                    ((rafters[0]['value'] as num) - (eaveBatten as num)) *
-                        scaleFactor));
-      }
-
-      // Draw first batten
-      for (int i = 0; i < rafters.length; i++) {
-        final rafterHeight = rafters[i]['value'] as num;
-        final x = startX + i * (maxWidth * scaleFactor) / (rafters.length - 1);
-        final y = startY + (rafterHeight - (firstBatten as num)) * scaleFactor;
-        canvas.drawLine(
-          Offset(x - 5, y),
-          Offset(x + 5, y),
-          battenPaint,
-        );
-      }
-      // Label (only once)
-      textPainter.text = TextSpan(
-        text: 'First: ${firstBatten}mm',
-        style: textStyle,
-      );
-      textPainter.layout();
-      textPainter.paint(
-          canvas,
-          Offset(
-              startX + maxWidth * scaleFactor + 10,
-              startY +
-                  ((rafters[0]['value'] as num) - (firstBatten as num)) *
-                      scaleFactor));
-
-      // Extract gauge information
-      String gaugeText = gauge;
-      int regularBattens = 0;
-      int gaugeDistance = 0;
-
-      final gaugeParts = gaugeText.split('@');
-      if (gaugeParts.length == 2) {
-        regularBattens = int.tryParse(gaugeParts[0].trim()) ?? 0;
-        gaugeDistance = int.tryParse(gaugeParts[1].trim()) ?? 0;
-      }
-
-      // Draw regular battens
-      for (int j = 1; j <= regularBattens; j++) {
-        final y = startY +
-            ((rafters[0]['value'] as num) - (firstBatten) - gaugeDistance * j) *
-                scaleFactor;
-        canvas.drawLine(
-          Offset(startX, y),
-          Offset(startX + maxWidth * scaleFactor, y),
-          battenPaint,
-        );
-
-        // Label only some battens to avoid clutter
-        if (j == 1 || j == regularBattens || j % 5 == 0) {
-          textPainter.text = TextSpan(
-            text: 'Batten ${j + 1}',
-            style: textStyle,
-          );
-          textPainter.layout();
-          textPainter.paint(
-              canvas, Offset(startX + maxWidth * scaleFactor + 10, y));
-        }
-      }
-
-      // Label ridge offset
-      textPainter.text = TextSpan(
-        text: 'Ridge Offset: ${ridgeOffset}mm',
-        style: textStyle,
-      );
-      textPainter.layout();
-      textPainter.paint(
-          canvas, Offset(startX + maxWidth * scaleFactor + 10, startY));
-    }
-
-    // Draw marks (vertical lines along widths)
-    if (result.type == CalculationType.horizontal) {
-      final solution = outputs['solution'];
-      final marks = outputs['marks'];
-      final firstMark = outputs['firstMark'];
-      final secondMark = outputs['secondMark'];
-      final actualSpacing = outputs['actualSpacing'] ?? 0;
-      final lhOverhang = outputs['lhOverhang'];
-      final rhOverhang = outputs['rhOverhang'];
-
-      // Draw LH overhang if present
-      if (lhOverhang != null) {
-        for (int i = 0; i < widths.length; i++) {
-          final y = startY +
-              i * (maxRafterHeight * scaleFactor) / (widths.length - 1);
-          final x = startX;
-          canvas.drawLine(
-            Offset(x - 5, y),
-            Offset(x + 5, y),
-            measurementPaint,
-          );
-          final xOverhang = startX + (lhOverhang as num) * scaleFactor;
-          canvas.drawLine(
-            Offset(xOverhang - 5, y),
-            Offset(xOverhang + 5, y),
-            measurementPaint,
-          );
-          textPainter.text = TextSpan(
-            text: 'LH: ${lhOverhang}mm',
-            style: textStyle,
-          );
-          textPainter.layout();
-          textPainter.paint(canvas,
-              Offset((x + xOverhang) / 2 - textPainter.width / 2, y + 15));
-        }
-      }
-
-      // Draw RH overhang if present
-      if (rhOverhang != null) {
-        for (int i = 0; i < widths.length; i++) {
-          final width = widths[i]['value'] as num;
-          final y = startY +
-              i * (maxRafterHeight * scaleFactor) / (widths.length - 1);
-          final xEnd = startX + width * scaleFactor;
-          canvas.drawLine(
-            Offset(xEnd - 5, y),
-            Offset(xEnd + 5, y),
-            measurementPaint,
-          );
-          final xOverhang =
-              startX + (width - (rhOverhang as num)) * scaleFactor;
-          canvas.drawLine(
-            Offset(xOverhang - 5, y),
-            Offset(xOverhang + 5, y),
-            measurementPaint,
-          );
-          textPainter.text = TextSpan(
-            text: 'RH: ${rhOverhang}mm',
-            style: textStyle,
-          );
-          textPainter.layout();
-          textPainter.paint(canvas,
-              Offset((xOverhang + xEnd) / 2 - textPainter.width / 2, y + 15));
-        }
-      }
-
-      // Draw first mark
-      if (firstMark != null) {
-        final x = startX + (firstMark as num) * scaleFactor;
-        canvas.drawLine(
-          Offset(x, startY),
-          Offset(x, startY + maxRafterHeight * scaleFactor),
-          markPaint,
-        );
-
-        // Label
-        textPainter.text = TextSpan(
-          text: '${firstMark}mm',
-          style: textStyle,
-        );
-        textPainter.layout();
-        textPainter.paint(
-            canvas, Offset(x - textPainter.width / 2, startY - 15));
-      }
-
-      // Draw second mark if exists
-      if (secondMark != null) {
-        final x = startX + (secondMark as num) * scaleFactor;
-        canvas.drawLine(
-          Offset(x, startY),
-          Offset(x, startY + maxRafterHeight * scaleFactor),
-          markPaint,
-        );
-
-        // Label
-        textPainter.text = TextSpan(
-          text: '${secondMark}mm',
-          style: textStyle,
-        );
-        textPainter.layout();
-        textPainter.paint(
-            canvas, Offset(x - textPainter.width / 2, startY - 15));
-      }
-
-      // Draw marks info
-      if (marks != null) {
-        textPainter.text = TextSpan(
-          text: 'Marks: $marks',
-          style: textStyle,
-        );
-        textPainter.layout();
-        textPainter.paint(
-            canvas, Offset(startX - textPainter.width / 2, startY - 30));
-      }
-    }
-
-    canvas.restore();
+    // Extract the numeric value (trim any units like "mm" if present)
+    final valuePart = parts[1].trim();
+    // Remove "mm" if present, otherwise use the trimmed value
+    final numericPart =
+        valuePart.contains('mm') ? valuePart.split('mm')[0].trim() : valuePart;
+    final parsedValue = double.tryParse(numericPart);
+    debugPrint('Parsed measurement: "$measurement" -> $parsedValue');
+    return parsedValue ?? 0.0;
   }
 
   @override
-  bool shouldRepaint(covariant RoofResultPainter oldDelegate) {
-    return oldDelegate.result != result ||
-        oldDelegate.scale != scale ||
-        oldDelegate.offset != offset;
+  void paint(Canvas canvas, Size size) {
+    const double margin = 40.0; // Margin for labels
+    const double labelOffset = 10.0;
+    const double minElementSize =
+        10.0; // Minimum size for battens/marks to be visible
+
+    // Calculate available drawing area
+    final double availableWidth = size.width - 2 * margin;
+    final double availableHeight = size.height - 2 * margin;
+
+    debugPrint(
+        'Available drawing area: width=$availableWidth, height=$availableHeight');
+
+    if (availableWidth <= 0 || availableHeight <= 0) {
+      debugPrint('Skipping drawing due to insufficient space');
+      return; // Skip drawing if there's no space
+    }
+
+    // Paint for lines and shapes
+    final linePaint = Paint()
+      ..color = primaryColor
+      ..strokeWidth = 4.0;
+    final dashedPaint = Paint()
+      ..color = primaryColor.withOpacity(0.5)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+    final tilePaint = Paint()
+      ..color = primaryColor.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    final tileBorderPaint = Paint()
+      ..color = primaryColor
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    // Draw Vertical-only view
+    if (verticalResult != null && horizontalResult == null) {
+      if (verticalResult!.inputRafter <= 0 ||
+          verticalResult!.totalCourses <= 0) {
+        debugPrint(
+            'Skipping Vertical drawing: invalid inputRafter=${verticalResult!.inputRafter} or totalCourses=${verticalResult!.totalCourses}');
+        return;
+      }
+
+      final double inputRafter = verticalResult!.inputRafter.toDouble();
+      final double gauge =
+          parseMeasurement(verticalResult!.splitGauge ?? verticalResult!.gauge);
+      final int totalCourses = verticalResult!.totalCourses;
+      final double firstBatten = verticalResult!.firstBatten.toDouble();
+      final double ridgeOffset = verticalResult!.ridgeOffset.toDouble();
+      final double effectiveGutterOverhang = gutterOverhang ?? 0;
+
+      if (gauge <= 0) {
+        debugPrint('Skipping Vertical drawing: invalid gauge=$gauge');
+        return;
+      }
+
+      // Calculate scale based on the number of battens to ensure visibility
+      final double totalBattens =
+          totalCourses - 1; // Number of battens between courses
+      final double minHeightPerBatten =
+          minElementSize; // Minimum height for each batten
+      final double minRequiredHeight = totalBattens * minHeightPerBatten;
+      final double baseScale = availableHeight / inputRafter;
+      // Scale to ensure each batten is at least minElementSize
+      final double scale = max(baseScale, minRequiredHeight / inputRafter);
+
+      final double scaledInputRafter = inputRafter * scale;
+      final double scaledGauge = gauge * scale;
+      final double scaledFirstBatten = firstBatten * scale;
+      final double scaledRidgeOffset = ridgeOffset * scale;
+      final double scaledGutterOverhang = effectiveGutterOverhang * scale;
+
+      debugPrint(
+          'Vertical Drawing: scale=$scale, scaledInputRafter=$scaledInputRafter, scaledGauge=$scaledGauge, scaledFirstBatten=$scaledFirstBatten');
+
+      // Draw rafter line (vertical)
+      canvas.drawLine(
+        Offset(margin, margin),
+        Offset(margin, margin + scaledInputRafter),
+        linePaint,
+      );
+
+      // Draw battens
+      double y = margin + scaledGutterOverhang + scaledFirstBatten;
+      for (int i = 0; i < totalCourses - 1; i++) {
+        canvas.drawLine(
+          Offset(margin - 10, y),
+          Offset(margin + 10, y),
+          linePaint,
+        );
+
+        // Label batten position
+        _drawText(canvas, 'Batten ${i + 1}',
+            Offset(margin + 20, y - labelOffset), textStyle);
+        y += scaledGauge;
+      }
+
+      // Draw ridge
+      canvas.drawLine(
+        Offset(margin - 10, margin + scaledInputRafter - scaledRidgeOffset),
+        Offset(margin + 10, margin + scaledInputRafter - scaledRidgeOffset),
+        linePaint,
+      );
+      _drawText(
+          canvas,
+          'Ridge (${ridgeOffset.toStringAsFixed(1)} mm)',
+          Offset(margin + 20,
+              margin + scaledInputRafter - scaledRidgeOffset - labelOffset),
+          textStyle);
+
+      // Draw eave
+      canvas.drawLine(
+        Offset(margin - 10, margin + scaledGutterOverhang),
+        Offset(margin + 10, margin + scaledGutterOverhang),
+        linePaint,
+      );
+      _drawText(
+          canvas,
+          'Eave (${effectiveGutterOverhang.toStringAsFixed(1)} mm)',
+          Offset(margin + 20, margin + scaledGutterOverhang - labelOffset),
+          textStyle);
+
+      // Draw first batten label
+      _drawText(
+          canvas,
+          'First Batten (${verticalResult!.firstBatten.toStringAsFixed(1)} mm)',
+          Offset(margin + 20,
+              margin + scaledGutterOverhang + scaledFirstBatten - labelOffset),
+          textStyle);
+    }
+    // Draw Horizontal-only view
+    else if (horizontalResult != null && verticalResult == null) {
+      if (horizontalResult!.width <= 0) {
+        debugPrint(
+            'Skipping Horizontal drawing: invalid width=${horizontalResult!.width}');
+        return;
+      }
+
+      final double width = horizontalResult!.width.toDouble();
+      final double marks = parseMeasurement(
+          horizontalResult!.splitMarks ?? horizontalResult!.marks);
+      final double lhOverhang = (horizontalResult!.lhOverhang ?? 0).toDouble();
+      final double rhOverhang = (horizontalResult!.rhOverhang ?? 0).toDouble();
+      final double firstMark = horizontalResult!.firstMark.toDouble();
+
+      if (marks <= 0) {
+        debugPrint('Skipping Horizontal drawing: invalid marks=$marks');
+        return;
+      }
+
+      // Calculate scale based on the number of marks to ensure visibility
+      final int totalMarks = (width / marks).floor();
+      final double minWidthPerMark =
+          minElementSize; // Minimum width for each mark
+      final double minRequiredWidth = totalMarks * minWidthPerMark;
+      final double baseScale = availableWidth / width;
+      final double scale = max(baseScale, minRequiredWidth / width);
+
+      final double scaledWidth = width * scale;
+      final double scaledMarks = marks * scale;
+      final double scaledLhOverhang = lhOverhang * scale;
+      final double scaledRhOverhang = rhOverhang * scale;
+      final double scaledFirstMark = firstMark * scale;
+
+      debugPrint(
+          'Horizontal Drawing: scale=$scale, scaledWidth=$scaledWidth, scaledMarks=$scaledMarks');
+
+      // Draw width line (horizontal)
+      canvas.drawLine(
+        Offset(margin + scaledLhOverhang, margin),
+        Offset(margin + scaledLhOverhang + scaledWidth, margin),
+        linePaint,
+      );
+
+      // Draw tile marks
+      double x = margin + scaledLhOverhang + scaledFirstMark;
+      for (int i = 0; i < totalMarks; i++) {
+        canvas.drawLine(
+          Offset(x, margin - 10),
+          Offset(x, margin + 10),
+          linePaint,
+        );
+
+        // Label mark position
+        _drawText(canvas, 'Mark ${i + 1}', Offset(x - 20, margin + labelOffset),
+            textStyle);
+        x += scaledMarks;
+      }
+
+      // Draw left and right overhangs
+      if (lhOverhang > 0) {
+        _drawText(canvas, 'LH Overhang (${lhOverhang.toStringAsFixed(1)} mm)',
+            Offset(margin, margin + labelOffset), textStyle);
+      }
+      if (rhOverhang > 0) {
+        _drawText(
+            canvas,
+            'RH Overhang (${rhOverhang.toStringAsFixed(1)} mm)',
+            Offset(margin + scaledLhOverhang + scaledWidth - 60,
+                margin + labelOffset),
+            textStyle);
+      }
+
+      // Draw first mark label
+      _drawText(
+          canvas,
+          'First Mark (${horizontalResult!.firstMark.toStringAsFixed(1)} mm)',
+          Offset(margin + scaledLhOverhang + scaledFirstMark - 40,
+              margin + labelOffset),
+          textStyle);
+    }
+    // Draw Combined view
+    else if (verticalResult != null && horizontalResult != null) {
+      if (verticalResult!.inputRafter <= 0 || horizontalResult!.width <= 0) {
+        debugPrint(
+            'Skipping Combined drawing: invalid inputRafter=${verticalResult!.inputRafter} or width=${horizontalResult!.width}');
+        return;
+      }
+
+      final double inputRafter = verticalResult!.inputRafter.toDouble();
+      final double gauge =
+          parseMeasurement(verticalResult!.splitGauge ?? verticalResult!.gauge);
+      final int totalCourses = verticalResult!.totalCourses;
+      final double firstBatten = verticalResult!.firstBatten.toDouble();
+      final double ridgeOffset = verticalResult!.ridgeOffset.toDouble();
+      final double effectiveGutterOverhang = gutterOverhang ?? 0;
+
+      final double width = horizontalResult!.width.toDouble();
+      final double marks = parseMeasurement(
+          horizontalResult!.splitMarks ?? horizontalResult!.marks);
+      final double lhOverhang = (horizontalResult!.lhOverhang ?? 0).toDouble();
+      final double firstMark = horizontalResult!.firstMark.toDouble();
+
+      if (gauge <= 0 || marks <= 0) {
+        debugPrint(
+            'Skipping Combined drawing: invalid gauge=$gauge or marks=$marks');
+        return;
+      }
+
+      // Calculate scale based on the number of elements for both dimensions
+      final double totalBattens = totalCourses - 1;
+      final int totalMarks = (width / marks).floor();
+      final double minHeightPerBatten = minElementSize;
+      final double minWidthPerMark = minElementSize;
+      final double minRequiredHeight = totalBattens * minHeightPerBatten;
+      final double minRequiredWidth = totalMarks * minWidthPerMark;
+      final double heightScale = availableHeight / inputRafter;
+      final double widthScale = availableWidth / width;
+      final double baseScaleFactor = min(heightScale, widthScale);
+      final double scaleFactor = max(baseScaleFactor,
+          max(minRequiredHeight / inputRafter, minRequiredWidth / width));
+
+      final double scaledInputRafter = inputRafter * scaleFactor;
+      final double scaledGauge = gauge * scaleFactor;
+      final double scaledFirstBatten = firstBatten * scaleFactor;
+      final double scaledRidgeOffset = ridgeOffset * scaleFactor;
+      final double scaledGutterOverhang = effectiveGutterOverhang * scaleFactor;
+
+      final double scaledWidth = width * scaleFactor;
+      final double scaledMarks = marks * scaleFactor;
+      final double scaledLhOverhang = lhOverhang * scaleFactor;
+      final double scaledFirstMark = firstMark * scaleFactor;
+
+      debugPrint(
+          'Combined Drawing: scaleFactor=$scaleFactor, scaledInputRafter=$scaledInputRafter, scaledWidth=$scaledWidth');
+
+      // Draw grid
+      double y = margin + scaledGutterOverhang + scaledFirstBatten;
+      final int totalVertical = totalCourses - 1;
+      for (int i = 0; i < totalVertical; i++) {
+        double x = margin + scaledLhOverhang + scaledFirstMark;
+        for (int j = 0; j < totalMarks; j++) {
+          // Draw tile rectangle
+          final rect =
+              Rect.fromLTWH(x, y - scaledGauge, scaledMarks, scaledGauge);
+          canvas.drawRect(rect, tilePaint);
+          canvas.drawRect(rect, tileBorderPaint);
+          x += scaledMarks;
+        }
+        y += scaledGauge;
+      }
+
+      // Draw axes and labels
+      // Vertical axis (Y-axis)
+      canvas.drawLine(
+        Offset(margin, margin),
+        Offset(margin, margin + scaledInputRafter),
+        linePaint,
+      );
+      _drawText(
+          canvas,
+          'Eave (${effectiveGutterOverhang.toStringAsFixed(1)} mm)',
+          Offset(margin - 30, margin + scaledGutterOverhang),
+          textStyle,
+          angle: -pi / 2);
+      _drawText(
+          canvas,
+          'First Batten (${verticalResult!.firstBatten.toStringAsFixed(1)} mm)',
+          Offset(
+              margin - 50, margin + scaledGutterOverhang + scaledFirstBatten),
+          textStyle,
+          angle: -pi / 2);
+      _drawText(
+          canvas,
+          'Ridge (${ridgeOffset.toStringAsFixed(1)} mm)',
+          Offset(margin - 30, margin + scaledInputRafter - scaledRidgeOffset),
+          textStyle,
+          angle: -pi / 2);
+
+      // Horizontal axis (X-axis)
+      canvas.drawLine(
+        Offset(margin + scaledLhOverhang, margin + scaledInputRafter + 10),
+        Offset(margin + scaledLhOverhang + scaledWidth,
+            margin + scaledInputRafter + 10),
+        linePaint,
+      );
+      if (lhOverhang > 0) {
+        _drawText(canvas, 'LH Overhang (${lhOverhang.toStringAsFixed(1)} mm)',
+            Offset(margin, margin + scaledInputRafter + 20), textStyle);
+      }
+      _drawText(
+          canvas,
+          'First Mark (${horizontalResult!.firstMark.toStringAsFixed(1)} mm)',
+          Offset(margin + scaledLhOverhang + scaledFirstMark - 40,
+              margin + scaledInputRafter + 20),
+          textStyle);
+    }
+  }
+
+  void _drawText(Canvas canvas, String text, Offset position, TextStyle style,
+      {double angle = 0}) {
+    final textSpan = TextSpan(text: text, style: style);
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    // Check if the text will fit within bounds
+    if (position.dx + textPainter.width > canvasSize.width ||
+        position.dy + textPainter.height > canvasSize.height) {
+      debugPrint(
+          'Skipping text drawing due to overflow: text=$text, position=$position');
+      return; // Skip drawing if text overflows
+    }
+
+    canvas.save();
+    canvas.translate(position.dx, position.dy);
+    if (angle != 0) {
+      canvas.rotate(angle);
+    }
+    textPainter.paint(canvas, Offset.zero);
+    canvas.restore();
+  }
+
+  Size canvasSize = Size.zero;
+
+  @override
+  bool shouldRepaint(covariant RoofPainter oldDelegate) {
+    return oldDelegate.verticalResult != verticalResult ||
+        oldDelegate.horizontalResult != horizontalResult ||
+        oldDelegate.gutterOverhang != gutterOverhang;
   }
 }

@@ -13,8 +13,8 @@ import 'package:roofgrid_uk/screens/auth/register_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
 import 'package:roofgrid_uk/screens/home_screen.dart';
-import 'package:roofgrid_uk/screens/results/result_detail_screen.dart'; // Updated path
-import 'package:roofgrid_uk/screens/results/saved_results_screen.dart'; // Updated path
+import 'package:roofgrid_uk/screens/results/result_detail_screen.dart';
+import 'package:roofgrid_uk/screens/results/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/splash_screen.dart';
 import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
 import 'package:roofgrid_uk/screens/subscription/success_page.dart';
@@ -23,7 +23,6 @@ import 'package:roofgrid_uk/screens/support/contact_screen.dart';
 import 'package:roofgrid_uk/screens/support/faq_screen.dart';
 import 'package:roofgrid_uk/screens/support/legal_screen.dart';
 import 'package:roofgrid_uk/screens/tile_management_screen.dart';
-import 'package:roofgrid_uk/widgets/result_visualization.dart'; // Updated path
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -80,12 +79,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/result-detail',
         builder: (context, state) => ResultDetailScreen(
-          result: state.extra as SavedResult,
-        ),
-      ),
-      GoRoute(
-        path: '/result-visualization',
-        builder: (context, state) => ResultVisualization(
           result: state.extra as SavedResult,
         ),
       ),

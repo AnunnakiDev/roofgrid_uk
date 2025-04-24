@@ -49,7 +49,7 @@ class _ProfileManagementWidgetState
 
     // Load custom primary color from ThemeProvider
     final themeState = ref.read(themeProvider);
-    _selectedColor = themeState.customPrimaryColor!;
+    _selectedColor = themeState.customPrimaryColor;
   }
 
   @override

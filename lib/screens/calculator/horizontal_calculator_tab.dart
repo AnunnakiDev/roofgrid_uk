@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
-import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
-import 'package:roofgrid_uk/widgets/result_visualization.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class HorizontalCalculatorTab extends ConsumerStatefulWidget {
@@ -17,7 +13,8 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
   final bool canExport;
   final bool canAccessDatabase;
   final HorizontalInputs initialInputs;
-  final void Function(HorizontalInputs) onInputsChanged;
+  final void Function(HorizontalInputs, bool)
+      onInputsConfirmed; // Updated callback
 
   const HorizontalCalculatorTab({
     super.key,
@@ -27,7 +24,7 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
     required this.canExport,
     required this.canAccessDatabase,
     required this.initialInputs,
-    required this.onInputsChanged,
+    required this.onInputsConfirmed,
   });
 
   @override
@@ -44,6 +41,7 @@ class HorizontalCalculatorTabState
   late String _crossBonded;
   bool _isOnline = true;
   List<Color> _widthColors = [];
+  bool _isInputsValid = false;
 
   @override
   void initState() {
@@ -84,8 +82,8 @@ class HorizontalCalculatorTabState
       });
     }
 
-    // Notify parent of initial inputs
-    _updateParentInputs();
+    // Validate initial inputs
+    _validateInputs();
   }
 
   Color _getColorForIndex(int index) {
@@ -109,7 +107,21 @@ class HorizontalCalculatorTabState
     });
   }
 
-  void _updateParentInputs() {
+  void _validateInputs() {
+    bool isValid = true;
+    for (final controller in _widthControllers) {
+      final value = double.tryParse(controller.text);
+      if (value == null || value <= 0) {
+        isValid = false;
+        break;
+      }
+    }
+    setState(() {
+      _isInputsValid = isValid;
+    });
+  }
+
+  void _confirmInputs() {
     final inputs = HorizontalInputs(
       widths: _widthControllers.asMap().entries.map((entry) {
         final index = entry.key;
@@ -124,7 +136,7 @@ class HorizontalCalculatorTabState
       useLHTile: _useLHTile,
       crossBonded: _crossBonded,
     );
-    widget.onInputsChanged(inputs);
+    widget.onInputsConfirmed(inputs, _isInputsValid);
   }
 
   @override
@@ -187,6 +199,23 @@ class HorizontalCalculatorTabState
           const SizedBox(height: 8),
           ..._buildWidthInputs(fontSize),
           if (!widget.canUseMultipleWidths) _buildProFeaturePrompt(fontSize),
+          const SizedBox(height: 16),
+          Semantics(
+            label: 'Confirm Horizontal Inputs',
+            child: ElevatedButton(
+              onPressed: _isInputsValid ? _confirmInputs : null,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              child: Text(
+                'Done',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Colors.white,
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -218,7 +247,6 @@ class HorizontalCalculatorTabState
                     ref
                         .read(calculatorProvider.notifier)
                         .setUseDryVerge(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -236,7 +264,6 @@ class HorizontalCalculatorTabState
                     ref
                         .read(calculatorProvider.notifier)
                         .setUseDryVerge(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -276,7 +303,6 @@ class HorizontalCalculatorTabState
                   _abutmentSide = value!;
                 });
                 ref.read(calculatorProvider.notifier).setAbutmentSide(value!);
-                _updateParentInputs();
               },
               style: TextStyle(fontSize: fontSize - 2),
             ),
@@ -310,7 +336,6 @@ class HorizontalCalculatorTabState
                       _useLHTile = value!;
                     });
                     ref.read(calculatorProvider.notifier).setUseLHTile(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -326,7 +351,6 @@ class HorizontalCalculatorTabState
                       _useLHTile = value!;
                     });
                     ref.read(calculatorProvider.notifier).setUseLHTile(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -364,7 +388,6 @@ class HorizontalCalculatorTabState
                     ref
                         .read(calculatorProvider.notifier)
                         .setCrossBonded(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -382,7 +405,6 @@ class HorizontalCalculatorTabState
                     ref
                         .read(calculatorProvider.notifier)
                         .setCrossBonded(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -424,7 +446,6 @@ class HorizontalCalculatorTabState
                               ? value
                               : 'Width ${i + 1}'; // Default name if empty
                         });
-                        _updateParentInputs();
                       },
                     ),
                   ),
@@ -448,7 +469,7 @@ class HorizontalCalculatorTabState
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) {
-                      _updateParentInputs();
+                      _validateInputs();
                     },
                   ),
                 ),
@@ -557,7 +578,7 @@ class HorizontalCalculatorTabState
       _widthNames.add('Width ${_widthControllers.length}');
       _widthColors.add(_getColorForIndex(_widthControllers.length - 1));
     });
-    _updateParentInputs();
+    _validateInputs();
   }
 
   void _removeWidth(int index) {
@@ -568,6 +589,6 @@ class HorizontalCalculatorTabState
       _widthNames.removeAt(index);
       _widthColors.removeAt(index);
     });
-    _updateParentInputs();
+    _validateInputs();
   }
 }

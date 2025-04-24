@@ -77,16 +77,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _initializeHiveAccess();
   }
 
-  // Add this new method for safe Hive initialization
   Future<void> _initializeHiveAccess() async {
     try {
-      // Wait for HiveService initialization to complete
       await _ref.read(hiveServiceInitializerProvider.future);
       _userBox = _hiveService.userBox;
       print("HiveService userBox accessed successfully in AuthNotifier");
     } catch (e) {
       print("Error initializing Hive access in AuthNotifier: $e");
-      // Don't rethrow - we'll handle the error gracefully
     }
   }
 
@@ -96,9 +93,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: true, error: null);
       print("Starting login with email: $email, rememberMe: $rememberMe");
 
-      // Simulate CAPTCHA verification during development
       if (_isRecaptchaEnabled) {
-        // Call Cloud Function to verify CAPTCHA
         final callable =
             FirebaseFunctions.instance.httpsCallable('verifyCaptcha');
         final result = await callable.call({'token': captchaToken});
@@ -129,7 +124,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       }
 
-      // Fetch user data from Firestore if online, otherwise use Hive
       final connectivityResult = await Connectivity().checkConnectivity();
       bool isOnline = connectivityResult != ConnectivityResult.none;
 
@@ -140,11 +134,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
             .get();
         if (userDoc.exists) {
           final userModel = UserModel.fromFirestore(userDoc);
-          // Store user data in Hive for offline use
           await _userBox.put(userCredential.user!.uid, userModel);
           print("User data saved to Hive: ${userModel.id}");
+
+          // Initialize tiles only for Pro or Admin users
+          if (userModel.isPro || userModel.role == UserRole.admin) {
+            await initializeDefaultTiles(userCredential.user!.uid);
+          } else {
+            print("Skipping tile initialization: User is free");
+          }
         } else {
-          // Create a default user in Firestore if not exists
           final newUser = UserModel.fromFirebaseUser(userCredential.user!);
           await _firestore
               .collection('users')
@@ -152,9 +151,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
               .set(newUser.toJson());
           await _userBox.put(userCredential.user!.uid, newUser);
           print("New user created and saved to Hive: ${newUser.id}");
+          print("Skipping tile initialization: New user is free");
         }
-        // Initialize default tiles after successful login
-        await initializeDefaultTiles();
       } else {
         print(
             "Offline: Skipping Firestore fetch, using Hive data if available");
@@ -204,7 +202,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (googleUser == null) {
         state = state.copyWith(isLoading: false);
         print("Google Sign-In cancelled by user");
-        return false; // User cancelled
+        return false;
       }
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -217,7 +215,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           "Google Sign-In successful with Firebase, UID: ${userCredential.user?.uid}");
       await _analytics.logLogin(loginMethod: 'google');
 
-      // Set user role to free by default for Google Sign-In users
       final connectivityResult = await Connectivity().checkConnectivity();
       bool isOnline = connectivityResult != ConnectivityResult.none;
 
@@ -231,7 +228,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'photoURL': userCredential.user?.photoURL,
         }, SetOptions(merge: true));
 
-        // Wait for the write to propagate
         await _waitForUserDocument(userCredential.user!.uid);
 
         final userDoc = await _firestore
@@ -241,12 +237,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final userModel = UserModel.fromFirestore(userDoc);
         await _userBox.put(userCredential.user!.uid, userModel);
         print("Google Sign-In user data saved to Hive: ${userModel.id}");
-        // Initialize default tiles after successful login
-        await initializeDefaultTiles();
+
+        if (userModel.isPro || userModel.role == UserRole.admin) {
+          await initializeDefaultTiles(userCredential.user!.uid);
+        } else {
+          print("Skipping tile initialization: Google Sign-In user is free");
+        }
       } else {
         print("Offline: Creating temporary user data in Hive");
         final userModel = UserModel.fromFirebaseUser(userCredential.user!);
         await _userBox.put(userCredential.user!.uid, userModel);
+        print("Skipping tile initialization: Offline user is free");
       }
 
       state = state.copyWith(
@@ -315,8 +316,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       print("Starting sign-out process");
       await _storage.delete(key: 'auth_token');
-      await _userBox
-          .delete(_auth.currentUser?.uid); // Remove user data from Hive
+      await _userBox.delete(_auth.currentUser?.uid);
       await _auth.signOut();
       await _googleSignIn.signOut();
       await _analytics.logEvent(name: 'sign_out');
@@ -351,19 +351,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
       );
 
-      // Determine the role based on the email
       String role = 'free';
       if (email.toLowerCase() == 'admin@example.com' ||
           email.toLowerCase() == 'support@roofgrid.uk') {
         role = 'admin';
       }
 
-      // Set up trial for new users
       final now = DateTime.now();
       final trialStartDate = now;
       final trialEndDate = now.add(const Duration(days: 14));
 
-      // Store user data in Firestore with the assigned role
       final newUser = UserModel.fromFirebaseUser(
         userCredential.user!,
         role: UserRole.values
@@ -378,14 +375,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
           .doc(userCredential.user?.uid)
           .set(newUser.toJson());
 
-      // Wait for the write to propagate
       await _waitForUserDocument(userCredential.user!.uid);
 
       await _userBox.put(userCredential.user!.uid, newUser);
       print("New user created and saved to Hive: ${newUser.id}");
 
-      // Initialize default tiles after successful signup
-      await initializeDefaultTiles();
+      if (role == 'admin') {
+        await initializeDefaultTiles(userCredential.user!.uid);
+      } else {
+        print("Skipping tile initialization: New user is free");
+      }
 
       state = state.copyWith(
         isAuthenticated: true,
@@ -440,7 +439,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
-      // Update Hive with the new user data
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final userModel = UserModel.fromFirestore(userDoc);
@@ -480,12 +478,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // Update Hive with the new user data
       final userDoc = await _firestore.collection('users').doc(userId).get();
       if (userDoc.exists) {
         final userModel = UserModel.fromFirestore(userDoc);
         await _userBox.put(userId, userModel);
         print("User upgraded to Pro and saved to Hive: ${userModel.id}");
+
+        // Initialize tiles for newly upgraded Pro user
+        await initializeDefaultTiles(userId);
       }
 
       await _analytics.logEvent(name: 'upgrade_to_pro');
@@ -499,126 +499,181 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> initializeDefaultTiles() async {
+  Future<void> initializeDefaultTiles(String userId) async {
     try {
-      print('Initializing default tiles');
-      // Check connectivity
+      print('Initializing default tiles for user: $userId');
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        print('User document not found for UID: $userId');
+        return;
+      }
+      final userModel = UserModel.fromFirestore(userDoc);
+      if (!userModel.isPro && userModel.role != UserRole.admin) {
+        print('Skipping tile initialization: User is not Pro or Admin');
+        return;
+      }
+
       final connectivityResult = await Connectivity().checkConnectivity();
       bool isOnline = connectivityResult != ConnectivityResult.none;
 
       if (isOnline) {
-        // Fetch tiles from Firestore if online
-        final existingTiles = await _firestore.collection('tiles').get();
-        if (existingTiles.docs.isNotEmpty) {
-          print(
-              'Default tiles already initialized in Firestore, syncing to Hive...');
-          for (var doc in existingTiles.docs) {
-            final tile = TileModel.fromJson(doc.data());
-            await _hiveService.tilesBox.put(tile.id, tile);
-          }
-          return;
-        }
+        // Sync existing tiles from Firestore to Hive
+        final querySnapshot = await _firestore
+            .collection('tiles')
+            .where('isPublic', isEqualTo: true)
+            .where('isApproved', isEqualTo: true)
+            .get();
+        final tiles = querySnapshot.docs
+            .map((doc) => TileModel.fromJson(doc.data()))
+            .toList();
 
-        final now = DateTime.now();
-        final defaultTiles = [
-          TileModel(
-            id: '1',
-            name: 'Standard Slate',
-            manufacturer: 'Generic',
-            materialType: TileSlateType.slate,
-            description: 'Standard 500x250mm natural slate',
-            isPublic: true,
-            isApproved: true,
-            createdById: '1',
-            createdAt: now,
-            updatedAt: now,
-            slateTileHeight: 500,
-            tileCoverWidth: 250,
-            minGauge: 195,
-            maxGauge: 210,
-            minSpacing: 1,
-            maxSpacing: 5,
-            defaultCrossBonded: true,
-          ),
-          TileModel(
-            id: '2',
-            name: 'Standard Plain Tile',
-            manufacturer: 'Generic',
-            materialType: TileSlateType.plainTile,
-            description: 'Standard 265x165mm clay plain tile',
-            isPublic: true,
-            isApproved: true,
-            createdById: '1',
-            createdAt: now,
-            updatedAt: now,
-            slateTileHeight: 265,
-            minGauge: 85,
-            maxGauge: 115,
-            tileCoverWidth: 165,
-            minSpacing: 1,
-            maxSpacing: 7,
-            defaultCrossBonded: true,
-          ),
-          TileModel(
-            id: '3',
-            name: 'Standard Concrete Tile',
-            manufacturer: 'Generic',
-            materialType: TileSlateType.concreteTile,
-            description: 'Standard 420x330mm concrete tile',
-            isPublic: true,
-            isApproved: true,
-            createdById: '1',
-            createdAt: now,
-            updatedAt: now,
-            slateTileHeight: 420,
-            minGauge: 310,
-            maxGauge: 345,
-            tileCoverWidth: 300,
-            minSpacing: 1,
-            maxSpacing: 5,
-            defaultCrossBonded: false,
-          ),
-        ];
-
-        for (var tile in defaultTiles) {
-          await _firestore.collection('tiles').doc(tile.id).set({
-            'id': tile.id,
-            'name': tile.name,
-            'manufacturer': tile.manufacturer,
-            'materialType': tile.materialType.toString().split('.').last,
-            'description': tile.description,
-            'isPublic': tile.isPublic,
-            'isApproved': tile.isApproved,
-            'createdById': tile.createdById,
-            'createdAt': Timestamp.fromDate(tile.createdAt),
-            'updatedAt': Timestamp.fromDate(tile.updatedAt),
-            'slateTileHeight': tile.slateTileHeight,
-            'tileCoverWidth': tile.tileCoverWidth,
-            'minGauge': tile.minGauge,
-            'maxGauge': tile.maxGauge,
-            'minSpacing': tile.minSpacing,
-            'maxSpacing': tile.maxSpacing,
-            'defaultCrossBonded': tile.defaultCrossBonded,
-          }, SetOptions(merge: true));
-
-          // Store in Hive
+        for (var tile in tiles) {
           await _hiveService.tilesBox.put(tile.id, tile);
         }
+        print('Synced ${tiles.length} tiles from Firestore to Hive');
 
         await _analytics.logEvent(
-          name: 'initialize_default_tiles',
-          parameters: {'tile_count': defaultTiles.length},
+          name: 'sync_default_tiles',
+          parameters: {'tile_count': tiles.length},
         );
-        print("Default tiles initialized successfully");
       } else {
-        print("Offline: Checking Hive for default tiles");
-        if (_hiveService.tilesBox.isEmpty) {
-          print("No tiles found in Hive while offline");
-        }
+        print('Offline: Using cached tiles from Hive');
+        final tiles = _hiveService.tilesBox.values.toList();
+        print('Loaded ${tiles.length} cached tiles from Hive');
       }
     } catch (e) {
       print('Failed to initialize default tiles: $e');
-      rethrow;
+      // Log non-fatal error instead of crashing
+      await _analytics.logEvent(
+        name: 'tile_initialization_error',
+        parameters: {'error': e.toString()},
+      );
+    }
+  }
+
+  Future<void> initializeDefaultTilesForAdmin() async {
+    try {
+      print('Initializing default tiles for Admin');
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) {
+        print('No user logged in for Admin tile initialization');
+        return;
+      }
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists || userDoc.data()!['role'] != 'admin') {
+        print('Skipping Admin tile initialization: User is not Admin');
+        return;
+      }
+
+      final connectivityResult = await Connectivity().checkConnectivity();
+      bool isOnline = connectivityResult != ConnectivityResult.none;
+      if (!isOnline) {
+        print('Offline: Cannot initialize default tiles for Admin');
+        return;
+      }
+
+      final existingTiles = await _firestore.collection('tiles').get();
+      if (existingTiles.docs.isNotEmpty) {
+        print('Default tiles already initialized in Firestore');
+        return;
+      }
+
+      final now = DateTime.now();
+      final defaultTiles = [
+        TileModel(
+          id: '1',
+          name: 'Standard Slate',
+          manufacturer: 'Generic',
+          materialType: TileSlateType.slate,
+          description: 'Standard 500x250mm natural slate',
+          isPublic: true,
+          isApproved: true,
+          createdById: userId,
+          createdAt: now,
+          updatedAt: now,
+          slateTileHeight: 500,
+          tileCoverWidth: 250,
+          minGauge: 195,
+          maxGauge: 210,
+          minSpacing: 1,
+          maxSpacing: 5,
+          defaultCrossBonded: true,
+        ),
+        TileModel(
+          id: '2',
+          name: 'Standard Plain Tile',
+          manufacturer: 'Generic',
+          materialType: TileSlateType.plainTile,
+          description: 'Standard 265x165mm clay plain tile',
+          isPublic: true,
+          isApproved: true,
+          createdById: userId,
+          createdAt: now,
+          updatedAt: now,
+          slateTileHeight: 265,
+          minGauge: 85,
+          maxGauge: 115,
+          tileCoverWidth: 165,
+          minSpacing: 1,
+          maxSpacing: 7,
+          defaultCrossBonded: true,
+        ),
+        TileModel(
+          id: '3',
+          name: 'Standard Concrete Tile',
+          manufacturer: 'Generic',
+          materialType: TileSlateType.concreteTile,
+          description: 'Standard 420x330mm concrete tile',
+          isPublic: true,
+          isApproved: true,
+          createdById: userId,
+          createdAt: now,
+          updatedAt: now,
+          slateTileHeight: 420,
+          minGauge: 310,
+          maxGauge: 345,
+          tileCoverWidth: 300,
+          minSpacing: 1,
+          maxSpacing: 5,
+          defaultCrossBonded: false,
+        ),
+      ];
+
+      for (var tile in defaultTiles) {
+        await _firestore.collection('tiles').doc(tile.id).set({
+          'id': tile.id,
+          'name': tile.name,
+          'manufacturer': tile.manufacturer,
+          'materialType': tile.materialType.toString().split('.').last,
+          'description': tile.description,
+          'isPublic': tile.isPublic,
+          'isApproved': tile.isApproved,
+          'createdById': tile.createdById,
+          'createdAt': Timestamp.fromDate(tile.createdAt),
+          'updatedAt': Timestamp.fromDate(tile.updatedAt),
+          'slateTileHeight': tile.slateTileHeight,
+          'tileCoverWidth': tile.tileCoverWidth,
+          'minGauge': tile.minGauge,
+          'maxGauge': tile.maxGauge,
+          'minSpacing': tile.minSpacing,
+          'maxSpacing': tile.maxSpacing,
+          'defaultCrossBonded': tile.defaultCrossBonded,
+        }, SetOptions(merge: true));
+
+        await _hiveService.tilesBox.put(tile.id, tile);
+      }
+
+      await _analytics.logEvent(
+        name: 'initialize_default_tiles_admin',
+        parameters: {'tile_count': defaultTiles.length},
+      );
+      print("Default tiles initialized successfully for Admin");
+    } catch (e) {
+      print('Failed to initialize default tiles for Admin: $e');
+      await _analytics.logEvent(
+        name: 'admin_tile_initialization_error',
+        parameters: {'error': e.toString()},
+      );
     }
   }
 
@@ -627,35 +682,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
       print('Checking persistent login');
       final token = await _storage.read(key: 'auth_token');
       if (token != null && _auth.currentUser != null) {
-        // Firebase automatically refreshes tokens, so we just check if the user is still authenticated
-        if (_auth.currentUser != null) {
-          final connectivityResult = await Connectivity().checkConnectivity();
-          bool isOnline = connectivityResult != ConnectivityResult.none;
-          if (isOnline) {
-            // Fetch fresh user data from Firestore and update Hive
-            final userDoc = await _firestore
-                .collection('users')
-                .doc(_auth.currentUser!.uid)
-                .get();
-            if (userDoc.exists) {
-              final userModel = UserModel.fromFirestore(userDoc);
-              await _userBox.put(_auth.currentUser!.uid, userModel);
-              print("User data synced from Firestore to Hive: ${userModel.id}");
-              // Initialize default tiles after successful login
-              await initializeDefaultTiles();
-            }
-          } else {
-            print("Offline: Using user data from Hive");
-          }
+        final connectivityResult = await Connectivity().checkConnectivity();
+        bool isOnline = connectivityResult != ConnectivityResult.none;
+        if (isOnline) {
+          final userDoc = await _firestore
+              .collection('users')
+              .doc(_auth.currentUser!.uid)
+              .get();
+          if (userDoc.exists) {
+            final userModel = UserModel.fromFirestore(userDoc);
+            await _userBox.put(_auth.currentUser!.uid, userModel);
+            print("User data synced from Firestore to Hive: ${userModel.id}");
 
-          state = state.copyWith(
-            isAuthenticated: true,
-            userId: _auth.currentUser!.uid,
-          );
-          print(
-              "Persistent login successful, UID: ${_auth.currentUser!.uid}, updated state: isAuthenticated=${state.isAuthenticated}");
-          return true;
+            if (userModel.isPro || userModel.role == UserRole.admin) {
+              await initializeDefaultTiles(_auth.currentUser!.uid);
+            } else {
+              print("Skipping tile initialization: User is free");
+            }
+          }
+        } else {
+          print("Offline: Using user data from Hive");
         }
+
+        state = state.copyWith(
+          isAuthenticated: true,
+          userId: _auth.currentUser!.uid,
+        );
+        print(
+            "Persistent login successful, UID: ${_auth.currentUser!.uid}, updated state: isAuthenticated=${state.isAuthenticated}");
+        return true;
       }
       print("No persistent login found");
       return false;
@@ -722,7 +777,6 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
     return Stream.value(null);
   }
 
-  // Check connectivity
   return Stream.fromFuture(Connectivity().checkConnectivity())
       .asyncExpand((connectivityResult) {
     bool isOnline = connectivityResult != ConnectivityResult.none;
@@ -730,11 +784,10 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
     final userBox = hiveService.userBox;
 
     if (isOnline) {
-      // Fetch from Firestore if online with retry mechanism
       return _fetchUserWithRetry(authState.userId!).map((snapshot) {
         if (snapshot.exists) {
           final userModel = UserModel.fromFirestore(snapshot);
-          userBox.put(authState.userId!, userModel); // Update Hive
+          userBox.put(authState.userId!, userModel);
           print(
               "Current user provider: Fetched user from Firestore, UID: ${userModel.id}");
           return userModel;
@@ -743,14 +796,12 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
         return null;
       }).handleError((error) {
         print("Error fetching user from Firestore: $error");
-        // Fallback to Hive if Firestore fails
         final userModel = userBox.get(authState.userId);
         print(
             "Current user provider: Falling back to Hive, user: ${userModel?.id}");
         return Stream.value(userModel);
       });
     } else {
-      // Use Hive if offline
       print("Current user provider: Offline, fetching user from Hive");
       final userModel = userBox.get(authState.userId);
       return Stream.value(userModel);
@@ -769,7 +820,6 @@ Stream<DocumentSnapshot> _fetchUserWithRetry(String userId) async* {
           .get();
       if (snapshot.exists) {
         yield snapshot;
-        // Listen for further updates
         yield* FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -782,7 +832,6 @@ Stream<DocumentSnapshot> _fetchUserWithRetry(String userId) async* {
     } catch (e) {
       print("Error fetching user document, attempt $attempt/$maxAttempts: $e");
       if (attempt == maxAttempts) {
-        // Emit the error to the stream and let the consumer handle it
         throw Exception(
             'Failed to load user data after $maxAttempts attempts: $e');
       }

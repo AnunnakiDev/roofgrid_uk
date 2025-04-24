@@ -30,7 +30,7 @@ class CalculationService {
     required double minGauge,
   }) async {
     debugPrint('CalculationService: Calculating vertical with input: $input');
-    return VerticalCalculationService.calculateVertical(
+    return await VerticalCalculationService.calculateVertical(
       input: input,
       materialType: materialType,
       slateTileHeight: slateTileHeight,
@@ -66,7 +66,10 @@ class CalculationService {
     required String crossBonded,
   }) async {
     debugPrint('CalculationService: Calculating combined results');
-    final verticalResult = await calculateVertical(
+    debugPrint(
+        'Input parameters: tileCoverWidth=$tileCoverWidth, minSpacing=$minSpacing, maxSpacing=$maxSpacing, lhTileWidth=$lhTileWidth');
+
+    final verticalResult = await VerticalCalculationService.calculateVertical(
       input: VerticalCalculationInput(
         rafterHeights: rafterHeights,
         gutterOverhang: gutterOverhang,
@@ -78,7 +81,7 @@ class CalculationService {
       minGauge: minGauge,
     );
 
-    final horizontalResult = await calculateHorizontal(
+    final horizontalResult = HorizontalCalculationService.calculateHorizontal(
       HorizontalCalculationInput(
         widths: widths,
         tileCoverWidth: tileCoverWidth,

@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow Cloud Functions (service account) full access
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == null;
+    }
+
+    // Users collection: Authenticated users can read their own data, admins can read all, write if authenticated
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if request.auth != null;
+
+      // Subcollection tiles: Allow users to read/write their own tiles, admins to read/write all
+      match /tiles/{tileId} {
+        allow read, write: if request.auth != null && (
+          isAdmin() || 
+          request.auth.uid == userId
+        );
+      }
+
+      // Subcollection saved_results: Allow Pro users to read/write their own results, admins to read/write all
+      match /saved_results/{resultId} {
+        allow read, write: if request.auth != null && (
+          isAdmin() || 
+          (request.auth.uid == userId && isPro())
+        );
+      }
+    }
+
+    // Main tile database
+    match /tiles/{tileId} {
+      allow read: if request.auth != null && isPro() && (
+        resource.data.isPublic == true && 
+        resource.data.isApproved == true
+      );
+      allow write: if request.auth != null && isAdmin();
+    }
+
+    // Collection group query for pending submissions (admins only)
+    match /{path=**}/tiles/{tileId} {
+      allow read: if request.auth != null && isAdmin();
+    }
+
+    // Rules for sessions and calculations collections
+    match /sessions/{sessionId} {
+      allow read: if request.auth != null && isAdmin();
+      allow write: if request.auth != null;
+    }
+
+    match /calculations/{calculationId} {
+      allow read: if request.auth != null && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if request.auth != null && isPro() && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && isPro() && 
+                    request.auth.uid == resource.data.userId && 
+                    request.resource.data.userId == resource.data.userId; // Prevent changing userId
+      allow delete: if request.auth != null && isPro() && request.auth.uid == resource.data.userId;
+    }
+
+    // Helper functions
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isPro() {
+      return request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pro' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+  }
+}

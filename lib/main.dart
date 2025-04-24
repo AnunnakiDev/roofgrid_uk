@@ -112,8 +112,7 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
     debugPrint('AppInitializer: Checking persistent login on app start');
     await ref.read(authProvider.notifier).checkPersistentLogin();
     debugPrint('AppInitializer: Persistent login check completed');
-    await ref.read(authProvider.notifier).initializeDefaultTiles();
-    debugPrint('AppInitializer: Default tiles initialized');
+
     setState(() {
       _isInitialized = true;
     });

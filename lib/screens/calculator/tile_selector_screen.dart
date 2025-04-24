@@ -30,8 +30,8 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
         _isOnline = result != ConnectivityResult.none;
       });
       if (_isOnline) {
-        ref.invalidate(allAvailableTilesProvider(
-            ref.read(currentUserProvider).value?.id ?? ''));
+        final userId = ref.read(currentUserProvider).value?.id ?? '';
+        ref.invalidate(allAvailableTilesProvider(userId));
       }
     });
   }
@@ -79,7 +79,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
             ),
           ),
           drawer: const MainDrawer(),
-          body: user.isPro
+          body: user.isPro || user.role == UserRole.admin
               ? _buildProUserContent(user)
               : _buildFreeUserContent(user),
         );
@@ -128,8 +128,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                     tile: initialTile,
                     onTileCreated: (updatedTile) {
                       Navigator.pop(context);
-                      context.pop(
-                          updatedTile); // Use go_router's pop to return the result
+                      context.pop(updatedTile);
                     },
                   ),
                 ),
@@ -150,7 +149,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           user: user,
           onTileSelected: (tile) {
             try {
-              context.pop(tile); // Use go_router's pop to return the result
+              context.pop(tile);
             } catch (e) {
               debugPrint('Error returning selected tile: $e');
               ScaffoldMessenger.of(context).showSnackBar(
@@ -180,7 +179,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
             user: user,
             onTileSelected: (tile) {
               try {
-                context.pop(tile); // Use go_router's pop to return the result
+                context.pop(tile);
               } catch (e) {
                 debugPrint('Error returning selected tile: $e');
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -194,9 +193,21 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           );
         }
         return Center(
-          child: Text(
-            'Error loading tiles: $error',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Error loading tiles: $error',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  ref.invalidate(allAvailableTilesProvider(user.id));
+                },
+                child: const Text('Retry'),
+              ),
+            ],
           ),
         );
       },
@@ -242,7 +253,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'As a free user, you can manually input tile details. Upgrade to Pro to access our full tile database.',
+                  'As a free user, you must manually input all tile details. Upgrade to Pro to access our full tile database.',
                   style: TextStyle(fontSize: 14),
                 ),
                 const SizedBox(height: 16),
@@ -258,7 +269,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
                             userId: user.id,
                             onTileCreated: (newTile) {
                               Navigator.pop(context);
-                              context.pop(newTile); // Return the new tile
+                              context.pop(newTile);
                             },
                           ),
                         ),

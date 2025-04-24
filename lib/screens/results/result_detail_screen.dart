@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
-import 'package:roofgrid_uk/widgets/result_visualization.dart';
+import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
+import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/visulization_toggle.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -27,10 +29,36 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final result = widget.result; // Use result from constructor
-
     final isVertical = result.type == CalculationType.vertical;
     final dateFormat = DateFormat('dd MMMM yyyy, HH:mm');
     final formattedDate = dateFormat.format(result.timestamp);
+    final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
+
+    // Extract vertical and horizontal results from savedResult
+    VerticalCalculationResult? verticalResult;
+    HorizontalCalculationResult? horizontalResult;
+
+    if (result.type == CalculationType.vertical) {
+      verticalResult = VerticalCalculationResult.fromJson(result.outputs);
+    } else if (result.type == CalculationType.horizontal) {
+      horizontalResult = HorizontalCalculationResult.fromJson(result.outputs);
+    } else if (result.type == CalculationType.combined) {
+      verticalResult =
+          VerticalCalculationResult.fromJson(result.outputs['vertical']);
+      horizontalResult =
+          HorizontalCalculationResult.fromJson(result.outputs['horizontal']);
+    }
+
+    // Extract gutterOverhang from inputs if available
+    double? gutterOverhang;
+    if (result.inputs['vertical_inputs'] != null) {
+      gutterOverhang =
+          result.inputs['vertical_inputs']['gutterOverhang'] as double?;
+    } else if (result.inputs['inputs'] != null &&
+        result.inputs['inputs']['vertical_inputs'] != null) {
+      gutterOverhang = result.inputs['inputs']['vertical_inputs']
+          ['gutterOverhang'] as double?;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -78,7 +106,9 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                     Text(
                       isVertical
                           ? 'Vertical Calculation'
-                          : 'Horizontal Calculation',
+                          : result.type == CalculationType.combined
+                              ? 'Combined Calculation'
+                              : 'Horizontal Calculation',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -94,60 +124,404 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                   ],
                 ),
               ),
-
-              // Visualization
-              Container(
-                height: 220,
-                padding: const EdgeInsets.all(16),
-                child: Card(
-                  elevation: 2,
-                  child: ResultVisualization(result: result),
-                ),
-              ),
-
-              // Details section
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle(context, 'Tile Information'),
-                    _buildInfoCard(
-                      context,
-                      title: 'Tile Details',
-                      content: Column(
-                        children: [
-                          _infoRow(
-                              'Name', result.tile['name']?.toString() ?? 'N/A'),
-                          _infoRow('Type',
-                              result.tile['materialType']?.toString() ?? 'N/A'),
-                          if (result.tile['tileCoverWidth'] != null)
-                            _infoRow('Cover Width',
-                                '${result.tile['tileCoverWidth']} mm'),
-                          if (result.tile['slateTileHeight'] != null)
-                            _infoRow('Height',
-                                '${result.tile['slateTileHeight']} mm'),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                    _buildSectionTitle(context, 'Inputs'),
-
-                    // Inputs card (dynamic based on calculation type)
-                    _buildInputsCard(context, result),
-
-                    const SizedBox(height: 24),
-                    _buildSectionTitle(context, 'Results'),
-
-                    // Results card (dynamic based on calculation type)
-                    _buildResultsCard(context, result),
+                    // Calculation Context Section
+                    _buildCalculationContext(context, result, fontSize),
+                    const SizedBox(height: 16),
+                    // Single Visualization with Toggle Buttons
+                    _buildVisualizationSection(context, verticalResult,
+                        horizontalResult, gutterOverhang, fontSize),
+                    const SizedBox(height: 16),
+                    // Results Summary and Details
+                    if (verticalResult != null)
+                      _buildVerticalResultsSection(
+                          context, verticalResult, result, fontSize),
+                    if (horizontalResult != null)
+                      _buildHorizontalResultsSection(
+                          context, horizontalResult, result, fontSize),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCalculationContext(
+      BuildContext context, SavedResult result, double fontSize) {
+    List<Widget> contextRows = [];
+
+    // Tile Information
+    contextRows
+        .add(_infoRow('Tile Name', result.tile['name']?.toString() ?? 'N/A'));
+    contextRows.add(_infoRow(
+        'Material Type', result.tile['materialType']?.toString() ?? 'N/A'));
+    if (result.tile['tileCoverWidth'] != null) {
+      contextRows
+          .add(_infoRow('Cover Width', '${result.tile['tileCoverWidth']} mm'));
+    }
+    if (result.tile['slateTileHeight'] != null) {
+      contextRows
+          .add(_infoRow('Height', '${result.tile['slateTileHeight']} mm'));
+    }
+
+    // Vertical Inputs
+    if (result.inputs['vertical_inputs'] != null) {
+      final verticalInputs =
+          result.inputs['vertical_inputs'] as Map<String, dynamic>;
+      contextRows.add(const Divider());
+      if (verticalInputs['gutterOverhang'] != null) {
+        contextRows.add(_infoRow(
+            'Gutter Overhang', '${verticalInputs['gutterOverhang']} mm'));
+      }
+      if (verticalInputs['useDryRidge'] != null) {
+        contextRows.add(_infoRow('Dry Ridge',
+            verticalInputs['useDryRidge'] == 'YES' ? 'Yes' : 'No'));
+      }
+      if (verticalInputs['rafterHeights'] != null) {
+        final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
+        for (int i = 0; i < rafters.length; i++) {
+          final rafter = rafters[i];
+          contextRows.add(_infoRow(
+              rafter['label'] ?? 'Rafter ${i + 1}', '${rafter['value']} mm'));
+        }
+      }
+    }
+
+    // Horizontal Inputs
+    if (result.inputs['horizontal_inputs'] != null) {
+      final horizontalInputs =
+          result.inputs['horizontal_inputs'] as Map<String, dynamic>;
+      contextRows.add(const Divider());
+      if (horizontalInputs['widths'] != null) {
+        final widths = horizontalInputs['widths'] as List<dynamic>;
+        for (int i = 0; i < widths.length; i++) {
+          final width = widths[i];
+          contextRows.add(_infoRow(
+              width['label'] ?? 'Width ${i + 1}', '${width['value']} mm'));
+        }
+      }
+      if (horizontalInputs['useDryVerge'] != null) {
+        contextRows.add(_infoRow('Dry Verge',
+            horizontalInputs['useDryVerge'] == 'YES' ? 'Yes' : 'No'));
+      }
+      if (horizontalInputs['abutmentSide'] != null) {
+        contextRows
+            .add(_infoRow('Abutment Side', horizontalInputs['abutmentSide']));
+      }
+      if (horizontalInputs['useLHTile'] != null) {
+        contextRows.add(_infoRow('Left Hand Tile',
+            horizontalInputs['useLHTile'] == 'YES' ? 'Yes' : 'No'));
+      }
+      if (horizontalInputs['crossBonded'] != null) {
+        contextRows.add(_infoRow('Cross Bonded',
+            horizontalInputs['crossBonded'] == 'YES' ? 'Yes' : 'No'));
+      }
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Calculation Context',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: fontSize,
+                  ),
+            ),
+            const Divider(),
+            ...contextRows,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisualizationSection(
+      BuildContext context,
+      VerticalCalculationResult? verticalResult,
+      HorizontalCalculationResult? horizontalResult,
+      double? gutterOverhang,
+      double fontSize) {
+    final hasVertical = verticalResult != null;
+    final hasHorizontal = horizontalResult != null;
+
+    // Default to Combined if both are available, otherwise the available result
+    final defaultMode = hasVertical && hasHorizontal
+        ? ViewMode.combined
+        : hasVertical
+            ? ViewMode.vertical
+            : ViewMode.horizontal;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Visualization',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: fontSize,
+                  ),
+            ),
+            const Divider(),
+            if (hasVertical || hasHorizontal)
+              VisualizationWithToggle(
+                verticalResult: verticalResult,
+                horizontalResult: horizontalResult,
+                gutterOverhang: gutterOverhang ?? 0,
+                defaultMode: defaultMode,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerticalResultsSection(
+      BuildContext context,
+      VerticalCalculationResult result,
+      SavedResult savedResult,
+      double fontSize) {
+    // Summary Metrics
+    List<Widget> summaryRows = [
+      _infoRow('Total Courses', result.totalCourses.toString()),
+      _infoRow('Gauge', '${result.gauge} mm'),
+      if (result.splitGauge != null)
+        _infoRow('Split Gauge', '${result.splitGauge} mm'),
+    ];
+
+    // Detailed Results for Each Rafter Height
+    List<Widget> detailRows = [];
+    if (savedResult.inputs['vertical_inputs'] != null) {
+      final verticalInputs =
+          savedResult.inputs['vertical_inputs'] as Map<String, dynamic>;
+      if (verticalInputs['rafterHeights'] != null) {
+        final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
+        for (int i = 0; i < rafters.length; i++) {
+          final rafter = rafters[i];
+          detailRows.add(_infoRow(
+              rafter['label'] ?? 'Rafter ${i + 1}', '${rafter['value']} mm'));
+          detailRows.add(_infoRow('Ridge Offset', '${result.ridgeOffset} mm'));
+          if (result.eaveBatten != null) {
+            detailRows.add(_infoRow('Eave Batten', '${result.eaveBatten} mm'));
+          }
+          detailRows.add(_infoRow('First Batten', '${result.firstBatten} mm'));
+          if (result.cutCourse != null) {
+            detailRows.add(_infoRow('Cut Course', '${result.cutCourse} mm'));
+          }
+          if (i < rafters.length - 1) {
+            detailRows.add(const Divider());
+          }
+        }
+      }
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Vertical Calculation Results',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: fontSize,
+                  ),
+            ),
+            const Divider(),
+            // Summary
+            Column(children: summaryRows),
+            if (result.warning != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        result.warning!,
+                        style: TextStyle(fontSize: fontSize - 2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            // Expandable Details
+            if (detailRows.isNotEmpty)
+              ExpansionTile(
+                title: Text(
+                  'Detailed Results per Rafter',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(children: detailRows),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorizontalResultsSection(
+      BuildContext context,
+      HorizontalCalculationResult result,
+      SavedResult savedResult,
+      double fontSize) {
+    // Summary Metrics
+    List<Widget> summaryRows = [
+      _infoRow('New Width', '${result.newWidth} mm'),
+      _infoRow('Marks', '${result.marks} mm'),
+      if (result.splitMarks != null)
+        _infoRow('Split Marks', '${result.splitMarks} mm'),
+    ];
+
+    // Detailed Results for Each Width
+    List<Widget> detailRows = [];
+    if (savedResult.inputs['horizontal_inputs'] != null) {
+      final horizontalInputs =
+          savedResult.inputs['horizontal_inputs'] as Map<String, dynamic>;
+      if (horizontalInputs['widths'] != null) {
+        final widths = horizontalInputs['widths'] as List<dynamic>;
+        for (int i = 0; i < widths.length; i++) {
+          final width = widths[i];
+          detailRows.add(_infoRow(
+              width['label'] ?? 'Width ${i + 1}', '${width['value']} mm'));
+          if (result.lhOverhang != null) {
+            detailRows.add(_infoRow('LH Overhang', '${result.lhOverhang} mm'));
+          }
+          if (result.rhOverhang != null) {
+            detailRows.add(_infoRow('RH Overhang', '${result.rhOverhang} mm'));
+          }
+          if (result.cutTile != null) {
+            detailRows.add(_infoRow('Cut Tile', '${result.cutTile} mm'));
+          }
+          detailRows.add(_infoRow('First Mark', '${result.firstMark} mm'));
+          if (result.secondMark != null) {
+            detailRows.add(_infoRow('Second Mark', '${result.secondMark} mm'));
+          }
+          if (i < widths.length - 1) {
+            detailRows.add(const Divider());
+          }
+        }
+      }
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Horizontal Calculation Results',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: fontSize,
+                  ),
+            ),
+            const Divider(),
+            // Summary
+            Column(children: summaryRows),
+            if (result.warning != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        result.warning!,
+                        style: TextStyle(fontSize: fontSize - 2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            // Expandable Details
+            if (detailRows.isNotEmpty)
+              ExpansionTile(
+                title: Text(
+                  'Detailed Results per Width',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(children: detailRows),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(value),
+          ),
+        ],
       ),
     );
   }
@@ -312,7 +686,7 @@ RoofGrid UK Calculation Result
 
 Project: ${result.projectName}
 Date: $formattedDate
-Type: ${isVertical ? 'Vertical' : 'Horizontal'} Calculation
+Type: ${isVertical ? 'Vertical' : result.type == CalculationType.combined ? 'Combined' : 'Horizontal'} Calculation
 
 Tile: ${result.tile['name'] ?? 'N/A'}
 ''';
@@ -337,382 +711,6 @@ Tile: ${result.tile['name'] ?? 'N/A'}
         });
       }
     }
-  }
-
-  Widget _buildSectionTitle(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(BuildContext context,
-      {required String title, required Widget content}) {
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            const Divider(),
-            const SizedBox(height: 8),
-            content,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputsCard(BuildContext context, SavedResult result) {
-    final isVertical = result.type == CalculationType.vertical;
-    final inputs = result.inputs;
-
-    List<Widget> inputRows = [];
-
-    // Common settings
-    if (isVertical) {
-      if (inputs['vertical_inputs'] != null) {
-        final verticalInputs =
-            inputs['vertical_inputs'] as Map<String, dynamic>;
-        if (verticalInputs['gutterOverhang'] != null) {
-          inputRows.add(_infoRow(
-              'Gutter Overhang', '${verticalInputs['gutterOverhang']} mm'));
-        }
-
-        if (verticalInputs['useDryRidge'] != null) {
-          inputRows.add(_infoRow('Dry Ridge',
-              verticalInputs['useDryRidge'] == 'YES' ? 'Yes' : 'No'));
-        }
-
-        if (verticalInputs['rafterHeights'] != null) {
-          final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
-          for (int i = 0; i < rafters.length; i++) {
-            final rafter = rafters[i];
-            inputRows.add(_buildEditableInfoRow(
-              context,
-              label: rafter['label'] ?? 'Rafter ${i + 1}',
-              value: '${rafter['value']} mm',
-              onEdit: () => _showEditLabelDialog(
-                context,
-                'Rename Rafter',
-                rafter['label'] ?? 'Rafter ${i + 1}',
-                (newLabel) =>
-                    _updateInputLabel(result, 'rafterHeights', i, newLabel),
-              ),
-            ));
-          }
-        }
-      }
-    } else {
-      if (inputs['horizontal_inputs'] != null) {
-        final horizontalInputs =
-            inputs['horizontal_inputs'] as Map<String, dynamic>;
-        if (horizontalInputs['widths'] != null) {
-          final widths = horizontalInputs['widths'] as List<dynamic>;
-          for (int i = 0; i < widths.length; i++) {
-            final width = widths[i];
-            inputRows.add(_buildEditableInfoRow(
-              context,
-              label: width['label'] ?? 'Width ${i + 1}',
-              value: '${width['value']} mm',
-              onEdit: () => _showEditLabelDialog(
-                context,
-                'Rename Width',
-                width['label'] ?? 'Width ${i + 1}',
-                (newLabel) => _updateInputLabel(result, 'widths', i, newLabel),
-              ),
-            ));
-          }
-        }
-
-        if (horizontalInputs['useDryVerge'] != null) {
-          inputRows.add(_infoRow('Dry Verge',
-              horizontalInputs['useDryVerge'] == 'YES' ? 'Yes' : 'No'));
-        }
-
-        if (horizontalInputs['abutmentSide'] != null) {
-          inputRows
-              .add(_infoRow('Abutment Side', horizontalInputs['abutmentSide']));
-        }
-
-        if (horizontalInputs['useLHTile'] != null) {
-          inputRows.add(_infoRow('Left Hand Tile',
-              horizontalInputs['useLHTile'] == 'YES' ? 'Yes' : 'No'));
-        }
-
-        if (horizontalInputs['crossBonded'] != null) {
-          inputRows.add(_infoRow('Cross Bonded',
-              horizontalInputs['crossBonded'] == 'YES' ? 'Yes' : 'No'));
-        }
-      }
-    }
-
-    return _buildInfoCard(
-      context,
-      title: 'Calculation Inputs',
-      content: Column(children: inputRows),
-    );
-  }
-
-  Widget _buildEditableInfoRow(
-    BuildContext context, {
-    required String label,
-    required String value,
-    required VoidCallback onEdit,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 2,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '$label:',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit, size: 16),
-                  onPressed: onEdit,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Rename',
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showEditLabelDialog(
-    BuildContext context,
-    String title,
-    String currentLabel,
-    Function(String) onSave,
-  ) async {
-    final controller = TextEditingController(text: currentLabel);
-
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Label',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => context.pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                onSave(controller.text.trim());
-                context.pop();
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _updateInputLabel(
-      SavedResult result, String inputType, int index, String newLabel) async {
-    try {
-      final resultsService = ref.read(resultsServiceProvider);
-      final success =
-          await resultsService.renameInput(result, inputType, index, newLabel);
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Label updated')),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update label')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildResultsCard(BuildContext context, SavedResult result) {
-    final isVertical = result.type == CalculationType.vertical;
-    final outputs = result.outputs;
-
-    List<Widget> outputRows = [];
-
-    // Common outputs
-    if (outputs['solution'] != null) {
-      outputRows.add(_infoRow('Solution Type', outputs['solution']));
-    }
-
-    // Vertical specific
-    if (isVertical) {
-      if (outputs['totalCourses'] != null) {
-        outputRows.add(_infoRow('Total Courses', '${outputs['totalCourses']}'));
-      }
-
-      if (outputs['ridgeOffset'] != null) {
-        outputRows
-            .add(_infoRow('Ridge Offset', '${outputs['ridgeOffset']} mm'));
-      }
-
-      if (outputs['eaveBatten'] != null) {
-        outputRows.add(_infoRow('Eave Batten', '${outputs['eaveBatten']} mm'));
-      }
-
-      if (outputs['firstBatten'] != null) {
-        outputRows
-            .add(_infoRow('First Batten', '${outputs['firstBatten']} mm'));
-      }
-
-      if (outputs['cutCourse'] != null) {
-        outputRows.add(_infoRow('Cut Course', '${outputs['cutCourse']} mm'));
-      }
-
-      if (outputs['gauge'] != null) {
-        outputRows.add(_infoRow('Gauge', outputs['gauge']));
-      }
-
-      if (outputs['splitGauge'] != null) {
-        outputRows.add(_infoRow('Split Gauge', outputs['splitGauge']));
-      }
-    }
-
-    // Horizontal specific
-    else {
-      if (outputs['newWidth'] != null) {
-        outputRows.add(_infoRow('New Width', '${outputs['newWidth']} mm'));
-      }
-
-      if (outputs['lhOverhang'] != null) {
-        outputRows.add(_infoRow('LH Overhang', '${outputs['lhOverhang']} mm'));
-      }
-
-      if (outputs['rhOverhang'] != null) {
-        outputRows.add(_infoRow('RH Overhang', '${outputs['rhOverhang']} mm'));
-      }
-
-      if (outputs['cutTile'] != null) {
-        outputRows.add(_infoRow('Cut Tile', '${outputs['cutTile']} mm'));
-      }
-
-      if (outputs['firstMark'] != null) {
-        outputRows.add(_infoRow('First Mark', '${outputs['firstMark']} mm'));
-      }
-
-      if (outputs['secondMark'] != null) {
-        outputRows.add(_infoRow('Second Mark', '${outputs['secondMark']} mm'));
-      }
-
-      if (outputs['marks'] != null) {
-        outputRows.add(_infoRow('Marks', outputs['marks']));
-      }
-
-      if (outputs['splitMarks'] != null) {
-        outputRows.add(_infoRow('Split Marks', outputs['splitMarks']));
-      }
-    }
-
-    // Warning if any
-    if (outputs['warning'] != null) {
-      outputRows.add(const SizedBox(height: 8));
-      outputRows.add(Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Theme.of(context).colorScheme.error),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.warning_amber,
-              color: Theme.of(context).colorScheme.error,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                outputs['warning'],
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ));
-    }
-
-    return _buildInfoCard(
-      context,
-      title: 'Calculation Results',
-      content: Column(children: outputRows),
-    );
   }
 }
 

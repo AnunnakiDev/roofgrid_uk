@@ -9,8 +9,8 @@ class HorizontalCalculationResult {
   final int? secondMark;
   final String marks;
   final String? splitMarks;
-  final int? actualSpacing; // Added field
-  final String? warning; // Added field
+  final int? actualSpacing;
+  final String? warning;
 
   const HorizontalCalculationResult({
     required this.width,
@@ -29,33 +29,33 @@ class HorizontalCalculationResult {
 
   factory HorizontalCalculationResult.fromJson(Map<String, dynamic> json) {
     return HorizontalCalculationResult(
-      width: json['Width'] as int,
-      solution: json['Solution'] as String,
-      newWidth: json['New Width'] as int,
-      lhOverhang: json['LH Overhang'] as int?,
-      rhOverhang: json['RH Overhang'] as int?,
-      cutTile: json['Cut Tile'] as int?,
-      firstMark: json['1st Mark'] as int,
-      secondMark: json['2nd Mark'] as int?,
-      marks: json['Marks'] as String,
-      splitMarks: json['Split Marks'] as String?,
-      actualSpacing: json['actualSpacing'] as int?,
+      width: (json['width'] as num?)?.toInt() ?? 0,
+      solution: json['solution'] as String? ?? 'Invalid',
+      newWidth: (json['newWidth'] as num?)?.toInt() ?? 0,
+      lhOverhang: (json['lhOverhang'] as num?)?.toInt(),
+      rhOverhang: (json['rhOverhang'] as num?)?.toInt(),
+      cutTile: (json['cutTile'] as num?)?.toInt(),
+      firstMark: (json['firstMark'] as num?)?.toInt() ?? 0,
+      secondMark: (json['secondMark'] as num?)?.toInt(),
+      marks: json['marks'] as String? ?? 'N/A',
+      splitMarks: json['splitMarks'] as String?,
+      actualSpacing: (json['actualSpacing'] as num?)?.toInt(),
       warning: json['warning'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'Width': width,
-      'Solution': solution,
-      'New Width': newWidth,
-      if (lhOverhang != null) 'LH Overhang': lhOverhang,
-      if (rhOverhang != null) 'RH Overhang': rhOverhang,
-      if (cutTile != null) 'Cut Tile': cutTile,
-      '1st Mark': firstMark,
-      if (secondMark != null) '2nd Mark': secondMark,
-      'Marks': marks,
-      if (splitMarks != null) 'Split Marks': splitMarks,
+      'width': width,
+      'solution': solution,
+      'newWidth': newWidth,
+      if (lhOverhang != null) 'lhOverhang': lhOverhang,
+      if (rhOverhang != null) 'rhOverhang': rhOverhang,
+      if (cutTile != null) 'cutTile': cutTile,
+      'firstMark': firstMark,
+      if (secondMark != null) 'secondMark': secondMark,
+      'marks': marks,
+      if (splitMarks != null) 'splitMarks': splitMarks,
       if (actualSpacing != null) 'actualSpacing': actualSpacing,
       if (warning != null) 'warning': warning,
     };

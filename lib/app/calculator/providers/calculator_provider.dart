@@ -6,7 +6,6 @@ import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_input.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
-import 'package:roofgrid_uk/services/hive_service.dart';
 
 class CalculatorState {
   final bool isLoading;

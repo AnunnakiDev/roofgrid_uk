@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
-import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
-import 'package:roofgrid_uk/widgets/result_visualization.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 class VerticalCalculatorTab extends ConsumerStatefulWidget {
   final UserModel user;
@@ -16,7 +12,8 @@ class VerticalCalculatorTab extends ConsumerStatefulWidget {
   final bool canExport;
   final bool canAccessDatabase;
   final VerticalInputs initialInputs;
-  final void Function(VerticalInputs) onInputsChanged;
+  final void Function(VerticalInputs, bool)
+      onInputsConfirmed; // Updated callback
 
   const VerticalCalculatorTab({
     super.key,
@@ -26,7 +23,7 @@ class VerticalCalculatorTab extends ConsumerStatefulWidget {
     required this.canExport,
     required this.canAccessDatabase,
     required this.initialInputs,
-    required this.onInputsChanged,
+    required this.onInputsConfirmed,
   });
 
   @override
@@ -40,6 +37,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
   late double _gutterOverhang;
   late String _useDryRidge;
   List<Color> _rafterColors = [];
+  bool _isInputsValid = false;
 
   @override
   void initState() {
@@ -72,8 +70,8 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
       });
     }
 
-    // Notify parent of initial inputs
-    _updateParentInputs();
+    // Validate initial inputs
+    _validateInputs();
   }
 
   Color _getColorForIndex(int index) {
@@ -98,7 +96,21 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
     super.dispose();
   }
 
-  void _updateParentInputs() {
+  void _validateInputs() {
+    bool isValid = true;
+    for (final controller in _rafterControllers) {
+      final value = double.tryParse(controller.text);
+      if (value == null || value <= 0) {
+        isValid = false;
+        break;
+      }
+    }
+    setState(() {
+      _isInputsValid = isValid;
+    });
+  }
+
+  void _confirmInputs() {
     final inputs = VerticalInputs(
       rafterHeights: _rafterControllers.asMap().entries.map((entry) {
         final index = entry.key;
@@ -111,7 +123,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
       gutterOverhang: _gutterOverhang,
       useDryRidge: _useDryRidge,
     );
-    widget.onInputsChanged(inputs);
+    widget.onInputsConfirmed(inputs, _isInputsValid);
   }
 
   @override
@@ -164,6 +176,23 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
           const SizedBox(height: 8),
           ..._buildRafterInputs(fontSize),
           if (!widget.canUseMultipleRafters) _buildProFeaturePrompt(fontSize),
+          const SizedBox(height: 16),
+          Semantics(
+            label: 'Confirm Vertical Inputs',
+            child: ElevatedButton(
+              onPressed: _isInputsValid ? _confirmInputs : null,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              child: Text(
+                'Done',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Colors.white,
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -194,7 +223,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                   _gutterOverhang = value;
                 });
                 ref.read(calculatorProvider.notifier).setGutterOverhang(value);
-                _updateParentInputs();
               },
             ),
           ),
@@ -236,7 +264,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                     ref
                         .read(calculatorProvider.notifier)
                         .setUseDryRidge(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -254,7 +281,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                     ref
                         .read(calculatorProvider.notifier)
                         .setUseDryRidge(value!);
-                    _updateParentInputs();
                   },
                 ),
               ),
@@ -296,7 +322,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                               ? value
                               : 'Rafter ${i + 1}'; // Default name if empty
                         });
-                        _updateParentInputs();
                       },
                     ),
                   ),
@@ -321,7 +346,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) {
-                      _updateParentInputs();
+                      _validateInputs();
                     },
                   ),
                 ),
@@ -430,7 +455,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
       _rafterNames.add('Rafter ${_rafterControllers.length}');
       _rafterColors.add(_getColorForIndex(_rafterControllers.length - 1));
     });
-    _updateParentInputs();
+    _validateInputs();
   }
 
   void _removeRafter(int index) {
@@ -441,6 +466,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
       _rafterNames.removeAt(index);
       _rafterColors.removeAt(index);
     });
-    _updateParentInputs();
+    _validateInputs();
   }
 }
