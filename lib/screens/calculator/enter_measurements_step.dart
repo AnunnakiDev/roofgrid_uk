@@ -112,7 +112,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
             Text(
               title,
               style: TextStyle(
-                fontSize: fontSize - 2,
+                fontSize: fontSize + 2, // Increased font size
                 color: isActive
                     ? Theme.of(context).colorScheme.primary
                     : Colors.black,
@@ -245,15 +245,13 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-    final padding =
-        isLargeScreen ? 16.0 : 12.0; // Increased padding for better alignment
+    final padding = isLargeScreen ? 16.0 : 12.0;
     final fontSize = isLargeScreen ? 14.0 : 12.0;
 
     final steps = _buildSteps(context);
 
     return Padding(
-      padding:
-          EdgeInsets.symmetric(horizontal: padding), // Added horizontal padding
+      padding: EdgeInsets.symmetric(horizontal: padding),
       child: Column(
         children: [
           Padding(

@@ -142,7 +142,7 @@ class HorizontalCalculatorTabState
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 12.0 : 8.0;
+    final padding = isLargeScreen ? 16.0 : 12.0;
     final fontSize = isLargeScreen ? 14.0 : 12.0;
 
     return Padding(
@@ -202,30 +202,23 @@ class HorizontalCalculatorTabState
 
   Widget _buildDryVergeToggle(double fontSize) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          flex: 3,
-          child: Text(
-            'Use Dry Verge:',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
+        Text(
+          'Use Dry Verge:',
+          style: TextStyle(fontSize: fontSize - 2),
         ),
-        Expanded(
-          flex: 5,
-          child: OnOffToggle(
-            label: 'Use Dry Verge',
-            value: _useDryVerge == 'YES',
-            onChanged: (value) {
-              setState(() {
-                _useDryVerge = value ? 'YES' : 'NO';
-              });
-              ref
-                  .read(calculatorProvider.notifier)
-                  .setUseDryVerge(_useDryVerge);
-              _validateInputs();
-            },
-            fontSize: fontSize - 2,
-          ),
+        OnOffToggle(
+          label: 'Use Dry Verge',
+          value: _useDryVerge == 'YES',
+          onChanged: (value) {
+            setState(() {
+              _useDryVerge = value ? 'YES' : 'NO';
+            });
+            ref.read(calculatorProvider.notifier).setUseDryVerge(_useDryVerge);
+            _validateInputs();
+          },
+          fontSize: fontSize - 2,
         ),
       ],
     );
@@ -276,28 +269,23 @@ class HorizontalCalculatorTabState
 
   Widget _buildLHTileToggle(double fontSize) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          flex: 3,
-          child: Text(
-            'Use Left Hand Tile:',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
+        Text(
+          'Use Left Hand Tile:',
+          style: TextStyle(fontSize: fontSize - 2),
         ),
-        Expanded(
-          flex: 5,
-          child: OnOffToggle(
-            label: 'Use Left Hand Tile',
-            value: _useLHTile == 'YES',
-            onChanged: (value) {
-              setState(() {
-                _useLHTile = value ? 'YES' : 'NO';
-              });
-              ref.read(calculatorProvider.notifier).setUseLHTile(_useLHTile);
-              _validateInputs();
-            },
-            fontSize: fontSize - 2,
-          ),
+        OnOffToggle(
+          label: 'Use Left Hand Tile',
+          value: _useLHTile == 'YES',
+          onChanged: (value) {
+            setState(() {
+              _useLHTile = value ? 'YES' : 'NO';
+            });
+            ref.read(calculatorProvider.notifier).setUseLHTile(_useLHTile);
+            _validateInputs();
+          },
+          fontSize: fontSize - 2,
         ),
       ],
     );
@@ -316,15 +304,16 @@ class HorizontalCalculatorTabState
             children: [
               if (widget.canUseMultipleWidths) ...[
                 Expanded(
-                  flex: 3,
+                  flex: 4, // Wider name box, matching Vertical tab
                   child: Semantics(
                     label: 'Width Name ${i + 1}',
                     child: TextField(
                       controller: TextEditingController(text: _widthNames[i]),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12), // Same height as Vertical tab
                       ),
                       style: TextStyle(fontSize: fontSize - 2),
                       onChanged: (value) {
@@ -338,10 +327,13 @@ class HorizontalCalculatorTabState
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(
+                    width: 8), // Reduced spacing to match Vertical tab
               ],
               Expanded(
-                flex: widget.canUseMultipleWidths ? 5 : 8,
+                flex: widget.canUseMultipleWidths
+                    ? 3
+                    : 8, // Smaller number box, matching Vertical tab
                 child: Semantics(
                   label: 'Width Measurement ${i + 1}',
                   child: TextField(
@@ -353,6 +345,9 @@ class HorizontalCalculatorTabState
                       suffixText: 'mm',
                       isDense: true,
                       border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12), // Same height as Vertical tab
                     ),
                     style: TextStyle(fontSize: fontSize - 2),
                     keyboardType:

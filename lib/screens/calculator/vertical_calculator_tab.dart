@@ -228,30 +228,23 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
 
   Widget _buildDryRidgeToggle(double fontSize) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          flex: 3,
-          child: Text(
-            'Use Dry Ridge:',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
+        Text(
+          'Use Dry Ridge:',
+          style: TextStyle(fontSize: fontSize - 2),
         ),
-        Expanded(
-          flex: 5,
-          child: OnOffToggle(
-            label: 'Use Dry Ridge',
-            value: _useDryRidge == 'YES',
-            onChanged: (value) {
-              setState(() {
-                _useDryRidge = value ? 'YES' : 'NO';
-              });
-              ref
-                  .read(calculatorProvider.notifier)
-                  .setUseDryRidge(_useDryRidge);
-              _validateInputs();
-            },
-            fontSize: fontSize - 2,
-          ),
+        OnOffToggle(
+          label: 'Use Dry Ridge',
+          value: _useDryRidge == 'YES',
+          onChanged: (value) {
+            setState(() {
+              _useDryRidge = value ? 'YES' : 'NO';
+            });
+            ref.read(calculatorProvider.notifier).setUseDryRidge(_useDryRidge);
+            _validateInputs();
+          },
+          fontSize: fontSize - 2,
         ),
       ],
     );
@@ -270,16 +263,15 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
             children: [
               if (widget.canUseMultipleRafters) ...[
                 Expanded(
-                  flex: 4, // Wider name box
+                  flex: 4,
                   child: Semantics(
                     label: 'Rafter Name ${i + 1}',
                     child: TextField(
                       controller: TextEditingController(text: _rafterNames[i]),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12), // Same height as number box
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                       style: TextStyle(fontSize: fontSize - 2),
                       onChanged: (value) {
@@ -296,8 +288,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                 const SizedBox(width: 8),
               ],
               Expanded(
-                flex:
-                    widget.canUseMultipleRafters ? 3 : 8, // Smaller number box
+                flex: widget.canUseMultipleRafters ? 3 : 8,
                 child: Semantics(
                   label: 'Rafter Measurement ${i + 1}',
                   child: TextField(
@@ -311,7 +302,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                       isDense: true,
                       border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12), // Reduced height
+                          horizontal: 12, vertical: 12),
                     ),
                     style: TextStyle(fontSize: fontSize - 2),
                     keyboardType:

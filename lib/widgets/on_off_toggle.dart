@@ -53,16 +53,6 @@ class _OnOffToggleState extends State<OnOffToggle> {
                   ),
                 ),
               ),
-              Center(
-                child: Text(
-                  widget.value ? 'ON' : 'OFF',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10, // Reduced font size for smaller toggle
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
