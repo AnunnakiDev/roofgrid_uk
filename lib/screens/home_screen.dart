@@ -26,7 +26,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _logAnalyticsEvent(String name,
       [Map<String, Object>? parameters]) async {
     try {
-      // Ensure Firebase is initialized before logging
       await Firebase.initializeApp();
       await _analytics.logEvent(
         name: name,
@@ -48,11 +47,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
+    final themeState = ref.watch(themeStateProvider);
+    final isDarkMode = themeState.themeMode == ThemeMode.dark ||
+        (themeState.themeMode == ThemeMode.system &&
+            MediaQuery.of(context).platformBrightness == Brightness.dark);
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-
-    // Watch themeProvider to get the current theme mode
-    final isDarkMode = ref.watch(themeProvider).themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -61,32 +61,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         actions: [
-          Row(
-            children: [
-              Icon(
-                isDarkMode ? Icons.wb_sunny : Icons.nightlight_round,
-                color: isDarkMode ? Colors.yellow[200] : Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Semantics(
-                label: 'Toggle theme to ${isDarkMode ? "light" : "dark"} mode',
-                child: Switch(
-                  value: isDarkMode,
-                  onChanged: (value) {
-                    ref.read(themeProvider.notifier).toggleTheme(value);
-                  },
-                  activeColor: Theme.of(context).colorScheme.primary,
-                  inactiveThumbColor: Colors.grey,
-                  inactiveTrackColor: Colors.grey.withOpacity(0.5),
+          PopupMenuButton<String>(
+            icon: Icon(
+              themeState.themeMode == ThemeMode.system
+                  ? Icons.brightness_auto
+                  : isDarkMode
+                      ? Icons.nightlight_round
+                      : Icons.wb_sunny,
+              color: isDarkMode ? Colors.yellow[200] : Colors.white,
+              size: 20,
+            ),
+            onSelected: (value) {
+              switch (value) {
+                case 'light':
+                  ref
+                      .read(themeProvider.notifier)
+                      .setThemeMode(ThemeMode.light);
+                  break;
+                case 'dark':
+                  ref.read(themeProvider.notifier).setThemeMode(ThemeMode.dark);
+                  break;
+                case 'system':
+                  ref
+                      .read(themeProvider.notifier)
+                      .setThemeMode(ThemeMode.system);
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'light',
+                child: Row(
+                  children: [
+                    Icon(Icons.wb_sunny, size: 20),
+                    SizedBox(width: 8),
+                    Text('Light Mode'),
+                  ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: _signOut,
-                tooltip: 'Sign out',
+              const PopupMenuItem(
+                value: 'dark',
+                child: Row(
+                  children: [
+                    Icon(Icons.nightlight_round, size: 20),
+                    SizedBox(width: 8),
+                    Text('Dark Mode'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'system',
+                child: Row(
+                  children: [
+                    Icon(Icons.brightness_auto, size: 20),
+                    SizedBox(width: 8),
+                    Text('System'),
+                  ],
+                ),
               ),
             ],
+            tooltip: 'Select theme mode',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _signOut,
+            tooltip: 'Sign out',
           ),
         ],
       ),

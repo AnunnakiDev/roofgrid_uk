@@ -275,7 +275,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
     }
   }
 
-  void _showSnackbar(String message) {
+  void _showSnackbar(String message, {Color backgroundColor = Colors.green}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -284,7 +284,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
                 color: Colors.white,
               ),
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: backgroundColor,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -358,9 +358,6 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
     }
 
     final user = widget.user!; // Safe to use non-null user now
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 24.0 : 16.0;
 
     // Redirect to tile selection if not already done
     if (!_hasRedirectedToTileSelect) {
@@ -398,355 +395,169 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
       });
     }
 
-    // Display error message if present using a Consumer for errorMessage only
-    return Consumer(
-      builder: (context, ref, child) {
-        final errorMessage =
-            ref.watch(calculatorProvider.select((state) => state.errorMessage));
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (errorMessage != null) {
-            print("Showing error message: $errorMessage");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(errorMessage),
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-            );
-            ref.read(calculatorProvider.notifier).clearResults();
-          }
-        });
-        return child!;
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.savedResult != null
-              ? 'Edit Calculation: ${widget.savedResult!.projectName}'
-              : 'Roofing Calculator'),
-          bottom: _currentStep == CalculatorStep.enterMeasurements
-              ? TabBar(
-                  controller: _tabController,
-                  tabs: const [
-                    Tab(
-                      icon: Icon(Icons.straighten),
-                      text: 'Vertical',
-                      iconMargin: EdgeInsets.only(bottom: 4),
-                    ),
-                    Tab(
-                      icon: Icon(Icons.grid_4x4),
-                      text: 'Horizontal',
-                      iconMargin: EdgeInsets.only(bottom: 4),
-                    ),
-                  ],
-                )
-              : null,
-          leading: Builder(
-            builder: (context) => Semantics(
-              label: 'Open navigation drawer',
-              child: IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () {
-                  print("Opening navigation drawer");
-                  Scaffold.of(context).openDrawer();
-                },
-                tooltip: 'Open navigation drawer',
-              ),
+    // Isolate error message handling to reduce rebuild scope
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.savedResult != null
+            ? 'Edit Calculation: ${widget.savedResult!.projectName}'
+            : 'Roofing Calculator'),
+        bottom: _currentStep == CalculatorStep.enterMeasurements
+            ? TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.straighten),
+                    text: 'Vertical',
+                    iconMargin: EdgeInsets.only(bottom: 4),
+                  ),
+                  Tab(
+                    icon: Icon(Icons.grid_4x4),
+                    text: 'Horizontal',
+                    iconMargin: EdgeInsets.only(bottom: 4),
+                  ),
+                ],
+              )
+            : null,
+        leading: Builder(
+          builder: (context) => Semantics(
+            label: 'Open navigation drawer',
+            child: IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                print("Opening navigation drawer");
+                Scaffold.of(context).openDrawer();
+              },
+              tooltip: 'Open navigation drawer',
             ),
           ),
-          actions: [
-            Semantics(
-              label: 'Show calculator information',
-              child: IconButton(
-                icon: const Icon(Icons.info_outline),
-                onPressed: () => _showCalculatorInfo(context),
-                tooltip: 'Show calculator information',
-              ),
-            ),
-          ],
         ),
-        drawer: const MainDrawer(),
-        body: _buildStepContent(context, user, padding),
-        bottomNavigationBar: BottomNavBar(
-          currentIndex: 1, // Highlight Calculator tab
-          onTap: (index) {
-            if (index == 0) {
-              print("Navigating to /home from bottom navigation");
-              context.go('/home');
-            }
-            if (index == 1) {
-              print(
-                  "Navigating to /home from bottom navigation (profile redirect)");
-              context.go('/home');
-            }
-            if (index == 2) {
-              // Tiles
-              if (user.isPro != true) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                print("User not Pro, redirecting to /subscription");
-                context.go('/subscription');
-              } else {
-                print("Navigating to /tiles from bottom navigation");
-                context.go('/tiles');
+        actions: [
+          Semantics(
+            label: 'Show calculator information',
+            child: IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: () => _showCalculatorInfo(context),
+              tooltip: 'Show calculator information',
+            ),
+          ),
+        ],
+      ),
+      drawer: const MainDrawer(),
+      body: Stack(
+        children: [
+          _buildStepContent(context, user),
+          // Isolate error message display
+          Consumer(
+            builder: (context, ref, child) {
+              final errorMessage = ref.watch(
+                  calculatorProvider.select((state) => state.errorMessage));
+              if (errorMessage != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  print("Showing error message: $errorMessage");
+                  _showSnackbar(errorMessage,
+                      backgroundColor: Theme.of(context).colorScheme.error);
+                  ref.read(calculatorProvider.notifier).clearResults();
+                });
               }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: 1, // Highlight Calculator tab
+        onTap: (index) {
+          if (index == 0) {
+            print("Navigating to /home from bottom navigation");
+            context.go('/home');
+          }
+          if (index == 1) {
+            print(
+                "Navigating to /home from bottom navigation (profile redirect)");
+            context.go('/home');
+          }
+          if (index == 2) {
+            // Tiles
+            if (user.isPro != true) {
+              _showSnackbar('Upgrade to Pro to access this feature',
+                  backgroundColor: Theme.of(context).colorScheme.error);
+              print("User not Pro, redirecting to /subscription");
+              context.go('/subscription');
+            } else {
+              print("Navigating to /tiles from bottom navigation");
+              context.go('/tiles');
             }
-            if (index == 3) {
-              // Results
-              if (user.isPro != true) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                print("User not Pro, redirecting to /subscription");
-                context.go('/subscription');
-              } else {
-                print("Navigating to /results from bottom navigation");
-                context.go('/results');
-              }
+          }
+          if (index == 3) {
+            // Results
+            if (user.isPro != true) {
+              _showSnackbar('Upgrade to Pro to access this feature',
+                  backgroundColor: Theme.of(context).colorScheme.error);
+              print("User not Pro, redirecting to /subscription");
+              context.go('/subscription');
+            } else {
+              print("Navigating to /results from bottom navigation");
+              context.go('/results');
             }
-          },
-          items: [
-            const BottomNavItem(
-              label: 'Home',
-              icon: Icons.home,
-              activeIcon: Icons.home_filled,
-            ),
-            const BottomNavItem(
-              label: 'Profile',
-              icon: Icons.person,
-              activeIcon: Icons.person,
-            ),
-            BottomNavItem(
-              label: 'Tiles',
-              icon: Icons.grid_view,
-              activeIcon: Icons.grid_view,
-              tooltip: user.isPro ? 'Tiles' : 'Upgrade to Pro to access tiles',
-            ),
-            BottomNavItem(
-              label: 'Results',
-              icon: Icons.save,
-              activeIcon: Icons.save,
-              tooltip: user.isPro
-                  ? 'Saved Results'
-                  : 'Upgrade to Pro to access saved results',
-            ),
-          ],
-        ),
+          }
+        },
+        items: [
+          const BottomNavItem(
+            label: 'Home',
+            icon: Icons.home,
+            activeIcon: Icons.home_filled,
+          ),
+          const BottomNavItem(
+            label: 'Profile',
+            icon: Icons.person,
+            activeIcon: Icons.person,
+          ),
+          BottomNavItem(
+            label: 'Tiles',
+            icon: Icons.grid_view,
+            activeIcon: Icons.grid_view,
+            tooltip: user.isPro ? 'Tiles' : 'Upgrade to Pro to access tiles',
+          ),
+          BottomNavItem(
+            label: 'Results',
+            icon: Icons.save,
+            activeIcon: Icons.save,
+            tooltip: user.isPro
+                ? 'Saved Results'
+                : 'Upgrade to Pro to access saved results',
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStepContent(
-      BuildContext context, UserModel user, double padding) {
+  Widget _buildStepContent(BuildContext context, UserModel user) {
     switch (_currentStep) {
       case CalculatorStep.confirmTile:
         return const Center(child: CircularProgressIndicator());
       case CalculatorStep.enterMeasurements:
-        return _buildEnterMeasurementsStep(context, user, padding);
+        return _buildEnterMeasurementsStep(context, user);
       case CalculatorStep.viewResults:
-        return _buildViewResultsStep(context, user, padding);
+        return _buildViewResultsStep(context, user);
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Widget _buildEnterMeasurementsStep(
-      BuildContext context, UserModel user, double padding) {
-    final canUseMultipleRafts = user.isPro;
-    final canUseAdvancedOptions = user.isPro;
-    final canExport = user.isPro;
-    final canAccessDatabase = user.isPro;
+  Widget _buildEnterMeasurementsStep(BuildContext context, UserModel user) {
+    // Cache layout values to avoid recalculation
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
+    final padding = isLargeScreen ? 24.0 : 16.0;
     final fontSize = isLargeScreen ? 16.0 : 14.0;
 
     return Column(
       children: [
         // Step Indicator
-        Padding(
-          padding: EdgeInsets.all(padding),
-          child: Semantics(
-            label: 'Step 2 description',
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.0,
-                ),
-              ),
-              child: const Text(
-                'Step 2: Enter Your Measurements',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ).animate().fadeIn(duration: 600.ms),
-          ),
-        ),
+        _buildStepIndicator(
+            'Step 2: Enter Your Measurements', padding, fontSize),
         // Selected Tile Row
-        Padding(
-          padding: EdgeInsets.all(padding),
-          child: Consumer(
-            builder: (context, ref, child) {
-              final selectedTile = ref.watch(
-                  calculatorProvider.select((state) => state.selectedTile));
-              print(
-                  "Rebuilding selected tile row, selectedTile: ${selectedTile?.name}, Image URL: ${selectedTile?.image}");
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        if (user.isPro)
-                          if (selectedTile?.image != null &&
-                              selectedTile!.image!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Image.network(
-                                selectedTile.image!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  debugPrint(
-                                      'Failed to load tile image: ${selectedTile.image}, error: $error');
-                                  return _getPlaceholderImage(
-                                      selectedTile.materialType);
-                                },
-                              ),
-                            )
-                          else
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: selectedTile != null
-                                  ? _getPlaceholderImage(
-                                      selectedTile.materialType)
-                                  : const Icon(
-                                      Icons.broken_image,
-                                      size: 40,
-                                      color: Colors.grey,
-                                    ),
-                            )
-                        else
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: GestureDetector(
-                              onTap: () => context.go('/subscription'),
-                              child: Semantics(
-                                label:
-                                    'Upgrade to Pro for access to the tile database',
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Image.asset(
-                                      'assets/images/upgrade_to_pro.png',
-                                      width: 40,
-                                      height: 40,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                        debugPrint(
-                                            'Failed to load upgrade_to_pro.png, error: $error');
-                                        return const Icon(
-                                          Icons.broken_image,
-                                          size: 40,
-                                          color: Colors.grey,
-                                        );
-                                      },
-                                    ),
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        borderRadius:
-                                            BorderRadius.circular(8.0),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'Upgrade\nto Pro',
-                                          textAlign: TextAlign.center,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelLarge
-                                              ?.copyWith(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        Flexible(
-                          child: Text(
-                            'Selected Tile: ${selectedTile?.name ?? "None"}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: fontSize,
-                                ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (canAccessDatabase)
-                    Semantics(
-                      label: 'Edit selected tile',
-                      child: TextButton(
-                        onPressed: () async {
-                          try {
-                            final selectedTile =
-                                await context.push('/calculator/tile-select');
-                            if (selectedTile != null &&
-                                selectedTile is TileModel) {
-                              print(
-                                  "Tile selected: ${selectedTile.name}, Image URL: ${selectedTile.image}");
-                              ref
-                                  .read(calculatorProvider.notifier)
-                                  .setTile(selectedTile);
-                            } else {
-                              debugPrint(
-                                  'No tile selected or invalid tile data returned');
-                            }
-                          } catch (e) {
-                            debugPrint('Error selecting tile: $e');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error selecting tile: $e'),
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.error,
-                              ),
-                            );
-                          }
-                        },
-                        child: Text(
-                          'Edit Tile',
-                          style: TextStyle(fontSize: fontSize - 2),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
+        _buildSelectedTileRow(user, padding, fontSize),
         // Tabs for Vertical and Horizontal Inputs
         Expanded(
           child: TabBarView(
@@ -754,10 +565,10 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
             children: [
               VerticalCalculatorTab(
                 user: user,
-                canUseMultipleRafters: canUseMultipleRafts,
-                canUseAdvancedOptions: canUseAdvancedOptions,
-                canExport: canExport,
-                canAccessDatabase: canAccessDatabase,
+                canUseMultipleRafters: user.isPro,
+                canUseAdvancedOptions: user.isPro,
+                canExport: user.isPro,
+                canAccessDatabase: user.isPro,
                 initialInputs: _verticalInputs,
                 onInputsConfirmed: (inputs, isValid) {
                   setState(() {
@@ -773,10 +584,10 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
               ),
               HorizontalCalculatorTab(
                 user: user,
-                canUseMultipleWidths: canUseMultipleRafts,
-                canUseAdvancedOptions: canUseAdvancedOptions,
-                canExport: canExport,
-                canAccessDatabase: canAccessDatabase,
+                canUseMultipleWidths: user.isPro,
+                canUseAdvancedOptions: user.isPro,
+                canExport: user.isPro,
+                canAccessDatabase: user.isPro,
                 initialInputs: _horizontalInputs,
                 onInputsConfirmed: (inputs, isValid) {
                   setState(() {
@@ -794,7 +605,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
           ),
         ),
         // Calculate Buttons (shown only after inputs are confirmed)
-        if (_isVerticalInputsConfirmed || _isHorizontalInputsConfirmed) ...[
+        if (_isVerticalInputsConfirmed || _isHorizontalInputsConfirmed)
           Padding(
             padding: EdgeInsets.all(padding),
             child: Column(
@@ -817,43 +628,20 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
               ],
             ),
           ),
-        ],
       ],
     );
   }
 
-  Widget _buildViewResultsStep(
-      BuildContext context, UserModel user, double padding) {
+  Widget _buildViewResultsStep(BuildContext context, UserModel user) {
     final calcState = ref.watch(calculatorProvider);
-    final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeScreen = screenWidth >= 600;
+    final padding = isLargeScreen ? 24.0 : 16.0;
+    final fontSize = isLargeScreen ? 16.0 : 14.0;
 
     return Column(
       children: [
-        Padding(
-          padding: EdgeInsets.all(padding),
-          child: Semantics(
-            label: 'Step 3 description',
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.0,
-                ),
-              ),
-              child: const Text(
-                'Step 3: View Results',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ).animate().fadeIn(duration: 600.ms),
-          ),
-        ),
+        _buildStepIndicator('Step 3: View Results', padding, fontSize),
         Expanded(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(padding),
@@ -960,6 +748,185 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
     );
   }
 
+  // Extracted method for step indicator
+  Widget _buildStepIndicator(String title, double padding, double fontSize) {
+    return Padding(
+      padding: EdgeInsets.all(padding),
+      child: Semantics(
+        label: title,
+        child: Container(
+          padding: const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8.0),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: 1.0,
+            ),
+          ),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ).animate().fadeIn(duration: 600.ms),
+      ),
+    );
+  }
+
+  // Extracted method for selected tile row
+  Widget _buildSelectedTileRow(
+      UserModel user, double padding, double fontSize) {
+    return Padding(
+      padding: EdgeInsets.all(padding),
+      child: Consumer(
+        builder: (context, ref, child) {
+          final selectedTile = ref
+              .watch(calculatorProvider.select((state) => state.selectedTile));
+          print(
+              "Rebuilding selected tile row, selectedTile: ${selectedTile?.name}, Image URL: ${selectedTile?.image}");
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    if (user.isPro)
+                      if (selectedTile?.image != null &&
+                          selectedTile!.image!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Image.network(
+                            selectedTile.image!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              debugPrint(
+                                  'Failed to load tile image: ${selectedTile.image}, error: $error');
+                              return _getPlaceholderImage(
+                                  selectedTile.materialType);
+                            },
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: selectedTile != null
+                              ? _getPlaceholderImage(selectedTile.materialType)
+                              : const Icon(
+                                  Icons.broken_image,
+                                  size: 40,
+                                  color: Colors.grey,
+                                ),
+                        )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: GestureDetector(
+                          onTap: () => context.go('/subscription'),
+                          child: Semantics(
+                            label:
+                                'Upgrade to Pro for access to the tile database',
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/images/upgrade_to_pro.png',
+                                  width: 40,
+                                  height: 40,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    debugPrint(
+                                        'Failed to load upgrade_to_pro.png, error: $error');
+                                    return const Icon(
+                                      Icons.broken_image,
+                                      size: 40,
+                                      color: Colors.grey,
+                                    );
+                                  },
+                                ),
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Upgrade\nto Pro',
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    Flexible(
+                      child: Text(
+                        'Selected Tile: ${selectedTile?.name ?? "None"}',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: fontSize,
+                                ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (user.isPro)
+                Semantics(
+                  label: 'Edit selected tile',
+                  child: TextButton(
+                    onPressed: () async {
+                      try {
+                        final selectedTile =
+                            await context.push('/calculator/tile-select');
+                        if (selectedTile != null && selectedTile is TileModel) {
+                          print(
+                              "Tile selected: ${selectedTile.name}, Image URL: ${selectedTile.image}");
+                          ref
+                              .read(calculatorProvider.notifier)
+                              .setTile(selectedTile);
+                        } else {
+                          debugPrint(
+                              'No tile selected or invalid tile data returned');
+                        }
+                      } catch (e) {
+                        debugPrint('Error selecting tile: $e');
+                        _showSnackbar('Error selecting tile: $e',
+                            backgroundColor:
+                                Theme.of(context).colorScheme.error);
+                      }
+                    },
+                    child: Text(
+                      'Edit Tile',
+                      style: TextStyle(fontSize: fontSize - 2),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildCalculationContext(BuildContext context, double fontSize) {
     return Consumer(
       builder: (context, ref, child) {
@@ -973,10 +940,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
           contextRows.add(_infoRow('Tile Name', selectedTile.name));
           contextRows.add(
               _infoRow('Material Type', selectedTile.materialType.toString()));
-          contextRows.add(
-              _infoRow('Cover Width', '${selectedTile.tileCoverWidth} mm'));
-          contextRows
-              .add(_infoRow('Height', '${selectedTile.slateTileHeight} mm'));
+          if (selectedTile.tileCoverWidth != null) {
+            contextRows.add(
+                _infoRow('Cover Width', '${selectedTile.tileCoverWidth} mm'));
+          }
+          if (selectedTile.slateTileHeight != null) {
+            contextRows
+                .add(_infoRow('Height', '${selectedTile.slateTileHeight} mm'));
+          }
         } else {
           contextRows.add(_infoRow('Tile Name', 'N/A'));
         }
@@ -1023,7 +994,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Calculation Context',
+                  'calculation context',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         fontSize: fontSize,
@@ -1432,15 +1403,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
     );
   }
 
-  void _calculateVertical(UserModel user) async {
+  Future<void> _calculateVertical(UserModel user) async {
     debugPrint('Starting _calculateVertical');
     final calculatorState = ref.read(calculatorProvider);
     debugPrint('Selected tile: ${calculatorState.selectedTile?.name}');
     if (calculatorState.selectedTile == null) {
       debugPrint('No tile selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a tile first')),
-      );
+      _showSnackbar('Please select a tile first',
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1450,10 +1420,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
 
     if (rafterHeights.isEmpty) {
       debugPrint('No rafter heights provided');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter at least one rafter height')),
-      );
+      _showSnackbar('Please enter at least one rafter height',
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1465,23 +1433,18 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
 
     setState(() {
       _lastVerticalCalculationData = result;
-      if (_lastHorizontalCalculationData != null) {
-        _currentStep = CalculatorStep.viewResults;
-      } else {
-        _currentStep = CalculatorStep.viewResults;
-      }
+      _currentStep = CalculatorStep.viewResults;
     });
   }
 
-  void _calculateHorizontal(UserModel user) async {
+  Future<void> _calculateHorizontal(UserModel user) async {
     debugPrint('Starting _calculateHorizontal');
     final calculatorState = ref.read(calculatorProvider);
     debugPrint('Selected tile: ${calculatorState.selectedTile?.name}');
     if (calculatorState.selectedTile == null) {
       debugPrint('No tile selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a tile first')),
-      );
+      _showSnackbar('Please select a tile first',
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1491,9 +1454,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
 
     if (widths.isEmpty) {
       debugPrint('No widths provided');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter at least one width')),
-      );
+      _showSnackbar('Please enter at least one width',
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1504,23 +1466,37 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
 
     setState(() {
       _lastHorizontalCalculationData = result;
-      if (_lastVerticalCalculationData != null) {
-        _currentStep = CalculatorStep.viewResults;
-      } else {
-        _currentStep = CalculatorStep.viewResults;
-      }
+      _currentStep = CalculatorStep.viewResults;
     });
   }
 
-  void _calculateCombined(UserModel user) async {
+  Future<void> _calculateCombined(UserModel user) async {
     debugPrint('Starting _calculateCombined');
     final calculatorState = ref.read(calculatorProvider);
     debugPrint('Selected tile: ${calculatorState.selectedTile?.name}');
     if (calculatorState.selectedTile == null) {
       debugPrint('No tile selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a tile first')),
-      );
+      _showSnackbar('Please select a tile first',
+          backgroundColor: Theme.of(context).colorScheme.error);
+      return;
+    }
+
+    // Validate required tile properties
+    final tile = calculatorState.selectedTile!;
+    final missingFields = [];
+    if (tile.slateTileHeight == null) missingFields.add('slateTileHeight');
+    if (tile.maxGauge == null) missingFields.add('maxGauge');
+    if (tile.minGauge == null) missingFields.add('minGauge');
+    if (tile.tileCoverWidth == null) missingFields.add('tileCoverWidth');
+    if (tile.minSpacing == null) missingFields.add('minSpacing');
+    if (tile.maxSpacing == null) missingFields.add('maxSpacing');
+
+    if (missingFields.isNotEmpty) {
+      final errorMessage =
+          'Tile "${tile.name}" is missing required properties: ${missingFields.join(", ")}';
+      debugPrint(errorMessage);
+      _showSnackbar(errorMessage,
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1533,10 +1509,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
 
     if (rafterHeights.isEmpty || widths.isEmpty) {
       debugPrint('Missing inputs for combined calculation');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter both rafter heights and widths')),
-      );
+      _showSnackbar('Please enter both rafter heights and widths',
+          backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
@@ -1545,15 +1519,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
           await ref.read(calculationServiceProvider).calculateCombined(
                 rafterHeights: rafterHeights,
                 widths: widths,
-                materialType: calculatorState.selectedTile!.materialTypeString,
-                slateTileHeight: calculatorState.selectedTile!.slateTileHeight,
-                maxGauge: calculatorState.selectedTile!.maxGauge,
-                minGauge: calculatorState.selectedTile!.minGauge,
-                tileCoverWidth: calculatorState.selectedTile!.tileCoverWidth,
-                minSpacing: calculatorState.selectedTile!.minSpacing,
-                maxSpacing: calculatorState.selectedTile!.maxSpacing,
-                lhTileWidth: calculatorState.selectedTile!.leftHandTileWidth ??
-                    calculatorState.selectedTile!.tileCoverWidth,
+                materialType: tile.materialTypeString,
+                slateTileHeight: tile.slateTileHeight!,
+                maxGauge: tile.maxGauge!,
+                minGauge: tile.minGauge!,
+                tileCoverWidth: tile.tileCoverWidth!,
+                minSpacing: tile.minSpacing!,
+                maxSpacing: tile.maxSpacing!,
+                lhTileWidth: tile.leftHandTileWidth ?? tile.tileCoverWidth!,
                 gutterOverhang: _verticalInputs.gutterOverhang,
                 useDryRidge: _verticalInputs.useDryRidge,
                 useDryVerge: _horizontalInputs.useDryVerge,
@@ -1599,12 +1572,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
       });
     } catch (e) {
       debugPrint('Error in combined calculation: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to calculate: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      _showSnackbar('Failed to calculate: $e',
+          backgroundColor: Theme.of(context).colorScheme.error);
     }
   }
 
@@ -1640,11 +1609,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
           TextButton(
             onPressed: () async {
               if (projectNameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a project name'),
-                  ),
-                );
+                _showSnackbar('Please enter a project name',
+                    backgroundColor: Theme.of(context).colorScheme.error);
                 return;
               }
               final updatedCalculationData =
@@ -1696,11 +1662,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
           TextButton(
             onPressed: () async {
               if (projectNameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a project name'),
-                  ),
-                );
+                _showSnackbar('Please enter a project name',
+                    backgroundColor: Theme.of(context).colorScheme.error);
                 return;
               }
               final combinedCalculationData = {
@@ -1771,12 +1734,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
     } catch (e) {
       debugPrint('Error saving calculation: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save calculation: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        _showSnackbar('Failed to save calculation: $e',
+            backgroundColor: Theme.of(context).colorScheme.error);
       }
     }
 
@@ -1795,33 +1754,19 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent>
       } catch (e) {
         debugPrint('Error saving to Hive: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text('Saved to Firestore, but failed to save offline: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          _showSnackbar('Saved to Firestore, but failed to save offline: $e',
+              backgroundColor: Theme.of(context).colorScheme.error);
         }
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Calculation result saved successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnackbar('Calculation result saved successfully');
       }
     } catch (e) {
       debugPrint('Error saving result: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save result: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        _showSnackbar('Failed to save result: $e',
+            backgroundColor: Theme.of(context).colorScheme.error);
       }
     }
   }
