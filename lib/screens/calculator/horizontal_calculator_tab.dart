@@ -5,6 +5,8 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/form_validator.dart';
+import 'package:roofgrid_uk/widgets/on_off_toggle.dart';
 
 class HorizontalCalculatorTab extends ConsumerStatefulWidget {
   final UserModel user;
@@ -13,8 +15,7 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
   final bool canExport;
   final bool canAccessDatabase;
   final HorizontalInputs initialInputs;
-  final void Function(HorizontalInputs, bool)
-      onInputsConfirmed; // Updated callback
+  final void Function(HorizontalInputs, bool) onInputsChanged;
 
   const HorizontalCalculatorTab({
     super.key,
@@ -24,7 +25,7 @@ class HorizontalCalculatorTab extends ConsumerStatefulWidget {
     required this.canExport,
     required this.canAccessDatabase,
     required this.initialInputs,
-    required this.onInputsConfirmed,
+    required this.onInputsChanged,
   });
 
   @override
@@ -38,7 +39,6 @@ class HorizontalCalculatorTabState
   late String _useDryVerge;
   late String _abutmentSide;
   late String _useLHTile;
-  late String _crossBonded;
   bool _isOnline = true;
   List<Color> _widthColors = [];
   bool _isInputsValid = false;
@@ -61,7 +61,6 @@ class HorizontalCalculatorTabState
     _useDryVerge = widget.initialInputs.useDryVerge;
     _abutmentSide = widget.initialInputs.abutmentSide;
     _useLHTile = widget.initialInputs.useLHTile;
-    _crossBonded = widget.initialInputs.crossBonded;
 
     // Assign colors to each width
     _widthColors = _widthNames
@@ -76,6 +75,7 @@ class HorizontalCalculatorTabState
         _isOnline = result != ConnectivityResult.none;
       });
     });
+
     if (widget.user.isTrialAboutToExpire) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showTrialExpirationWarning(context);
@@ -108,20 +108,11 @@ class HorizontalCalculatorTabState
   }
 
   void _validateInputs() {
-    bool isValid = true;
-    for (final controller in _widthControllers) {
-      final value = double.tryParse(controller.text);
-      if (value == null || value <= 0) {
-        isValid = false;
-        break;
-      }
-    }
+    final isValid = FormValidator.validatePositiveNumbers(_widthControllers);
     setState(() {
       _isInputsValid = isValid;
     });
-  }
 
-  void _confirmInputs() {
     final inputs = HorizontalInputs(
       widths: _widthControllers.asMap().entries.map((entry) {
         final index = entry.key;
@@ -134,9 +125,9 @@ class HorizontalCalculatorTabState
       useDryVerge: _useDryVerge,
       abutmentSide: _abutmentSide,
       useLHTile: _useLHTile,
-      crossBonded: _crossBonded,
+      crossBonded: '',
     );
-    widget.onInputsConfirmed(inputs, _isInputsValid);
+    widget.onInputsChanged(inputs, _isInputsValid);
   }
 
   @override
@@ -151,15 +142,14 @@ class HorizontalCalculatorTabState
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 24.0 : 16.0;
-    final fontSize = isLargeScreen ? 16.0 : 14.0;
+    final padding = isLargeScreen ? 12.0 : 8.0;
+    final fontSize = isLargeScreen ? 14.0 : 12.0;
 
-    return SingleChildScrollView(
+    return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 16),
           Text(
             'Options',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -168,11 +158,17 @@ class HorizontalCalculatorTabState
                 ),
           ),
           const SizedBox(height: 8),
-          _buildDryVergeToggle(fontSize),
           _buildAbutmentSideSelector(fontSize),
-          _buildLHTileToggle(fontSize),
-          _buildCrossBondedToggle(fontSize),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: _buildDryVergeToggle(fontSize)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildLHTileToggle(fontSize)),
+            ],
+          ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -199,23 +195,6 @@ class HorizontalCalculatorTabState
           const SizedBox(height: 8),
           ..._buildWidthInputs(fontSize),
           if (!widget.canUseMultipleWidths) _buildProFeaturePrompt(fontSize),
-          const SizedBox(height: 16),
-          Semantics(
-            label: 'Confirm Horizontal Inputs',
-            child: ElevatedButton(
-              onPressed: _isInputsValid ? _confirmInputs : null,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              child: Text(
-                'Done',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Colors.white,
-                    ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -233,42 +212,19 @@ class HorizontalCalculatorTabState
         ),
         Expanded(
           flex: 5,
-          child: Row(
-            children: [
-              Semantics(
-                label: 'Use Dry Verge Yes',
-                child: Radio<String>(
-                  value: 'YES',
-                  groupValue: _useDryVerge,
-                  onChanged: (value) {
-                    setState(() {
-                      _useDryVerge = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setUseDryVerge(value!);
-                  },
-                ),
-              ),
-              Text('Yes', style: TextStyle(fontSize: fontSize - 2)),
-              const SizedBox(width: 16),
-              Semantics(
-                label: 'Use Dry Verge No',
-                child: Radio<String>(
-                  value: 'NO',
-                  groupValue: _useDryVerge,
-                  onChanged: (value) {
-                    setState(() {
-                      _useDryVerge = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setUseDryVerge(value!);
-                  },
-                ),
-              ),
-              Text('No', style: TextStyle(fontSize: fontSize - 2)),
-            ],
+          child: OnOffToggle(
+            label: 'Use Dry Verge',
+            value: _useDryVerge == 'YES',
+            onChanged: (value) {
+              setState(() {
+                _useDryVerge = value ? 'YES' : 'NO';
+              });
+              ref
+                  .read(calculatorProvider.notifier)
+                  .setUseDryVerge(_useDryVerge);
+              _validateInputs();
+            },
+            fontSize: fontSize - 2,
           ),
         ),
       ],
@@ -292,6 +248,8 @@ class HorizontalCalculatorTabState
             child: DropdownButton<String>(
               value: _abutmentSide,
               isExpanded: true,
+              isDense: true,
+              underline: const SizedBox(),
               items: const [
                 DropdownMenuItem(value: 'NONE', child: Text('None')),
                 DropdownMenuItem(value: 'LEFT', child: Text('Left')),
@@ -303,8 +261,12 @@ class HorizontalCalculatorTabState
                   _abutmentSide = value!;
                 });
                 ref.read(calculatorProvider.notifier).setAbutmentSide(value!);
+                _validateInputs();
               },
-              style: TextStyle(fontSize: fontSize - 2),
+              style: TextStyle(
+                  fontSize: fontSize - 2,
+                  color: Theme.of(context).textTheme.bodyMedium?.color),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
             ),
           ),
         ),
@@ -324,92 +286,17 @@ class HorizontalCalculatorTabState
         ),
         Expanded(
           flex: 5,
-          child: Row(
-            children: [
-              Semantics(
-                label: 'Use Left Hand Tile Yes',
-                child: Radio<String>(
-                  value: 'YES',
-                  groupValue: _useLHTile,
-                  onChanged: (value) {
-                    setState(() {
-                      _useLHTile = value!;
-                    });
-                    ref.read(calculatorProvider.notifier).setUseLHTile(value!);
-                  },
-                ),
-              ),
-              Text('Yes', style: TextStyle(fontSize: fontSize - 2)),
-              const SizedBox(width: 16),
-              Semantics(
-                label: 'Use Left Hand Tile No',
-                child: Radio<String>(
-                  value: 'NO',
-                  groupValue: _useLHTile,
-                  onChanged: (value) {
-                    setState(() {
-                      _useLHTile = value!;
-                    });
-                    ref.read(calculatorProvider.notifier).setUseLHTile(value!);
-                  },
-                ),
-              ),
-              Text('No', style: TextStyle(fontSize: fontSize - 2)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCrossBondedToggle(double fontSize) {
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Text(
-            'Cross Bonded:',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
-        ),
-        Expanded(
-          flex: 5,
-          child: Row(
-            children: [
-              Semantics(
-                label: 'Cross Bonded Yes',
-                child: Radio<String>(
-                  value: 'YES',
-                  groupValue: _crossBonded,
-                  onChanged: (value) {
-                    setState(() {
-                      _crossBonded = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setCrossBonded(value!);
-                  },
-                ),
-              ),
-              Text('Yes', style: TextStyle(fontSize: fontSize - 2)),
-              const SizedBox(width: 16),
-              Semantics(
-                label: 'Cross Bonded No',
-                child: Radio<String>(
-                  value: 'NO',
-                  groupValue: _crossBonded,
-                  onChanged: (value) {
-                    setState(() {
-                      _crossBonded = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setCrossBonded(value!);
-                  },
-                ),
-              ),
-              Text('No', style: TextStyle(fontSize: fontSize - 2)),
-            ],
+          child: OnOffToggle(
+            label: 'Use Left Hand Tile',
+            value: _useLHTile == 'YES',
+            onChanged: (value) {
+              setState(() {
+                _useLHTile = value ? 'YES' : 'NO';
+              });
+              ref.read(calculatorProvider.notifier).setUseLHTile(_useLHTile);
+              _validateInputs();
+            },
+            fontSize: fontSize - 2,
           ),
         ),
       ],
@@ -424,7 +311,7 @@ class HorizontalCalculatorTabState
     for (int i = 0; i < displayCount; i++) {
       widthInputs.add(
         Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
+          padding: const EdgeInsets.only(bottom: 8.0),
           child: Row(
             children: [
               if (widget.canUseMultipleWidths) ...[
@@ -446,6 +333,7 @@ class HorizontalCalculatorTabState
                               ? value
                               : 'Width ${i + 1}'; // Default name if empty
                         });
+                        _validateInputs();
                       },
                     ),
                   ),
@@ -464,6 +352,7 @@ class HorizontalCalculatorTabState
                       hintText: 'e.g., 4000',
                       suffixText: 'mm',
                       isDense: true,
+                      border: const OutlineInputBorder(),
                     ),
                     style: TextStyle(fontSize: fontSize - 2),
                     keyboardType:
@@ -497,7 +386,7 @@ class HorizontalCalculatorTabState
 
   Widget _buildProFeaturePrompt(double fontSize) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color:

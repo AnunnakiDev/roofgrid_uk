@@ -65,3 +65,5 @@ flutter:
     - assets/images/logo/RoofGridUk-Logo-hor-500.png
     - assets/images/logo/RoofGridUk-Logo-hor-250.png
     - assets/images/logo/logo-square-600.png
+    - assets/images/toggle_on.png
+    - assets/images/toggle_off.png

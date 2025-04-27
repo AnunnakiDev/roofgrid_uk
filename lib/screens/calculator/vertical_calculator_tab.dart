@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/form_validator.dart';
+import 'package:roofgrid_uk/widgets/on_off_toggle.dart';
 
 class VerticalCalculatorTab extends ConsumerStatefulWidget {
   final UserModel user;
@@ -12,8 +15,7 @@ class VerticalCalculatorTab extends ConsumerStatefulWidget {
   final bool canExport;
   final bool canAccessDatabase;
   final VerticalInputs initialInputs;
-  final void Function(VerticalInputs, bool)
-      onInputsConfirmed; // Updated callback
+  final void Function(VerticalInputs, bool) onInputsChanged;
 
   const VerticalCalculatorTab({
     super.key,
@@ -23,19 +25,19 @@ class VerticalCalculatorTab extends ConsumerStatefulWidget {
     required this.canExport,
     required this.canAccessDatabase,
     required this.initialInputs,
-    required this.onInputsConfirmed,
+    required this.onInputsChanged,
   });
 
   @override
   VerticalCalculatorTabState createState() => VerticalCalculatorTabState();
 }
 
-class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
-    with SingleTickerProviderStateMixin {
+class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
   late List<TextEditingController> _rafterControllers;
   late List<String> _rafterNames;
   late double _gutterOverhang;
   late String _useDryRidge;
+  bool _isOnline = true;
   List<Color> _rafterColors = [];
   bool _isInputsValid = false;
 
@@ -64,6 +66,13 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
         .map((entry) => _getColorForIndex(entry.key))
         .toList();
 
+    _checkConnectivity();
+    Connectivity().onConnectivityChanged.listen((result) {
+      setState(() {
+        _isOnline = result != ConnectivityResult.none;
+      });
+    });
+
     if (widget.user.isTrialAboutToExpire) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showTrialExpirationWarning(context);
@@ -88,29 +97,19 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
     return colors[index % colors.length];
   }
 
-  @override
-  void dispose() {
-    for (final controller in _rafterControllers) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  void _validateInputs() {
-    bool isValid = true;
-    for (final controller in _rafterControllers) {
-      final value = double.tryParse(controller.text);
-      if (value == null || value <= 0) {
-        isValid = false;
-        break;
-      }
-    }
+  Future<void> _checkConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
     setState(() {
-      _isInputsValid = isValid;
+      _isOnline = result != ConnectivityResult.none;
     });
   }
 
-  void _confirmInputs() {
+  void _validateInputs() {
+    final isValid = FormValidator.validatePositiveNumbers(_rafterControllers);
+    setState(() {
+      _isInputsValid = isValid;
+    });
+
     final inputs = VerticalInputs(
       rafterHeights: _rafterControllers.asMap().entries.map((entry) {
         final index = entry.key;
@@ -123,22 +122,29 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
       gutterOverhang: _gutterOverhang,
       useDryRidge: _useDryRidge,
     );
-    widget.onInputsConfirmed(inputs, _isInputsValid);
+    widget.onInputsChanged(inputs, _isInputsValid);
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _rafterControllers) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 24.0 : 16.0;
-    final fontSize = isLargeScreen ? 16.0 : 14.0;
+    final padding = isLargeScreen ? 16.0 : 12.0;
+    final fontSize = isLargeScreen ? 14.0 : 12.0;
 
-    return SingleChildScrollView(
+    return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 16),
           Text(
             'Options',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -147,14 +153,53 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                 ),
           ),
           const SizedBox(height: 8),
-          _buildGutterOverhangSlider(fontSize),
           _buildDryRidgeToggle(fontSize),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Rafter Height',
+                'Gutter Overhang',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: fontSize,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: _gutterOverhang,
+                  min: 0.0,
+                  max: 100.0,
+                  divisions: 100,
+                  label: '${_gutterOverhang.round()} mm',
+                  onChanged: (value) {
+                    setState(() {
+                      _gutterOverhang = value;
+                    });
+                    ref
+                        .read(calculatorProvider.notifier)
+                        .setGutterOverhang(value);
+                    _validateInputs();
+                  },
+                ),
+              ),
+              Text(
+                '${_gutterOverhang.round()} mm',
+                style: TextStyle(fontSize: fontSize - 2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Rafter Measurements',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       fontSize: fontSize,
@@ -176,65 +221,8 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
           const SizedBox(height: 8),
           ..._buildRafterInputs(fontSize),
           if (!widget.canUseMultipleRafters) _buildProFeaturePrompt(fontSize),
-          const SizedBox(height: 16),
-          Semantics(
-            label: 'Confirm Vertical Inputs',
-            child: ElevatedButton(
-              onPressed: _isInputsValid ? _confirmInputs : null,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              child: Text(
-                'Done',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Colors.white,
-                    ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
         ],
       ),
-    );
-  }
-
-  Widget _buildGutterOverhangSlider(double fontSize) {
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Text(
-            'Gutter Overhang:',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
-        ),
-        Expanded(
-          flex: 5,
-          child: Semantics(
-            label: 'Gutter Overhang Slider',
-            child: Slider(
-              value: _gutterOverhang,
-              min: 25.0,
-              max: 75.0,
-              divisions: 10,
-              label: '${_gutterOverhang.round()} mm',
-              onChanged: (value) {
-                setState(() {
-                  _gutterOverhang = value;
-                });
-                ref.read(calculatorProvider.notifier).setGutterOverhang(value);
-              },
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 50,
-          child: Text(
-            '${_gutterOverhang.round()} mm',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
-        ),
-      ],
     );
   }
 
@@ -250,42 +238,19 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
         ),
         Expanded(
           flex: 5,
-          child: Row(
-            children: [
-              Semantics(
-                label: 'Use Dry Ridge Yes',
-                child: Radio<String>(
-                  value: 'YES',
-                  groupValue: _useDryRidge,
-                  onChanged: (value) {
-                    setState(() {
-                      _useDryRidge = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setUseDryRidge(value!);
-                  },
-                ),
-              ),
-              Text('Yes', style: TextStyle(fontSize: fontSize - 2)),
-              const SizedBox(width: 16),
-              Semantics(
-                label: 'Use Dry Ridge No',
-                child: Radio<String>(
-                  value: 'NO',
-                  groupValue: _useDryRidge,
-                  onChanged: (value) {
-                    setState(() {
-                      _useDryRidge = value!;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setUseDryRidge(value!);
-                  },
-                ),
-              ),
-              Text('No', style: TextStyle(fontSize: fontSize - 2)),
-            ],
+          child: OnOffToggle(
+            label: 'Use Dry Ridge',
+            value: _useDryRidge == 'YES',
+            onChanged: (value) {
+              setState(() {
+                _useDryRidge = value ? 'YES' : 'NO';
+              });
+              ref
+                  .read(calculatorProvider.notifier)
+                  .setUseDryRidge(_useDryRidge);
+              _validateInputs();
+            },
+            fontSize: fontSize - 2,
           ),
         ),
       ],
@@ -300,20 +265,21 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
     for (int i = 0; i < displayCount; i++) {
       rafterInputs.add(
         Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
+          padding: const EdgeInsets.only(bottom: 8.0),
           child: Row(
             children: [
               if (widget.canUseMultipleRafters) ...[
                 Expanded(
-                  flex: 3,
+                  flex: 4, // Wider name box
                   child: Semantics(
                     label: 'Rafter Name ${i + 1}',
                     child: TextField(
                       controller: TextEditingController(text: _rafterNames[i]),
                       decoration: const InputDecoration(
                         isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12), // Same height as number box
                       ),
                       style: TextStyle(fontSize: fontSize - 2),
                       onChanged: (value) {
@@ -322,25 +288,30 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
                               ? value
                               : 'Rafter ${i + 1}'; // Default name if empty
                         });
+                        _validateInputs();
                       },
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 8),
               ],
               Expanded(
-                flex: widget.canUseMultipleRafters ? 5 : 8,
+                flex:
+                    widget.canUseMultipleRafters ? 3 : 8, // Smaller number box
                 child: Semantics(
-                  label: 'Rafter Height ${i + 1}',
+                  label: 'Rafter Measurement ${i + 1}',
                   child: TextField(
                     controller: _rafterControllers[i],
                     decoration: InputDecoration(
                       labelText: widget.canUseMultipleRafters
                           ? null
-                          : 'Rafter height in mm',
-                      hintText: 'e.g., 6000',
+                          : 'Rafter Height in mm',
+                      hintText: 'e.g., 4000',
                       suffixText: 'mm',
                       isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12), // Reduced height
                     ),
                     style: TextStyle(fontSize: fontSize - 2),
                     keyboardType:
@@ -374,7 +345,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab>
 
   Widget _buildProFeaturePrompt(double fontSize) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color:
