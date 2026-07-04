@@ -248,6 +248,8 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
     final keyboardInset = View.of(context).viewInsets.bottom;
     final keyboardOpen = keyboardInset > 0;
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padding),
       child: Column(
@@ -256,41 +258,28 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
             CalculatorKeyboardContextBar(
               calculationType: widget.calculationType,
             )
-          else ...[
+          else
             Padding(
-              padding: EdgeInsets.only(top: padding, bottom: 8),
-              child: const CalculatorStepProgress(
-                currentStep: CalculatorFlowStep.enterMeasurements,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: SelectedTileRow(
-                user: widget.user,
-                effectiveIsPro: widget.effectiveIsPro,
-                previewSize: isLargeScreen ? 88 : 72,
-                placeholderImageBuilder: widget.placeholderImageBuilder,
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Chip(
-                avatar: Icon(
-                  Icons.straighten,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-                label: Text(
-                  calculationTypeLabel(widget.calculationType),
-                  style: GoogleFonts.poppins(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.w600,
+              padding: EdgeInsets.only(top: padding, bottom: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CalculatorStepProgress(
+                    currentStep: CalculatorFlowStep.enterMeasurements,
+                    compact: !isLargeScreen,
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    calculationTypeLabel(widget.calculationType),
+                    style: GoogleFonts.poppins(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.secondary,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-          ],
           Expanded(
             child: Column(
               children: [
@@ -299,7 +288,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                     controller: _scrollController,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.only(bottom: keyboardInset + 16),
+                    padding: EdgeInsets.only(bottom: keyboardInset + 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -372,11 +361,32 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                     ),
                   ),
                 ),
+                if (!keyboardOpen)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: colorScheme.outlineVariant
+                              .withValues(alpha: 0.5),
+                        ),
+                      ),
+                      color: colorScheme.surface,
+                    ),
+                    child: SelectedTileRow(
+                      user: widget.user,
+                      effectiveIsPro: widget.effectiveIsPro,
+                      compact: true,
+                      placeholderImageBuilder: widget.placeholderImageBuilder,
+                    ),
+                  ),
                 SafeArea(
                   top: false,
                   bottom: true,
                   child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: padding),
+                    padding: EdgeInsets.only(
+                      top: keyboardOpen ? padding : 4,
+                      bottom: padding,
+                    ),
                     child: ElevatedButton.icon(
                       onPressed: _isCalculateEnabled()
                           ? () => widget.onCalculate(

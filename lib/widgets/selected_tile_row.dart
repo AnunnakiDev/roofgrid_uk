@@ -14,6 +14,7 @@ class SelectedTileRow extends ConsumerWidget {
   final bool effectiveIsPro;
   final Widget Function(TileSlateType) placeholderImageBuilder;
   final double previewSize;
+  final bool compact;
 
   const SelectedTileRow({
     super.key,
@@ -21,6 +22,7 @@ class SelectedTileRow extends ConsumerWidget {
     required this.effectiveIsPro,
     required this.placeholderImageBuilder,
     this.previewSize = 72,
+    this.compact = false,
   });
 
   void _openManualTileDialog(BuildContext context, WidgetRef ref) {
@@ -39,19 +41,67 @@ class SelectedTileRow extends ConsumerWidget {
     );
   }
 
+  Future<void> _openTilePicker(BuildContext context, WidgetRef ref) async {
+    try {
+      final result = await context.push('/calculator/tile-select');
+      if (result != null && result is TileModel) {
+        ref.read(calculatorProvider.notifier).setTile(result);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error selecting tile: $e');
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting tile: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 12.0 : 8.0;
+    final padding = compact
+        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
+        : EdgeInsets.all(isLargeScreen ? 12.0 : 8.0);
     final fontSize = isLargeScreen ? 14.0 : 12.0;
+    final thumbSize = compact ? 36.0 : previewSize;
     final canBrowseDatabase = effectiveIsPro;
 
     final selectedTile =
         ref.watch(calculatorProvider.select((state) => state.selectedTile));
 
+    final editButton = canBrowseDatabase
+        ? Semantics(
+            label: 'Edit selected tile',
+            child: TextButton(
+              onPressed: () => _openTilePicker(context, ref),
+              child: Text(
+                compact ? 'Edit' : 'Edit Tile',
+                style: TextStyle(fontSize: fontSize - 2),
+              ),
+            ),
+          )
+        : selectedTile != null
+            ? Semantics(
+                label: 'Change tile specifications',
+                child: TextButton(
+                  onPressed: () => _openManualTileDialog(context, ref),
+                  child: Text(
+                    compact ? 'Edit' : 'Change Specs',
+                    style: TextStyle(fontSize: fontSize - 2),
+                  ),
+                ),
+              )
+            : null;
+
     return Padding(
-      padding: EdgeInsets.all(padding),
+      padding: padding,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -60,99 +110,71 @@ class SelectedTileRow extends ConsumerWidget {
               image: selectedTile.image,
               materialType: selectedTile.materialType,
               placeholderBuilder: placeholderImageBuilder,
-              width: previewSize,
-              height: previewSize,
-              borderRadius: BorderRadius.circular(10),
+              width: thumbSize,
+              height: thumbSize,
+              borderRadius: BorderRadius.circular(compact ? 6 : 10),
             )
           else
             SizedBox(
-              width: previewSize,
-              height: previewSize,
+              width: thumbSize,
+              height: thumbSize,
               child: Icon(
                 Icons.image_not_supported_outlined,
-                size: previewSize * 0.45,
+                size: thumbSize * 0.45,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-          const SizedBox(width: 12),
+          SizedBox(width: compact ? 8 : 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Selected Tile',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  selectedTile?.name ?? 'None',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: fontSize + 1,
-                      ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (!canBrowseDatabase) ...[
-                  const SizedBox(height: 4),
-                  GestureDetector(
-                    onTap: () => context.go('/subscription'),
-                    child: Text(
-                      'Upgrade to Pro for the full tile database',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                            decoration: TextDecoration.underline,
-                          ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (canBrowseDatabase)
-            Semantics(
-              label: 'Edit selected tile',
-              child: TextButton(
-                onPressed: () async {
-                  try {
-                    final result =
-                        await context.push('/calculator/tile-select');
-                    if (result != null && result is TileModel) {
-                      ref.read(calculatorProvider.notifier).setTile(result);
-                    }
-                  } catch (e) {
-                    if (kDebugMode) {
-                      debugPrint('Error selecting tile: $e');
-                    }
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error selecting tile: $e'),
-                          backgroundColor: Theme.of(context).colorScheme.error,
+            child: compact
+                ? Text(
+                    selectedTile?.name ?? 'No tile selected',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: fontSize,
                         ),
-                      );
-                    }
-                  }
-                },
-                child: Text(
-                  'Edit Tile',
-                  style: TextStyle(fontSize: fontSize - 2),
-                ),
-              ),
-            )
-          else if (selectedTile != null)
-            Semantics(
-              label: 'Change tile specifications',
-              child: TextButton(
-                onPressed: () => _openManualTileDialog(context, ref),
-                child: Text(
-                  'Change Specs',
-                  style: TextStyle(fontSize: fontSize - 2),
-                ),
-              ),
-            ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selected Tile',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color:
+                                  Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        selectedTile?.name ?? 'None',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: fontSize + 1,
+                            ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!canBrowseDatabase) ...[
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () => context.go('/subscription'),
+                          child: Text(
+                            'Upgrade to Pro for the full tile database',
+                            style:
+                                Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+          if (editButton != null) editButton,
         ],
       ),
     );

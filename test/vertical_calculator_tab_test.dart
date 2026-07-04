@@ -49,7 +49,7 @@ void main() {
     expect(find.text('Gutter Overhang'), findsOneWidget);
   });
 
-  testWidgets('Add rafter button appears below measurement inputs',
+  testWidgets('Add rafter button appears in section header trailing',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -79,6 +79,7 @@ void main() {
     final addButton = tester.getTopLeft(find.text('Add rafter'));
     final measurementField = tester.getTopLeft(find.text('e.g. 4000'));
 
-    expect(addButton.dy, greaterThan(measurementField.dy));
+    expect(addButton.dy, lessThan(measurementField.dy));
+    expect(addButton.dx, greaterThan(measurementField.dx));
   });
 }

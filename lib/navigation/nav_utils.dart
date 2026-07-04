@@ -6,6 +6,11 @@ import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 
 import 'package:roofgrid_uk/widgets/admin_access_guard.dart';
 
+/// Hide the shell bottom nav during the calculator wizard flow.
+bool hideShellNavForLocation(String location) {
+  return location.startsWith('/calculator');
+}
+
 /// Maps a location to the main shell tab index (0–3).
 int shellTabIndexFromLocation(String location) {
   if (location.startsWith('/calculator')) return 1;

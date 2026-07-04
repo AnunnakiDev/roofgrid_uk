@@ -78,7 +78,8 @@ void main() {
     expect(find.text('Measurements'), findsOneWidget);
     expect(find.text('Vertical set-out'), findsOneWidget);
     expect(find.text('Rafter measurements'), findsOneWidget);
-    expect(find.text('Selected Tile'), findsOneWidget);
+    expect(find.text('Test Pantile'), findsOneWidget);
+    expect(find.text('Selected Tile'), findsNothing);
     expect(find.text('Dry Ridge'), findsOneWidget);
     expect(find.text('Gutter Overhang'), findsOneWidget);
     expect(find.text('Dry Verge'), findsNothing);

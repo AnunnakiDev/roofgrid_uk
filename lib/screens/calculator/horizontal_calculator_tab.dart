@@ -167,13 +167,43 @@ class HorizontalCalculatorTabState
         .map((controller) => double.tryParse(controller.text) ?? 0)
         .toList();
 
+    final dense = !isLargeScreen;
+
     return Padding(
-      padding: EdgeInsets.all(padding),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, dense ? 8 : padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CalculatorInputSection(
+            title: 'Width Measurements',
+            helperText: 'Measure verge to verge before overhangs are added.',
+            dense: dense,
+            trailing: widget.canUseMultipleWidths
+                ? Semantics(
+                    label: 'Add new width input',
+                    child: TextButton.icon(
+                      onPressed: _addWidth,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add width'),
+                    ),
+                  )
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ..._buildWidthInputs(fontSize),
+                const SizedBox(height: 12),
+                SchematicPreviewStrip(
+                  axis: SchematicPreviewAxis.horizontalCourse,
+                  dimensionsMm: widthValues,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: dense ? 10 : 14),
+          CalculatorInputSection(
             title: 'Options',
+            dense: dense,
             child: Column(
               children: [
                 _buildAbutmentSideSelector(fontSize),
@@ -190,33 +220,6 @@ class HorizontalCalculatorTabState
                 ),
                 const SizedBox(height: 10),
                 _buildCrossBondedInfo(fontSize, selectedTile),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          CalculatorInputSection(
-            title: 'Width Measurements',
-            helperText: 'Measure verge to verge before overhangs are added.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ..._buildWidthInputs(fontSize),
-                if (widget.canUseMultipleWidths) ...[
-                  const SizedBox(height: 4),
-                  Semantics(
-                    label: 'Add new width input',
-                    child: TextButton.icon(
-                      onPressed: _addWidth,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add width'),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                SchematicPreviewStrip(
-                  axis: SchematicPreviewAxis.horizontalCourse,
-                  dimensionsMm: widthValues,
-                ),
               ],
             ),
           ),

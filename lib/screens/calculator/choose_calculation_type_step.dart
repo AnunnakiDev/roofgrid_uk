@@ -25,7 +25,10 @@ class ChooseCalculationTypeStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final padding = MediaQuery.of(context).size.width >= 600 ? 16.0 : 12.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLargeScreen = screenWidth >= 600;
+    final padding = isLargeScreen ? 16.0 : 12.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padding),
@@ -34,16 +37,11 @@ class ChooseCalculationTypeStep extends ConsumerWidget {
         children: [
           Padding(
             padding: EdgeInsets.only(top: padding, bottom: 8),
-            child: const CalculatorStepProgress(
+            child: CalculatorStepProgress(
               currentStep: CalculatorFlowStep.selectType,
+              compact: !isLargeScreen,
             ),
           ),
-          SelectedTileRow(
-            user: user,
-            effectiveIsPro: effectiveIsPro,
-            placeholderImageBuilder: placeholderImageBuilder,
-          ),
-          const SizedBox(height: 8),
           Text(
             'Choose set-out type',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -54,13 +52,29 @@ class ChooseCalculationTypeStep extends ConsumerWidget {
           Text(
             'Pick vertical batten gauge, horizontal marking out, or both.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: colorScheme.onSurfaceVariant,
                 ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Expanded(
             child: SingleChildScrollView(
               child: CalculatorLaunchCards(onLaunch: onTypeSelected),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              color: colorScheme.surface,
+            ),
+            child: SelectedTileRow(
+              user: user,
+              effectiveIsPro: effectiveIsPro,
+              compact: true,
+              placeholderImageBuilder: placeholderImageBuilder,
             ),
           ),
           Padding(

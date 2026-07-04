@@ -4,6 +4,19 @@ import 'package:roofgrid_uk/navigation/nav_items.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 
 void main() {
+  group('hideShellNavForLocation', () {
+    test('hides nav on calculator routes', () {
+      expect(hideShellNavForLocation('/calculator'), isTrue);
+      expect(hideShellNavForLocation('/calculator/tile-select'), isTrue);
+    });
+
+    test('shows nav on non-calculator routes', () {
+      expect(hideShellNavForLocation('/home'), isFalse);
+      expect(hideShellNavForLocation('/results'), isFalse);
+      expect(hideShellNavForLocation('/tiles'), isFalse);
+    });
+  });
+
   group('shellTabIndexFromLocation', () {
     test('maps home', () {
       expect(shellTabIndexFromLocation('/home'), 0);

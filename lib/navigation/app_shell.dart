@@ -12,19 +12,24 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final location = GoRouterState.of(context).matchedLocation;
+    final hideShellNav = hideShellNavForLocation(location);
+
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: navigationShell.currentIndex,
-        onTabSelected: (index) {
-          navigateToShellTab(
-            context,
-            ref,
-            index,
-            goBranch: (i) => navigationShell.goBranch(i),
-          );
-        },
-      ),
+      bottomNavigationBar: hideShellNav
+          ? null
+          : AppBottomNav(
+              currentIndex: navigationShell.currentIndex,
+              onTabSelected: (index) {
+                navigateToShellTab(
+                  context,
+                  ref,
+                  index,
+                  goBranch: (i) => navigationShell.goBranch(i),
+                );
+              },
+            ),
     );
   }
 }

@@ -98,8 +98,9 @@ class ViewResultsStep extends ConsumerWidget {
           padding: EdgeInsets.all(padding),
           child: Semantics(
             label: 'Step 3: View Results',
-            child: const CalculatorStepProgress(
+            child: CalculatorStepProgress(
               currentStep: CalculatorFlowStep.viewResults,
+              compact: !isLargeScreen,
             ),
           ),
         ),

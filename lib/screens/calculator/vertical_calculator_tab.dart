@@ -12,6 +12,7 @@ import 'package:roofgrid_uk/utils/form_validator.dart';
 import 'package:roofgrid_uk/utils/calculator_input_colors.dart';
 import 'package:roofgrid_uk/utils/keyboard_scroll_utils.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_input_section.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_mm_stepper.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_measurement_field.dart';
 import 'package:roofgrid_uk/widgets/calculator/schematic_preview_strip.dart';
 import 'package:roofgrid_uk/widgets/on_off_toggle.dart';
@@ -147,13 +148,43 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
         .map((controller) => double.tryParse(controller.text) ?? 0)
         .toList();
 
+    final dense = !isLargeScreen;
+
     return Padding(
-      padding: EdgeInsets.all(padding),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, dense ? 8 : padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CalculatorInputSection(
+            title: 'Rafter Measurements',
+            helperText: 'Measure from top of fascia to ridge.',
+            dense: dense,
+            trailing: widget.canUseMultipleRafters
+                ? Semantics(
+                    label: 'Add new rafter input',
+                    child: TextButton.icon(
+                      onPressed: _addRafter,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add rafter'),
+                    ),
+                  )
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ..._buildRafterInputs(fontSize),
+                const SizedBox(height: 12),
+                SchematicPreviewStrip(
+                  axis: SchematicPreviewAxis.verticalBatten,
+                  dimensionsMm: rafterValues,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: dense ? 10 : 14),
+          CalculatorInputSection(
             title: 'Options',
+            dense: dense,
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,33 +194,6 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                   Expanded(child: _buildGutterOverhangControl(fontSize)),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          CalculatorInputSection(
-            title: 'Rafter Measurements',
-            helperText: 'Measure from top of fascia to ridge.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ..._buildRafterInputs(fontSize),
-                if (widget.canUseMultipleRafters) ...[
-                  const SizedBox(height: 4),
-                  Semantics(
-                    label: 'Add new rafter input',
-                    child: TextButton.icon(
-                      onPressed: _addRafter,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add rafter'),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                SchematicPreviewStrip(
-                  axis: SchematicPreviewAxis.verticalBatten,
-                  dimensionsMm: rafterValues,
-                ),
-              ],
             ),
           ),
           if (!widget.canUseMultipleRafters) _buildProFeaturePrompt(fontSize),
@@ -226,19 +230,16 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
   Widget _buildGutterOverhangControl(double fontSize) {
     return CalculatorOptionTile(
       title: 'Gutter Overhang',
-      subtitle: '${_gutterOverhang.round()} mm',
-      child: Slider(
-        value: _gutterOverhang,
-        min: 0.0,
-        max: 100.0,
-        divisions: 100,
-        label: '${_gutterOverhang.round()} mm',
-        activeColor: Theme.of(context).colorScheme.secondary,
+      child: CalculatorMmStepper(
+        value: _gutterOverhang.round(),
+        semanticsLabel: 'Gutter overhang',
         onChanged: (value) {
           setState(() {
-            _gutterOverhang = value;
+            _gutterOverhang = value.toDouble();
           });
-          ref.read(calculatorProvider.notifier).setGutterOverhang(value);
+          ref
+              .read(calculatorProvider.notifier)
+              .setGutterOverhang(value.toDouble());
           _validateInputs();
         },
       ),

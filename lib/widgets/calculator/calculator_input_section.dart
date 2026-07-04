@@ -8,6 +8,7 @@ class CalculatorInputSection extends StatelessWidget {
   final String? helperText;
   final Widget? trailing;
   final Widget child;
+  final bool dense;
 
   const CalculatorInputSection({
     super.key,
@@ -15,16 +16,21 @@ class CalculatorInputSection extends StatelessWidget {
     this.helperText,
     this.trailing,
     required this.child,
+    this.dense = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cardPadding = dense ? 10.0 : 16.0;
+    final titleSize = dense ? 14.0 : 16.0;
+    final helperSize = dense ? 12.0 : 13.0;
+    final childGap = dense ? 8.0 : 14.0;
 
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(cardPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -38,17 +44,20 @@ class CalculatorInputSection extends StatelessWidget {
                       Text(
                         title,
                         style: GoogleFonts.poppins(
-                          fontSize: 16,
+                          fontSize: titleSize,
                           fontWeight: FontWeight.w700,
                           color: colorScheme.onSurface,
                         ),
                       ),
                       if (helperText != null) ...[
-                        const SizedBox(height: 4),
+                        SizedBox(height: dense ? 2 : 4),
                         Text(
                           helperText!,
+                          maxLines: dense ? 1 : null,
+                          overflow:
+                              dense ? TextOverflow.ellipsis : TextOverflow.visible,
                           style: GoogleFonts.poppins(
-                            fontSize: 13,
+                            fontSize: helperSize,
                             color: colorScheme.onSurfaceVariant,
                             height: 1.35,
                           ),
@@ -60,7 +69,7 @@ class CalculatorInputSection extends StatelessWidget {
                 if (trailing != null) trailing!,
               ],
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: childGap),
             child,
           ],
         ),
