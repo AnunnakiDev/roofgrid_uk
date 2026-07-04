@@ -39,6 +39,7 @@ dependencies:
   fl_chart: ^1.1.0
   csv: ^6.0.0
   syncfusion_flutter_charts: ^31.0.0
+  pdf: ^3.11.3
 
 
 dev_dependencies:

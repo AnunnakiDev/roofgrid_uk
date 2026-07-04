@@ -403,22 +403,20 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
 
     try {
       final resultsService = ref.read(resultsServiceProvider);
-      final pdfPath = await resultsService.exportResultAsPdf(result);
+      final pdfBytes = await resultsService.exportResultAsPdf(result);
 
-      if (pdfPath != null) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(pdfPath)],
-            text: 'RoofGrid UK Calculation Result',
-          ),
-        );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PDF export feature coming soon!')),
-          );
-        }
-      }
+      final directory = await getTemporaryDirectory();
+      final pdfPath =
+          '${directory.path}/roofgrid_${result.id}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File(pdfPath);
+      await file.writeAsBytes(pdfBytes, flush: true);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(pdfPath, mimeType: 'application/pdf', name: '${result.projectName}.pdf')],
+          text: 'RoofGrid UK Calculation Result',
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

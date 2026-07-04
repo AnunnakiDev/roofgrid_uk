@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:roofgrid_uk/app/results/services/result_pdf_exporter.dart';
 
 class ResultsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -110,8 +111,7 @@ class ResultsService {
     return true;
   }
 
-  Future<String?> exportResultAsPdf(SavedResult result) async {
-    // TODO: Implement PDF export (requires 'pdf' package)
-    return null;
+  Future<List<int>> exportResultAsPdf(SavedResult result) async {
+    return ResultPdfExporter.generateBytes(result);
   }
 }
