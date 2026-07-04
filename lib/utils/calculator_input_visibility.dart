@@ -13,14 +13,6 @@ String resolveCrossBonded({String? saved, required TileModel tile}) {
   return crossBondedFromTile(tile);
 }
 
-/// Read-only label for calculator context (not an editable input).
-String crossBondedDisplayLabel(TileModel? tile) {
-  if (tile == null) {
-    return 'Select a tile';
-  }
-  return tile.defaultCrossBonded ? 'Yes (from tile spec)' : 'No (from tile spec)';
-}
-
 /// LH tile is disabled when any abutment is set (calc forces it off).
 bool isLeftHandTileEnabled(String abutmentSide) {
   return abutmentSide == 'NONE';

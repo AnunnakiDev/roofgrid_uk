@@ -12,7 +12,6 @@ void main() {
       useDryVerge: 'NO',
       abutmentSide: 'NONE',
       useLHTile: 'NO',
-      crossBonded: 'NO',
       scope: CalculatorWorkingsScope.vertical,
     );
 

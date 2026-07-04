@@ -627,7 +627,6 @@ List<ResultDisplayRow> buildHorizontalInputRows({
   String? useDryVerge,
   String? abutmentSide,
   String? useLHTile,
-  String? crossBonded,
 }) {
   if (widths == null &&
       useDryVerge == null &&
@@ -667,16 +666,6 @@ List<ResultDisplayRow> buildHorizontalInputRows({
       ),
     );
   }
-  if (crossBonded != null) {
-    rows.add(
-      ResultDisplayRow(
-        label: 'Cross bonded',
-        value: crossBonded == 'YES'
-            ? 'Yes (from tile spec)'
-            : 'No (from tile spec)',
-      ),
-    );
-  }
   return rows;
 }
 
@@ -692,7 +681,6 @@ JobWorkingsData buildJobWorkingsData({
   String? useDryVerge,
   String? abutmentSide,
   String? useLHTile,
-  String? crossBonded,
   VerticalCalculationResult? verticalResult,
   HorizontalCalculationResult? horizontalResult,
   CalculatorWorkingsScope scope = CalculatorWorkingsScope.combined,
@@ -737,7 +725,6 @@ JobWorkingsData buildJobWorkingsData({
             useDryVerge: useDryVerge,
             abutmentSide: abutmentSide,
             useLHTile: useLHTile,
-            crossBonded: crossBonded,
           )
         : const [],
     verticalWorkings: [
@@ -788,12 +775,6 @@ JobWorkingsData buildJobWorkingsDataFromSavedResult(
         HorizontalCalculationResult.fromJson(normalized.outputs['horizontal']);
   }
 
-  final savedCrossBonded = horizontalInputs?['crossBonded'] as String?;
-  final tileCrossBonded = savedCrossBonded ??
-      ((normalized.tile['defaultCrossBonded'] as bool? ?? false)
-          ? 'YES'
-          : 'NO');
-
   return buildJobWorkingsData(
     tileName: normalized.tile['name']?.toString(),
     materialType: normalized.tile['materialType']?.toString() ??
@@ -809,7 +790,6 @@ JobWorkingsData buildJobWorkingsDataFromSavedResult(
     useDryVerge: horizontalInputs?['useDryVerge'] as String?,
     abutmentSide: horizontalInputs?['abutmentSide'] as String?,
     useLHTile: horizontalInputs?['useLHTile'] as String?,
-    crossBonded: tileCrossBonded,
     verticalResult: verticalResult,
     horizontalResult: horizontalResult,
     scope: effectiveScope,

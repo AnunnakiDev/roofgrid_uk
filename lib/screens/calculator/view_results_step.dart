@@ -214,7 +214,6 @@ class ViewResultsStep extends ConsumerWidget {
       useDryVerge: includeHorizontal ? horizontalInputs.useDryVerge : null,
       abutmentSide: includeHorizontal ? horizontalInputs.abutmentSide : null,
       useLHTile: includeHorizontal ? horizontalInputs.useLHTile : null,
-      crossBonded: includeHorizontal ? horizontalInputs.crossBonded : null,
       verticalResult: includeVertical ? calcState.verticalResult : null,
       horizontalResult: includeHorizontal ? calcState.horizontalResult : null,
       scope: scope,

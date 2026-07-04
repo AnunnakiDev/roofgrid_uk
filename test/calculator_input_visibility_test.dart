@@ -42,13 +42,7 @@ void main() {
       );
     });
 
-    test('crossBondedDisplayLabel describes tile-spec source', () {
-      expect(
-        crossBondedDisplayLabel(_tile(defaultCrossBonded: true)),
-        'Yes (from tile spec)',
-      );
-      expect(crossBondedDisplayLabel(null), 'Select a tile');
-    });
+
 
     test('isLeftHandTileEnabled only allows NONE abutment', () {
       expect(isLeftHandTileEnabled('NONE'), isTrue);

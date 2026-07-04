@@ -747,10 +747,6 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
                     ),
                   ],
                 ),
-                _infoRow(
-                  'Cross Bonded',
-                  tile.defaultCrossBonded ? 'Yes' : 'No',
-                ),
                 if (tile.leftHandTileWidth != null &&
                     tile.leftHandTileWidth! > 0)
                   _infoRow(
@@ -926,8 +922,6 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
                             _infoRow('Max Spacing', '${tile.maxSpacing} mm')),
                   ],
                 ),
-                _infoRow(
-                    'Cross Bonded', tile.defaultCrossBonded ? 'Yes' : 'No'),
                 if (tile.leftHandTileWidth != null &&
                     tile.leftHandTileWidth! > 0)
                   _infoRow(

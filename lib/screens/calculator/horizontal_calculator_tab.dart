@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
@@ -152,8 +151,6 @@ class HorizontalCalculatorTabState
     final isLargeScreen = screenWidth >= 600;
     final padding = isLargeScreen ? 16.0 : 12.0;
     final fontSize = isLargeScreen ? 14.0 : 12.0;
-    final selectedTile =
-        ref.watch(calculatorProvider.select((state) => state.selectedTile));
     ref.listen(
       calculatorProvider.select((state) => state.crossBonded),
       (previous, next) {
@@ -218,8 +215,6 @@ class HorizontalCalculatorTabState
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                _buildCrossBondedInfo(fontSize, selectedTile),
               ],
             ),
           ),
@@ -317,20 +312,6 @@ class HorizontalCalculatorTabState
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCrossBondedInfo(double fontSize, TileModel? selectedTile) {
-    return CalculatorOptionTile(
-      title: 'Cross Bonded',
-      child: Text(
-        crossBondedDisplayLabel(selectedTile),
-        style: TextStyle(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
