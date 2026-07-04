@@ -124,4 +124,68 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Test Tile 0'), findsOneWidget);
   });
+
+  testWidgets('wizard density hides Select Tile header and shows compact rows',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 912));
+
+    TileModel? selectedTile;
+    final tiles = List.generate(
+      8,
+      (i) => _sampleTile().copyWith(
+        id: 'tile-$i',
+        name: 'Wizard Tile $i',
+      ),
+    );
+
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(
+            (ref) => Stream.value(_proUser()),
+          ),
+          developerModeProvider.overrideWith(_TestDeveloperModeNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 912,
+              width: 420,
+              child: Column(
+                children: [
+                  const Text('Select your tile'),
+                  Expanded(
+                    child: TileSelectorWidget(
+                      tiles: tiles,
+                      user: _proUser(),
+                      density: TileSelectorDensity.wizard,
+                      showAddTileButton: false,
+                      onTileSelected: (tile) {
+                        selectedTile = tile;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Select Tile'), findsNothing);
+    expect(find.text('Wizard Tile 0'), findsOneWidget);
+    expect(find.text('Wizard Tile 1'), findsOneWidget);
+    expect(find.text('Wizard Tile 2'), findsOneWidget);
+    expect(find.text('Wizard Tile 3'), findsOneWidget);
+
+    await tester.tap(find.text('Wizard Tile 2'));
+    await tester.pumpAndSettle();
+
+    expect(selectedTile?.id, 'tile-2');
+  });
 }

@@ -27,7 +27,9 @@ class SelectTileStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final padding = MediaQuery.of(context).size.width >= 600 ? 16.0 : 12.0;
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 600;
+    final padding = isNarrow ? 12.0 : 16.0;
     final canBrowse = canBrowseTileDatabase(
       user,
       ref.watch(developerModeProvider),
@@ -39,9 +41,10 @@ class SelectTileStep extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.only(top: padding, bottom: 8),
-            child: const CalculatorStepProgress(
+            padding: EdgeInsets.only(top: padding, bottom: isNarrow ? 4 : 8),
+            child: CalculatorStepProgress(
               currentStep: CalculatorFlowStep.selectTile,
+              compact: isNarrow,
             ),
           ),
           Text(
@@ -50,14 +53,16 @@ class SelectTileStep extends ConsumerWidget {
                   fontWeight: FontWeight.bold,
                 ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Tile specifications drive gauge, spacing, and set-out calculations.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-          const SizedBox(height: 12),
+          if (!isNarrow) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Tile specifications drive gauge, spacing, and set-out calculations.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+          SizedBox(height: isNarrow ? 8 : 12),
           Expanded(
             child: canBrowse
                 ? _ProTilePicker(
@@ -70,13 +75,18 @@ class SelectTileStep extends ConsumerWidget {
                   ),
           ),
           Padding(
-            padding: EdgeInsets.only(bottom: padding, top: 8),
+            padding: EdgeInsets.only(bottom: padding, top: isNarrow ? 4 : 8),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton(
-                onPressed: onCancel,
-                child: const Text('Cancel'),
-              ),
+              child: isNarrow
+                  ? TextButton(
+                      onPressed: onCancel,
+                      child: const Text('Cancel'),
+                    )
+                  : OutlinedButton(
+                      onPressed: onCancel,
+                      child: const Text('Cancel'),
+                    ),
             ),
           ),
         ],
@@ -110,6 +120,7 @@ class _ProTilePicker extends ConsumerWidget {
           tiles: tiles,
           user: user,
           onTileSelected: onTileSelected,
+          density: TileSelectorDensity.wizard,
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -122,6 +133,7 @@ class _ProTilePicker extends ConsumerWidget {
             tiles: fallback,
             user: user,
             onTileSelected: onTileSelected,
+            density: TileSelectorDensity.wizard,
           );
         }
         return Center(

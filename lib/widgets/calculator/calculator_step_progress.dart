@@ -11,10 +11,12 @@ enum CalculatorFlowStep {
 /// Top-of-flow progress: Tile → Type → Measurements → Results.
 class CalculatorStepProgress extends StatelessWidget {
   final CalculatorFlowStep currentStep;
+  final bool compact;
 
   const CalculatorStepProgress({
     super.key,
     required this.currentStep,
+    this.compact = false,
   });
 
   static const _labels = ['Tile', 'Type', 'Measurements', 'Results'];
@@ -34,7 +36,7 @@ class CalculatorStepProgress extends StatelessWidget {
               Expanded(
                 child: Container(
                   height: 2,
-                  margin: const EdgeInsets.only(bottom: 14),
+                  margin: EdgeInsets.only(bottom: compact ? 0 : 14),
                   color: i <= _currentIndex
                       ? colorScheme.secondary.withValues(alpha: 0.5)
                       : colorScheme.onSurface.withValues(alpha: 0.12),
@@ -43,6 +45,7 @@ class CalculatorStepProgress extends StatelessWidget {
             _StepNode(
               index: i,
               label: _labels[i],
+              compact: compact,
               state: i < _currentIndex
                   ? _StepNodeState.completed
                   : i == _currentIndex
@@ -62,11 +65,13 @@ class _StepNode extends StatelessWidget {
   final int index;
   final String label;
   final _StepNodeState state;
+  final bool compact;
 
   const _StepNode({
     required this.index,
     required this.label,
     required this.state,
+    this.compact = false,
   });
 
   @override
@@ -122,16 +127,19 @@ class _StepNode extends StatelessWidget {
           ),
           child: Center(child: circleChild),
         ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            fontWeight:
-                state == _StepNodeState.active ? FontWeight.w700 : FontWeight.w500,
-            color: labelColor,
+        if (!compact) ...[
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: state == _StepNodeState.active
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              color: labelColor,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
