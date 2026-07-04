@@ -1,3 +1,5 @@
+// Deprecated: use package:roofgrid_uk/utils/app_theme.dart instead.
+// This file is only referenced by the unused lib/app/app.dart entry point.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 

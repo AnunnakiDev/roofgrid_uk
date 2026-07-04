@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
+import 'package:roofgrid_uk/navigation/subscription_nav.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 
-class CancelPage extends StatefulWidget {
+class CancelPage extends ConsumerStatefulWidget {
   const CancelPage({super.key});
 
   @override
-  State<CancelPage> createState() => _CancelPageState();
+  ConsumerState<CancelPage> createState() => _CancelPageState();
 }
 
-class _CancelPageState extends State<CancelPage> {
+class _CancelPageState extends ConsumerState<CancelPage> {
   bool _isCancelling = false;
 
   Future<void> _cancelSubscription() async {
@@ -60,30 +66,39 @@ class _CancelPageState extends State<CancelPage> {
   }
 
   void _showCancelConfirmationDialog() {
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
           'Are You Sure?',
-          style: GoogleFonts.roboto(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF1E88E5),
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
           ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'By cancelling your Pro subscription, you will lose access to:',
-              style: GoogleFonts.roboto(fontSize: 16, color: Colors.black87),
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                color: colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               '• Advanced roof survey features\n'
               '• Priority support\n'
               '• Unlimited storage for survey data',
-              style: GoogleFonts.roboto(fontSize: 14, color: Colors.black54),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                height: 1.45,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -92,7 +107,7 @@ class _CancelPageState extends State<CancelPage> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'No, Keep Pro',
-              style: GoogleFonts.roboto(color: const Color(0xFF1E88E5)),
+              style: GoogleFonts.poppins(color: colorScheme.secondary),
             ),
           ),
           TextButton(
@@ -102,7 +117,7 @@ class _CancelPageState extends State<CancelPage> {
             },
             child: Text(
               'Yes, Cancel',
-              style: GoogleFonts.roboto(color: Colors.red),
+              style: GoogleFonts.poppins(color: colorScheme.error),
             ),
           ),
         ],
@@ -112,30 +127,28 @@ class _CancelPageState extends State<CancelPage> {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'RoofGrid UK',
-          style: GoogleFonts.roboto(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E88E5),
+        title: BrandWordmark.compact(color: colorScheme.onPrimary),
         automaticallyImplyLeading: false,
+        actions: const [HomeBackButton()],
       ),
+      drawer: effectiveIsPro ? null : const MainDrawer(),
       body: Container(
-        color: const Color(0xFFF5F5F5),
+        color: theme.scaffoldBackgroundColor,
         padding: const EdgeInsets.all(16.0),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Warning Icon with Animation
-              const Icon(
-                Icons.warning,
-                color: Colors.red,
+              Icon(
+                Icons.warning_amber_rounded,
+                color: colorScheme.error,
                 size: 100,
               )
                   .animate()
@@ -150,10 +163,10 @@ class _CancelPageState extends State<CancelPage> {
               // Cancellation Message with Fade-In Animation
               Text(
                 'Cancel Your Pro Subscription',
-                style: GoogleFonts.roboto(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E88E5),
+                style: GoogleFonts.poppins(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: colorScheme.onSurface,
                 ),
               ).animate().fadeIn(
                     duration: 800.ms,
@@ -163,9 +176,10 @@ class _CancelPageState extends State<CancelPage> {
               Text(
                 'You can cancel your Pro subscription at any time. Please confirm if you’d like to proceed.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.roboto(
+                style: GoogleFonts.poppins(
                   fontSize: 16,
-                  color: Colors.black87,
+                  height: 1.45,
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ).animate().fadeIn(
                     duration: 800.ms,
@@ -173,25 +187,24 @@ class _CancelPageState extends State<CancelPage> {
                   ),
               const SizedBox(height: 30),
               // Cancel Button with Slide Animation
-              ElevatedButton(
+              OutlinedButton.icon(
                 onPressed: _isCancelling ? null : _showCancelConfirmationDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                icon: _isCancelling
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel Subscription'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: colorScheme.error,
+                  side: BorderSide(
+                    color: colorScheme.error.withValues(alpha: 0.6),
                   ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 ),
-                child: _isCancelling
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                        'Cancel Subscription',
-                        style: GoogleFonts.roboto(
-                          fontSize: 18,
-                          color: Colors.white,
-                        ),
-                      ),
               ).animate().slideY(
                     begin: 1.0,
                     end: 0.0,
@@ -201,38 +214,17 @@ class _CancelPageState extends State<CancelPage> {
                   ),
               const SizedBox(height: 10),
               // Back Button
-              TextButton(
+              TextButton.icon(
                 onPressed: () => context.go('/home'),
-                child: Text(
-                  'Go Back',
-                  style: GoogleFonts.roboto(
-                    fontSize: 16,
-                    color: const Color(0xFF1E88E5),
-                  ),
-                ),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Go Back'),
               ),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 3, // Highlight Subscription tab
-        onTap: (index) {
-          if (index == 0) context.go('/home');
-          if (index == 1) context.go('/surveys');
-          if (index == 2) context.go('/profile');
-          if (index == 3) context.go('/subscription');
-        },
-        selectedItemColor: const Color(0xFF1E88E5),
-        unselectedItemColor: const Color(0xFFB0BEC5),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Surveys'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.subscriptions), label: 'Subscription'),
-        ],
-      ),
+      bottomNavigationBar:
+          effectiveIsPro ? null : const FreeSubscriptionNav(currentIndex: 1),
     );
   }
 }

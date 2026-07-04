@@ -1,3 +1,5 @@
+import 'width_calculation_detail.dart';
+
 class HorizontalCalculationResult {
   final int width;
   final String solution;
@@ -11,6 +13,7 @@ class HorizontalCalculationResult {
   final String? splitMarks;
   final int? actualSpacing;
   final String? warning;
+  final List<WidthCalculationDetail>? widthDetails;
 
   const HorizontalCalculationResult({
     required this.width,
@@ -25,6 +28,7 @@ class HorizontalCalculationResult {
     this.splitMarks,
     this.actualSpacing,
     this.warning,
+    this.widthDetails,
   });
 
   factory HorizontalCalculationResult.fromJson(Map<String, dynamic> json) {
@@ -41,6 +45,10 @@ class HorizontalCalculationResult {
       splitMarks: json['splitMarks'] as String?,
       actualSpacing: (json['actualSpacing'] as num?)?.toInt(),
       warning: json['warning'] as String?,
+      widthDetails: (json['widthDetails'] as List<dynamic>?)
+          ?.map((item) =>
+              WidthCalculationDetail.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -58,6 +66,8 @@ class HorizontalCalculationResult {
       if (splitMarks != null) 'splitMarks': splitMarks,
       if (actualSpacing != null) 'actualSpacing': actualSpacing,
       if (warning != null) 'warning': warning,
+      if (widthDetails != null)
+        'widthDetails': widthDetails!.map((d) => d.toJson()).toList(),
     };
   }
 }

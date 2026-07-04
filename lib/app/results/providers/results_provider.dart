@@ -7,8 +7,16 @@ final resultsServiceProvider = Provider<ResultsService>((ref) {
   return ResultsService();
 });
 
-// Provider to store the currently selected result
-final selectedResultProvider = StateProvider<SavedResult?>((ref) => null);
+// Notifier to store the currently selected result (migrated for Riverpod 3)
+class SelectedResultNotifier extends Notifier<SavedResult?> {
+  @override
+  SavedResult? build() => null;
+
+  void set(SavedResult? value) => state = value;
+}
+
+final selectedResultProvider =
+    NotifierProvider<SelectedResultNotifier, SavedResult?>(SelectedResultNotifier.new);
 
 // Provider for fetching saved results for a specific user
 final savedResultsProvider =

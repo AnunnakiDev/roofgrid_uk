@@ -21,7 +21,7 @@ class _CaptchaWidgetState extends State<CaptchaWidget> {
       ..addJavaScriptChannel(
         'Captcha',
         onMessageReceived: (JavaScriptMessage message) {
-          print("reCAPTCHA token received: ${message.message}");
+          // print("reCAPTCHA token received: ${message.message}"); // debug removed
           widget.onVerified(message.message);
         },
       )

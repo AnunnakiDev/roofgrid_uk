@@ -12,8 +12,10 @@ class InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -21,12 +23,24 @@ class InfoRow extends StatelessWidget {
             flex: 2,
             child: Text(
               '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
             ),
           ),
           Expanded(
             flex: 3,
-            child: Text(value),
+            child: Text(
+              value,
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),

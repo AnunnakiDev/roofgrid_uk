@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
+import 'package:roofgrid_uk/utils/saved_result_inputs.dart';
 
 part 'saved_result.g.dart'; // Generated file for Hive
 
@@ -65,13 +66,18 @@ class SavedResult {
 
   // Update fromJson method to use the safe parser
   factory SavedResult.fromJson(Map<String, dynamic> json) {
+    final type = CalculationType.values[json['type'] as int];
+    final inputs = normalizeSavedResultInputsMap(
+      type,
+      Map<String, dynamic>.from(json['inputs'] as Map),
+    );
     return SavedResult(
       id: json['id'] as String,
       userId: json['userId'] as String,
       projectName: json['projectName'] as String,
-      type: CalculationType.values[json['type'] as int],
+      type: type,
       timestamp: (json['timestamp'] as Timestamp).toDate(),
-      inputs: Map<String, dynamic>.from(json['inputs'] as Map),
+      inputs: inputs,
       outputs: Map<String, dynamic>.from(json['outputs'] as Map),
       tile: Map<String, dynamic>.from(json['tile'] as Map),
       createdAt: (json['createdAt'] as Timestamp).toDate(),

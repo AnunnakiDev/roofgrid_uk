@@ -1,5 +1,6 @@
-// lib/screens/support/legal_screen.dart
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 
 class LegalScreen extends StatelessWidget {
@@ -10,6 +11,7 @@ class LegalScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Legal Information'),
+        actions: const [HomeBackButton()],
       ),
       drawer: const MainDrawer(),
       body: DefaultTabController(
@@ -21,8 +23,12 @@ class LegalScreen extends StatelessWidget {
                 Tab(text: 'Terms of Service'),
                 Tab(text: 'Privacy Policy'),
               ],
-              labelColor: Theme.of(context).colorScheme.primary,
-              indicatorColor: Theme.of(context).colorScheme.primary,
+              labelColor: Theme.of(context).colorScheme.secondary,
+              unselectedLabelColor:
+                  Theme.of(context).colorScheme.onSurfaceVariant,
+              indicatorColor: Theme.of(context).colorScheme.secondary,
+              dividerColor:
+                  Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08),
             ),
             Expanded(
               child: TabBarView(
@@ -200,14 +206,20 @@ class LegalScreen extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             content,
-            style: Theme.of(context).textTheme.bodyMedium,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              height: 1.5,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

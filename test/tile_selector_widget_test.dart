@@ -1,0 +1,191 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:roofgrid_uk/models/tile_model.dart';
+import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
+
+class _TestDeveloperModeNotifier extends DeveloperModeNotifier {
+  @override
+  DeveloperModeState build() => const DeveloperModeState();
+}
+
+TileModel _sampleTile() {
+  final now = DateTime(2026, 1, 1);
+  return TileModel(
+    id: 'tile-1',
+    name: 'Test Tile',
+    manufacturer: 'Test Co',
+    materialType: TileSlateType.plainTile,
+    description: 'Test description',
+    isPublic: true,
+    isApproved: true,
+    createdById: 'admin',
+    createdAt: now,
+    updatedAt: now,
+    slateTileHeight: 300,
+    tileCoverWidth: 250,
+    minGauge: 100,
+    maxGauge: 120,
+    minSpacing: 5,
+    maxSpacing: 10,
+    defaultCrossBonded: false,
+  );
+}
+
+UserModel _proUser({bool trialActive = true}) {
+  final now = DateTime(2026, 1, 1);
+  return UserModel(
+    id: 'user-1',
+    email: 'pro@example.com',
+    role: UserRole.pro,
+    createdAt: now,
+    proTrialStartDate: trialActive ? now : null,
+    proTrialEndDate: trialActive ? now.add(const Duration(days: 14)) : null,
+  );
+}
+
+void main() {
+  testWidgets('TileSelectorWidget embedded in scroll view lays out without error',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(
+            (ref) => Stream.value(_proUser()),
+          ),
+          developerModeProvider.overrideWith(_TestDeveloperModeNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TileSelectorWidget(
+                tiles: [_sampleTile()],
+                user: _proUser(),
+                embeddedInScrollView: true,
+                showAddTileButton: false,
+                onTileSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Test Tile'), findsOneWidget);
+  });
+
+  testWidgets(
+      'TileSelectorWidget in Expanded lays out without overflow',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(
+            (ref) => Stream.value(_proUser()),
+          ),
+          developerModeProvider.overrideWith(_TestDeveloperModeNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: Column(
+                children: [
+                  const Text('Select your tile'),
+                  Expanded(
+                    child: TileSelectorWidget(
+                      tiles: List.generate(
+                        12,
+                        (i) => _sampleTile().copyWith(
+                          id: 'tile-$i',
+                          name: 'Test Tile $i',
+                        ),
+                      ),
+                      user: _proUser(),
+                      showAddTileButton: false,
+                      onTileSelected: (_) {},
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Test Tile 0'), findsOneWidget);
+  });
+
+  testWidgets('wizard density hides Select Tile header and shows compact rows',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 912));
+
+    TileModel? selectedTile;
+    final tiles = List.generate(
+      8,
+      (i) => _sampleTile().copyWith(
+        id: 'tile-$i',
+        name: 'Wizard Tile $i',
+      ),
+    );
+
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(
+            (ref) => Stream.value(_proUser()),
+          ),
+          developerModeProvider.overrideWith(_TestDeveloperModeNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 912,
+              width: 420,
+              child: Column(
+                children: [
+                  const Text('Select your tile'),
+                  Expanded(
+                    child: TileSelectorWidget(
+                      tiles: tiles,
+                      user: _proUser(),
+                      density: TileSelectorDensity.wizard,
+                      showAddTileButton: false,
+                      onTileSelected: (tile) {
+                        selectedTile = tile;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Select Tile'), findsNothing);
+    expect(find.text('Wizard Tile 0'), findsOneWidget);
+    expect(find.text('Wizard Tile 1'), findsOneWidget);
+    expect(find.text('Wizard Tile 2'), findsOneWidget);
+    expect(find.text('Wizard Tile 3'), findsOneWidget);
+
+    await tester.tap(find.text('Wizard Tile 2'));
+    await tester.pumpAndSettle();
+
+    expect(selectedTile?.id, 'tile-2');
+  });
+}

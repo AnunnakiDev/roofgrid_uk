@@ -1,88 +1,83 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
-final themeInitializerProvider = FutureProvider<void>((ref) async {
-  final themeNotifier = ref.read(themeProvider.notifier);
-  await themeNotifier.initialize();
-});
+import 'package:roofgrid_uk/services/hive_service.dart';
+import 'package:roofgrid_uk/theme/app_color_schemes.dart';
+import 'package:roofgrid_uk/utils/app_theme.dart';
 
 final themeStateProvider = Provider<ThemeState>((ref) {
-  final initializer = ref.watch(themeInitializerProvider);
-  final themeState = ref.watch(themeProvider);
-
-  return initializer.when(
-    data: (_) => themeState,
-    loading: () =>
-        ThemeState(themeMode: ThemeMode.system, isInitialized: false),
-    error: (_, __) =>
-        ThemeState(themeMode: ThemeMode.system, isInitialized: false),
-  );
+  return ref.watch(themeProvider);
 });
 
 class ThemeState {
   final ThemeMode themeMode;
-  final Color customPrimaryColor;
+  final AppColorSchemeId colorSchemeId;
   final bool isInitialized;
 
   ThemeState({
     required this.themeMode,
-    this.customPrimaryColor = Colors.blue,
+    this.colorSchemeId = AppTheme.defaultColorScheme,
     this.isInitialized = false,
   });
 
+  ThemeData themeFor(Brightness brightness) {
+    return AppTheme.themeFor(
+      schemeId: colorSchemeId,
+      brightness: brightness,
+    );
+  }
+
+  AppSchemeTokens tokensFor(Brightness brightness) {
+    return AppColorSchemes.tokensFor(colorSchemeId, brightness);
+  }
+
   ThemeState copyWith({
     ThemeMode? themeMode,
-    Color? customPrimaryColor,
+    AppColorSchemeId? colorSchemeId,
     bool? isInitialized,
   }) {
     return ThemeState(
       themeMode: themeMode ?? this.themeMode,
-      customPrimaryColor: customPrimaryColor ?? this.customPrimaryColor,
+      colorSchemeId: colorSchemeId ?? this.colorSchemeId,
       isInitialized: isInitialized ?? this.isInitialized,
     );
   }
 }
 
-class ThemeNotifier extends StateNotifier<ThemeState> {
+class ThemeNotifier extends Notifier<ThemeState> {
   static const String _themePreferenceKey = 'themePreference';
-  static const String _customPrimaryColorKey = 'customPrimaryColor';
+  static const String _colorSchemeIdKey = 'colorSchemeId';
+  static const String _legacyCustomPrimaryColorKey = 'customPrimaryColor';
   Box? _box;
 
-  ThemeNotifier() : super(ThemeState(themeMode: ThemeMode.system));
-
-  Future<void> initialize() async {
-    try {
-      _box = await Hive.openBox('appState');
-      await _loadThemePreference();
-      await _loadCustomPrimaryColor();
-      state = state.copyWith(isInitialized: true);
-    } catch (e) {
-      debugPrint('Error initializing theme: $e');
-      try {
-        await Hive.deleteBoxFromDisk('appState');
-        _box = await Hive.openBox('appState');
-        await _loadThemePreference();
-        await _loadCustomPrimaryColor();
-        state = state.copyWith(isInitialized: true);
-      } catch (retryError) {
-        debugPrint('Retry failed: $retryError');
-        state = state.copyWith(
-          themeMode: ThemeMode.system,
-          isInitialized: true,
-        );
-        if (kIsWeb) {
-          debugPrint('Web storage issue detected. Using system theme.');
-        }
-      }
+  @override
+  ThemeState build() {
+    _box = _resolveAppStateBox();
+    if (_box == null) {
+      return ThemeState(
+        themeMode: ThemeMode.system,
+        isInitialized: true,
+      );
     }
+    return _readStateFromBox(_box!);
   }
 
-  Future<void> _loadThemePreference() async {
-    if (_box == null) return;
+  Box? _resolveAppStateBox() {
+    final serviceBox = HiveService.appStateBox;
+    if (serviceBox != null && serviceBox.isOpen) {
+      return serviceBox;
+    }
+    if (Hive.isBoxOpen('appState')) {
+      return Hive.box('appState');
+    }
+    return null;
+  }
+
+  ThemeState _readStateFromBox(Box box) {
     final themeString =
-        _box!.get(_themePreferenceKey, defaultValue: 'system') as String;
+        box.get(_themePreferenceKey, defaultValue: 'system') as String;
     ThemeMode themeMode;
     switch (themeString) {
       case 'light':
@@ -96,14 +91,37 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
         themeMode = ThemeMode.system;
         break;
     }
-    state = state.copyWith(themeMode: themeMode);
+
+    final schemeString = box.get(_colorSchemeIdKey) as String?;
+    final colorSchemeId = appColorSchemeIdFromStorage(schemeString);
+
+    if (box.get(_legacyCustomPrimaryColorKey) != null) {
+      box.delete(_legacyCustomPrimaryColorKey);
+    }
+
+    return ThemeState(
+      themeMode: themeMode,
+      colorSchemeId: colorSchemeId,
+      isInitialized: true,
+    );
   }
 
-  Future<void> _loadCustomPrimaryColor() async {
-    if (_box == null) return;
-    final colorValue = _box!.get(_customPrimaryColorKey);
-    if (colorValue != null) {
-      state = state.copyWith(customPrimaryColor: Color(colorValue));
+  Future<void> initialize() async {
+    try {
+      _box = _resolveAppStateBox() ??
+          (Hive.isBoxOpen('appState')
+              ? Hive.box('appState')
+              : await Hive.openBox('appState'));
+      state = _readStateFromBox(_box!);
+    } catch (e) {
+      debugPrint('Error initializing theme: $e');
+      state = ThemeState(
+        themeMode: ThemeMode.system,
+        isInitialized: true,
+      );
+      if (kIsWeb) {
+        debugPrint('Web storage issue detected. Using system theme.');
+      }
     }
   }
 
@@ -114,21 +132,42 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     }
   }
 
-  Future<void> setCustomPrimaryColor(Color color) async {
-    state = state.copyWith(customPrimaryColor: color);
+  Future<void> setColorSchemeId(
+    AppColorSchemeId schemeId, {
+    String? syncUserId,
+  }) async {
+    state = state.copyWith(colorSchemeId: schemeId);
     if (_box != null) {
-      await _box!.put(_customPrimaryColorKey, color.value);
+      await _box!.put(_colorSchemeIdKey, schemeId.storageKey);
+      await _box!.delete(_legacyCustomPrimaryColorKey);
+    }
+
+    if (syncUserId != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(syncUserId)
+            .update({
+          'settings.colorSchemeId': schemeId.storageKey,
+          'settings.primaryColor': FieldValue.delete(),
+        });
+      } catch (e) {
+        debugPrint('Failed to sync colour scheme to Firestore: $e');
+      }
     }
   }
 
-  void clearCustomPrimaryColor() {
-    state = state.copyWith(customPrimaryColor: Colors.blue);
+  /// Applies scheme from Firestore without writing back to the cloud.
+  Future<void> applyUserColorSchemeFromCloud(AppColorSchemeId? schemeId) async {
+    if (schemeId == null) return;
+
+    state = state.copyWith(colorSchemeId: schemeId);
     if (_box != null) {
-      _box!.delete(_customPrimaryColorKey);
+      await _box!.put(_colorSchemeIdKey, schemeId.storageKey);
+      await _box!.delete(_legacyCustomPrimaryColorKey);
     }
   }
 }
 
-final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeState>((ref) {
-  return ThemeNotifier();
-});
+final themeProvider =
+    NotifierProvider<ThemeNotifier, ThemeState>(ThemeNotifier.new);

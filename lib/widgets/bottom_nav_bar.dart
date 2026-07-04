@@ -29,23 +29,49 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: onTap,
-      items: items
-          .map((item) => BottomNavigationBarItem(
-                icon: Icon(item.icon),
-                activeIcon: Icon(item.activeIcon),
-                label: item.label,
-                tooltip: item.tooltip,
-              ))
-          .toList(),
-      selectedItemColor: Theme.of(context).colorScheme.primary,
-      unselectedItemColor: Colors.grey,
-      showUnselectedLabels: true,
-      type: BottomNavigationBarType.fixed,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      elevation: 8,
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.onSurface.withValues(alpha: 0.08),
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.35 : 0.1,
+            ),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: onTap,
+        items: items
+            .map((item) => BottomNavigationBarItem(
+                  icon: Icon(item.icon, size: 24),
+                  activeIcon: Icon(item.activeIcon, size: 28),
+                  label: item.label,
+                  tooltip: item.tooltip,
+                ))
+            .toList(),
+        selectedItemColor: colorScheme.secondary,
+        unselectedItemColor: colorScheme.onSurfaceVariant,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        selectedFontSize: 13,
+        unselectedFontSize: 12,
+        selectedLabelStyle: theme.bottomNavigationBarTheme.selectedLabelStyle,
+        unselectedLabelStyle: theme.bottomNavigationBarTheme.unselectedLabelStyle,
+      ),
     );
   }
 }

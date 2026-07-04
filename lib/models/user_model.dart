@@ -97,7 +97,7 @@ class UserModel {
           r.toString().split('.').last == (data['role'] as String? ?? 'free'),
       orElse: () => UserRole.free,
     );
-    print('Parsed role for user ${doc.id}: $userRole'); // Debug log
+    // print('Parsed role for user ${doc.id}: $userRole'); // Debug log - removed for production
 
     return UserModel(
       id: doc.id,

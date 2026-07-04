@@ -1,6 +1,9 @@
 import 'dart:math';
 import '../../../models/calculator/horizontal_calculation_input.dart';
 import '../../../models/calculator/horizontal_calculation_result.dart';
+import '../../../models/calculator/width_calculation_detail.dart';
+import '../../../utils/horizontal_result_validation.dart';
+import '../../../utils/tile_calculation_profile.dart';
 
 /// Calculates the horizontal spacing for roof tiles based on input measurements
 /// and tile specifications.
@@ -48,7 +51,10 @@ class HorizontalCalculationService {
       useLHTile = 'NO';
     }
 
-    final int setSize = inputs.tileCoverWidth > 300 ? 2 : 3;
+    final int setSize = resolveHorizontalSetSize(
+      materialType: inputs.materialType,
+      tileCoverWidth: inputs.tileCoverWidth,
+    );
 
     // Step 3: Calculate desired total width
     final List<int> desiredTotalWidths = inputs.widths
@@ -438,21 +444,31 @@ class HorizontalCalculationService {
     }
 
     // Create result object
-    final result = solution['widthResults'][0];
-    final solutionType = solution['type'];
+    final List<Map<String, dynamic>> widthResults =
+        (solution['widthResults'] as List).cast<Map<String, dynamic>>();
+    final result = widthResults[0];
+    final solutionType = solution['type'] as String;
+    final widthDetails = _buildWidthDetails(
+      widthResults: widthResults,
+      solutionType: solutionType,
+      inputWidths: inputs.widths,
+      useDryVerge: inputs.useDryVerge,
+      abutmentSide: inputs.abutmentSide,
+      crossBonded: inputs.crossBonded,
+    );
 
-    return HorizontalCalculationResult(
+    final horizontalResult = HorizontalCalculationResult(
       width: inputs.widths[0].round(),
       solution: solutionType == 'full'
           ? 'Even Sets'
           : solutionType == 'split'
               ? 'Split Sets'
-              : 'Cut Course',
+              : 'Cut Tile',
       newWidth: result['totalWidth'] as int,
-      lhOverhang: inputs.useDryVerge == 'NO' && inputs.abutmentSide == 'NONE'
+      lhOverhang: inputs.abutmentSide == 'NONE'
           ? result['overhangLeft'] as int
           : null,
-      rhOverhang: inputs.useDryVerge == 'NO' && inputs.abutmentSide == 'NONE'
+      rhOverhang: inputs.abutmentSide == 'NONE'
           ? result['overhangRight'] as int
           : null,
       cutTile: solutionType == 'cut' ? result['cutTileWidth'] as int : null,
@@ -465,7 +481,54 @@ class HorizontalCalculationService {
       splitMarks: solutionType == 'split'
           ? '${result['sets1']} sets of $setSize @ ${result['adjustedMarks1']}'
           : null,
-      actualSpacing: result['actualSpacing'] as int,
+      actualSpacing: (result['actualSpacing'] as int?) ??
+          (result['spacing2'] as int?) ??
+          (result['spacing1'] as int?),
+      widthDetails: widthDetails,
     );
+
+    assert(() {
+      if (horizontalResult.solution == 'Invalid') return true;
+      final issues = validateHorizontalReconciles(
+        input: inputs,
+        result: horizontalResult,
+      );
+      assert(
+        issues.isEmpty,
+        issues.map((issue) => issue.message).join('; '),
+      );
+      return true;
+    }());
+
+    return horizontalResult;
+  }
+
+  static List<WidthCalculationDetail> _buildWidthDetails({
+    required List<Map<String, dynamic>> widthResults,
+    required String solutionType,
+    required List<double> inputWidths,
+    required String useDryVerge,
+    required String abutmentSide,
+    required String crossBonded,
+  }) {
+    return List.generate(widthResults.length, (index) {
+      final entry = widthResults[index];
+      final includeOverhangs = abutmentSide == 'NONE';
+
+      return WidthCalculationDetail(
+        inputWidth: inputWidths[index].round(),
+        totalWidth: entry['totalWidth'] as int,
+        lhOverhang:
+            includeOverhangs ? entry['overhangLeft'] as int? : null,
+        rhOverhang:
+            includeOverhangs ? entry['overhangRight'] as int? : null,
+        firstMark: entry['firstMark'] as int,
+        secondMark: crossBonded == 'YES' ? entry['secondMark'] as int? : null,
+        cutTile: solutionType == 'cut' ? entry['cutTileWidth'] as int? : null,
+        actualSpacing: (entry['actualSpacing'] as int?) ??
+            (entry['spacing2'] as int?) ??
+            (entry['spacing1'] as int?),
+      );
+    });
   }
 }

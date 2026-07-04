@@ -8,6 +8,7 @@ class HorizontalCalculationInput {
   final String useLHTile; // 'YES' or 'NO'
   final double lhTileWidth;
   final String crossBonded; // 'YES' or 'NO'
+  final String? materialType;
 
   const HorizontalCalculationInput({
     required this.widths,
@@ -19,6 +20,7 @@ class HorizontalCalculationInput {
     required this.useLHTile,
     required this.lhTileWidth,
     required this.crossBonded,
+    this.materialType,
   });
 
   Map<String, dynamic> toJson() {
@@ -32,6 +34,7 @@ class HorizontalCalculationInput {
       'useLHTile': useLHTile,
       'lhTileWidth': lhTileWidth,
       'crossBonded': crossBonded,
+      if (materialType != null) 'materialType': materialType,
     };
   }
 }

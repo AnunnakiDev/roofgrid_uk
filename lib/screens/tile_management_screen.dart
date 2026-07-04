@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+
+import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
+import 'package:roofgrid_uk/utils/tile_access.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 
 class TileManagementScreen extends ConsumerStatefulWidget {
   const TileManagementScreen({super.key});
@@ -29,7 +33,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     _checkConnectivity();
     Connectivity().onConnectivityChanged.listen((result) {
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = isOnlineFromResults(result);
       });
       if (_isOnline) {
         ref.refresh(allAvailableTilesProvider(
@@ -39,9 +43,9 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
   }
 
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
@@ -66,6 +70,8 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
           return const Scaffold(
               body: Center(child: CircularProgressIndicator()));
         }
+        final effectiveIsPro = ref.watch(effectiveIsProProvider);
+
         return Scaffold(
           appBar: AppBar(
             title: const Text('Tile Management'),
@@ -81,36 +87,10 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             ),
           ),
           drawer: const MainDrawer(),
-          body: user.isPro
+          body: canBrowseTileDatabase(user, ref.watch(developerModeProvider))
               ? _buildProUserContent(user)
               : _buildFreeUserContent(user),
-          bottomNavigationBar: BottomNavBar(
-            currentIndex: 3,
-            onTap: (index) {
-              if (index == 0) context.go('/home');
-              if (index == 1) context.go('/calculator/tile-select');
-              if (index == 2) context.go('/results');
-              if (index == 3) context.go('/tiles');
-            },
-            items: const [
-              BottomNavItem(
-                  label: 'Home',
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home),
-              BottomNavItem(
-                  label: 'Calculator',
-                  icon: Icons.calculate_outlined,
-                  activeIcon: Icons.calculate),
-              BottomNavItem(
-                  label: 'Results',
-                  icon: Icons.save_outlined,
-                  activeIcon: Icons.save),
-              BottomNavItem(
-                  label: 'Tiles',
-                  icon: Icons.grid_view_outlined,
-                  activeIcon: Icons.grid_view),
-            ],
-          ),
+
         );
       },
       loading: () =>
@@ -133,19 +113,42 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
     );
   }
 
+  void _openTileEditor(UserModel user, TileModel tile) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: AddTileWidget(
+          userRole: user.role,
+          userId: user.id,
+          tile: canEditTileInList(
+            tile: tile,
+            user: user,
+            effectiveIsPro: ref.read(effectiveIsProProvider),
+          )
+              ? tile
+              : null,
+          onTileCreated: (_) {
+            ref.invalidate(allAvailableTilesProvider(user.id));
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildProUserContent(UserModel user) {
     final tilesAsync = ref.watch(allAvailableTilesProvider(user.id));
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
     return tilesAsync.when(
       data: (tiles) {
-        if (_isOnline) {
+        if (Hive.isBoxOpen('tilesBox')) {
           final tilesBox = Hive.box<TileModel>('tilesBox');
-          for (var tile in tiles) {
-            tilesBox.put(tile.id, tile);
+          if (_isOnline) {
+            for (var tile in tiles) {
+              tilesBox.put(tile.id, tile);
+            }
+          } else {
+            tiles = tilesBox.values.toList();
           }
-        }
-        if (!_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          tiles = tilesBox.values.toList();
         }
         if (tiles.isEmpty) {
           return _buildPlaceholderContent(context, user);
@@ -155,7 +158,13 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
           user: user,
           showAddTileButton: true,
           onTileSelected: (tile) {
-            context.push('/calculator/tile-select', extra: {'tile': tile});
+            if (canEditTileInList(
+              tile: tile,
+              user: user,
+              effectiveIsPro: effectiveIsPro,
+            )) {
+              _openTileEditor(user, tile);
+            }
           },
         );
       },
@@ -168,15 +177,22 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
           return const Center(
               child: Text('Please log in to access this feature'));
         }
-        final tilesBox = Hive.box<TileModel>('tilesBox');
-        final tiles = tilesBox.values.toList();
+        final tiles = Hive.isBoxOpen('tilesBox')
+            ? Hive.box<TileModel>('tilesBox').values.toList()
+            : <TileModel>[];
         if (tiles.isNotEmpty) {
           return TileSelectorWidget(
             tiles: tiles,
             user: user,
             showAddTileButton: true,
             onTileSelected: (tile) {
-              context.push('/calculator/tile-select', extra: {'tile': tile});
+              if (canEditTileInList(
+                tile: tile,
+                user: user,
+                effectiveIsPro: ref.read(effectiveIsProProvider),
+              )) {
+                _openTileEditor(user, tile);
+              }
             },
           );
         }
@@ -210,7 +226,7 @@ class _TileManagementScreenState extends ConsumerState<TileManagementScreen> {
             Icon(
               Icons.grid_view,
               size: 80,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 24),
             Text(

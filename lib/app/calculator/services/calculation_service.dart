@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:roofgrid_uk/app/calculator/services/horizontal_calculation_service.dart';
@@ -11,15 +11,24 @@ import 'package:roofgrid_uk/models/calculator/vertical_calculation_input.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 
 class CalculationService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final Box<Map> _calculationsBox = Hive.box<Map>('calculationsBox');
+  final bool _persistenceEnabled;
+  late final FirebaseFirestore _firestore;
+  late final Box<Map> _calculationsBox;
 
-  CalculationService() {
-    // Initialize Hive box if not already opened
-    if (!_calculationsBox.isOpen) {
-      Hive.openBox<Map>('calculationsBox');
+  CalculationService({bool persistenceEnabled = true})
+      : _persistenceEnabled = persistenceEnabled {
+    if (persistenceEnabled) {
+      _firestore = FirebaseFirestore.instance;
+      _calculationsBox = Hive.box<Map>('calculationsBox');
+      if (!_calculationsBox.isOpen) {
+        Hive.openBox<Map>('calculationsBox');
+      }
     }
   }
+
+  /// Calculation-only instance for widget/unit tests (no Firestore or Hive).
+  factory CalculationService.forTesting() =>
+      CalculationService(persistenceEnabled: false);
 
   /// Calculates vertical batten gauge
   Future<VerticalCalculationResult> calculateVertical({
@@ -92,6 +101,7 @@ class CalculationService {
         abutmentSide: abutmentSide,
         useLHTile: useLHTile,
         crossBonded: crossBonded,
+        materialType: materialType,
       ),
     );
 
@@ -99,6 +109,14 @@ class CalculationService {
       'verticalResult': verticalResult.toJson(),
       'horizontalResult': horizontalResult.toJson(),
     };
+  }
+
+  void _requirePersistence(String operation) {
+    if (!_persistenceEnabled) {
+      throw UnsupportedError(
+        '$operation requires persistence; use CalculationService() in production.',
+      );
+    }
   }
 
   /// Saves a calculation to Firestore and Hive
@@ -112,6 +130,7 @@ class CalculationService {
     required Map<String, dynamic> tile,
     required bool success,
   }) async {
+    _requirePersistence('saveCalculation');
     final timestamp = DateTime.now();
     final calculationForFirestore = {
       'id': id,
@@ -139,8 +158,7 @@ class CalculationService {
     };
 
     // Check connectivity
-    final connectivityResult = await Connectivity().checkConnectivity();
-    final isOnline = connectivityResult != ConnectivityResult.none;
+    final isOnline = await isDeviceOnline();
 
     if (isOnline) {
       // Save to Firestore
@@ -149,9 +167,9 @@ class CalculationService {
             .collection('calculations')
             .doc(id)
             .set(calculationForFirestore);
-        print("Calculation $id saved to Firestore");
+        // print("Calculation $id saved to Firestore"); // removed for prod
       } catch (e) {
-        print("Error saving calculation to Firestore: $e");
+        // print("Error saving calculation to Firestore: $e"); // removed for prod
         // Fall back to Hive if Firestore fails
         await _saveToHive(id, calculationForHive);
         throw Exception("Failed to save calculation to Firestore: $e");
@@ -159,7 +177,7 @@ class CalculationService {
     } else {
       // Save to Hive if offline
       await _saveToHive(id, calculationForHive);
-      print("Calculation $id saved to Hive (offline)");
+      // print("Calculation $id saved to Hive (offline)"); // removed for prod
     }
 
     // Save to Hive for local caching
@@ -173,17 +191,17 @@ class CalculationService {
 
   /// Syncs locally stored calculations to Firestore when online
   Future<void> syncCalculations() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    final isOnline = connectivityResult != ConnectivityResult.none;
+    _requirePersistence('syncCalculations');
+    final isOnline = await isDeviceOnline();
 
     if (!isOnline) {
-      print("Cannot sync calculations: Device is offline");
+      // print("Cannot sync calculations: Device is offline"); // removed for prod
       return;
     }
 
     final calculationsToSync = _calculationsBox.values.toList();
     if (calculationsToSync.isEmpty) {
-      print("No calculations to sync");
+      // print("No calculations to sync"); // removed for prod
       return;
     }
 
@@ -200,9 +218,9 @@ class CalculationService {
       final id = calculation['id'] as String;
       try {
         await _firestore.collection('calculations').doc(id).set(calculation);
-        print("Synced calculation $id to Firestore");
+        // print("Synced calculation $id to Firestore"); // removed for prod
       } catch (e) {
-        print("Error syncing calculation $id: $e");
+        // print("Error syncing calculation $id: $e"); // removed for prod
       }
     }
 
@@ -213,6 +231,7 @@ class CalculationService {
 
   /// Fetches all calculations for a user (for stats purposes)
   Stream<List<Map<String, dynamic>>> getCalculations(String userId) {
+    _requirePersistence('getCalculations');
     return _firestore
         .collection('calculations')
         .where('userId', isEqualTo: userId)
@@ -222,6 +241,7 @@ class CalculationService {
 
   /// Fetches all calculations (for admin stats)
   Stream<List<Map<String, dynamic>>> getAllCalculations() {
+    _requirePersistence('getAllCalculations');
     return _firestore
         .collection('calculations')
         .snapshots()

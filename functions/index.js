@@ -48,6 +48,57 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+const DESIGNATED_ADMIN_EMAILS = new Set([
+  "support@roofgrid.uk",
+  "hgwarner1307@gmail.com",
+]);
+
+// Verify Bearer ID token and ensure caller is an admin.
+const verifyAdminFromRequest = async (req) => {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer (.+)$/i);
+  if (!match) {
+    const error = new Error("Missing Authorization Bearer token");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const decoded = await admin.auth().verifyIdToken(match[1]);
+  const callerDoc = await admin
+    .firestore()
+    .collection("users")
+    .doc(decoded.uid)
+    .get();
+
+  const callerRole = callerDoc.exists ? callerDoc.data().role : null;
+  const callerEmail = decoded.email || callerDoc.data()?.email;
+  const isDesignatedAdmin =
+    callerEmail && DESIGNATED_ADMIN_EMAILS.has(callerEmail.toLowerCase());
+
+  if (callerRole !== "admin" && !isDesignatedAdmin) {
+    const error = new Error("Caller is not an admin");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return { uid: decoded.uid, callerDoc };
+};
+
+const deleteQueryBatch = async (query, batchSize = 200) => {
+  const snapshot = await query.limit(batchSize).get();
+  if (snapshot.empty) {
+    return;
+  }
+
+  const batch = admin.firestore().batch();
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+
+  if (snapshot.size >= batchSize) {
+    await deleteQueryBatch(query, batchSize);
+  }
+};
+
 // Utility function to get user document
 const getUserDoc = async (userId) => {
   try {
@@ -209,6 +260,93 @@ app.post("/createCustomerPortalSession", async (req, res) => {
   } catch (error) {
     functions.logger.error("Error in createCustomerPortalSession:", error);
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin: delete another user's Auth account and Firestore data
+app.post("/adminDeleteUser", async (req, res) => {
+  try {
+    const { uid: callerUid } = await verifyAdminFromRequest(req);
+    const targetUserId = req.body?.data?.targetUserId;
+
+    if (!targetUserId || typeof targetUserId !== "string") {
+      return res.status(400).json({ error: "targetUserId is required" });
+    }
+
+    if (targetUserId === callerUid) {
+      return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+
+    const targetDoc = await admin
+      .firestore()
+      .collection("users")
+      .doc(targetUserId)
+      .get();
+
+    if (targetDoc.exists && targetDoc.data().role === "admin") {
+      return res.status(400).json({ error: "Admin accounts cannot be deleted" });
+    }
+
+    const tilesQuery = admin
+      .firestore()
+      .collection("users")
+      .doc(targetUserId)
+      .collection("tiles");
+
+    await deleteQueryBatch(tilesQuery);
+    await admin.firestore().collection("users").doc(targetUserId).delete();
+
+    try {
+      await admin.auth().deleteUser(targetUserId);
+    } catch (authError) {
+      if (authError.code !== "auth/user-not-found") {
+        throw authError;
+      }
+      functions.logger.warn(
+        `Auth user ${targetUserId} not found; Firestore data removed`,
+      );
+    }
+
+    functions.logger.info(`Admin ${callerUid} deleted user ${targetUserId}`);
+    return res.status(200).json({ success: true, targetUserId });
+  } catch (error) {
+    functions.logger.error("Error in adminDeleteUser:", error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({ error: error.message || "Delete failed" });
+  }
+});
+
+// Admin: create a user without switching the caller's client session
+app.post("/adminCreateUser", async (req, res) => {
+  try {
+    await verifyAdminFromRequest(req);
+    const email = (req.body?.data?.email || "").trim().toLowerCase();
+    const password = req.body?.data?.password || "";
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const userRecord = await admin.auth().createUser({ email, password });
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    await admin.firestore().collection("users").doc(userRecord.uid).set({
+      id: userRecord.uid,
+      email,
+      role: "free",
+      createdAt: now,
+      lastLoginAt: now,
+    });
+
+    functions.logger.info(`Admin created user ${userRecord.uid} (${email})`);
+    return res.status(200).json({ success: true, userId: userRecord.uid });
+  } catch (error) {
+    functions.logger.error("Error in adminCreateUser:", error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({ error: error.message || "Create failed" });
   }
 });
 
