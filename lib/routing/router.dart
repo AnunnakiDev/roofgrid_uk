@@ -8,30 +8,33 @@ import 'package:roofgrid_uk/navigation/app_shell.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/routing/deferred_screen.dart';
 import 'package:roofgrid_uk/widgets/admin_access_guard.dart';
-import 'package:roofgrid_uk/screens/admin/admin_dashboard_screen.dart';
-import 'package:roofgrid_uk/screens/admin/admin_stats_screen.dart';
-import 'package:roofgrid_uk/screens/admin/admin_tile_management_screen.dart';
-import 'package:roofgrid_uk/screens/admin/user_management_screen.dart';
-import 'package:roofgrid_uk/screens/auth/email_link_screen.dart';
-import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
 import 'package:roofgrid_uk/screens/auth/login_screen.dart';
-import 'package:roofgrid_uk/screens/auth/register_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
-import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
 import 'package:roofgrid_uk/screens/home_screen.dart';
-import 'package:roofgrid_uk/screens/profile_screen.dart';
-import 'package:roofgrid_uk/screens/results/result_detail_screen.dart';
-import 'package:roofgrid_uk/screens/results/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/splash_screen.dart';
-import 'package:roofgrid_uk/screens/subscription/cancel_page.dart';
-import 'package:roofgrid_uk/screens/subscription/success_page.dart';
-import 'package:roofgrid_uk/screens/subscription_screen.dart';
-import 'package:roofgrid_uk/screens/support/contact_screen.dart';
-import 'package:roofgrid_uk/screens/support/faq_screen.dart';
-import 'package:roofgrid_uk/screens/support/legal_screen.dart';
-import 'package:roofgrid_uk/screens/tile_management_screen.dart';
+
+import '../screens/admin/admin_dashboard_screen.dart' deferred as admin_dashboard;
+import '../screens/admin/admin_stats_screen.dart' deferred as admin_stats;
+import '../screens/admin/admin_tile_management_screen.dart'
+    deferred as admin_tile_management;
+import '../screens/admin/user_management_screen.dart' deferred as admin_users;
+import '../screens/auth/email_link_screen.dart' deferred as email_link;
+import '../screens/auth/forgot_password_screen.dart' deferred as forgot_password;
+import '../screens/auth/register_screen.dart' deferred as register;
+import '../screens/calculator/tile_selector_screen.dart' deferred as tile_selector;
+import '../screens/profile_screen.dart' deferred as profile;
+import '../screens/results/result_detail_screen.dart' deferred as result_detail;
+import '../screens/results/saved_results_screen.dart' deferred as saved_results;
+import '../screens/subscription/cancel_page.dart' deferred as subscription_cancel;
+import '../screens/subscription/success_page.dart' deferred as subscription_success;
+import '../screens/subscription_screen.dart' deferred as subscription;
+import '../screens/support/contact_screen.dart' deferred as support_contact;
+import '../screens/support/faq_screen.dart' deferred as support_faq;
+import '../screens/support/legal_screen.dart' deferred as support_legal;
+import '../screens/tile_management_screen.dart' deferred as tile_management;
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   ref.keepAlive();
@@ -109,7 +112,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'tile-select',
-                    builder: (context, state) => const TileSelectorScreen(),
+                    builder: (context, state) => DeferredScreen(
+                      loadLibrary: tile_selector.loadLibrary,
+                      builder: () => tile_selector.TileSelectorScreen(),
+                    ),
                   ),
                 ],
               ),
@@ -119,7 +125,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/results',
-                builder: (context, state) => const SavedResultsScreen(),
+                builder: (context, state) => DeferredScreen(
+                  loadLibrary: saved_results.loadLibrary,
+                  builder: () => saved_results.SavedResultsScreen(),
+                ),
               ),
             ],
           ),
@@ -127,7 +136,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/tiles',
-                builder: (context, state) => const TileManagementScreen(),
+                builder: (context, state) => DeferredScreen(
+                  loadLibrary: tile_management.loadLibrary,
+                  builder: () => tile_management.TileManagementScreen(),
+                ),
               ),
             ],
           ),
@@ -138,26 +150,41 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final tab =
               int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
-          return ProfileScreen(initialTabIndex: tab);
+          return DeferredScreen(
+            loadLibrary: profile.loadLibrary,
+            builder: () => profile.ProfileScreen(initialTabIndex: tab),
+          );
         },
       ),
       GoRoute(
         path: '/result-detail',
-        builder: (context, state) => ResultDetailScreen(
-          result: state.extra as SavedResult,
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: result_detail.loadLibrary,
+          builder: () => result_detail.ResultDetailScreen(
+            result: state.extra as SavedResult,
+          ),
         ),
       ),
       GoRoute(
         path: '/subscription',
-        builder: (context, state) => const SubscriptionScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: subscription.loadLibrary,
+          builder: () => subscription.SubscriptionScreen(),
+        ),
         routes: [
           GoRoute(
             path: 'success',
-            builder: (context, state) => const SuccessPage(),
+            builder: (context, state) => DeferredScreen(
+              loadLibrary: subscription_success.loadLibrary,
+              builder: () => subscription_success.SuccessPage(),
+            ),
           ),
           GoRoute(
             path: 'cancel',
-            builder: (context, state) => const CancelPage(),
+            builder: (context, state) => DeferredScreen(
+              loadLibrary: subscription_cancel.loadLibrary,
+              builder: () => subscription_cancel.CancelPage(),
+            ),
           ),
         ],
       ),
@@ -167,53 +194,83 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/auth/register',
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: register.loadLibrary,
+          builder: () => register.RegisterScreen(),
+        ),
       ),
       GoRoute(
         path: '/auth/forgot-password',
-        builder: (context, state) => const ForgotPasswordScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: forgot_password.loadLibrary,
+          builder: () => forgot_password.ForgotPasswordScreen(),
+        ),
       ),
       GoRoute(
         path: '/auth/email-link',
-        builder: (context, state) => const EmailLinkScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: email_link.loadLibrary,
+          builder: () => email_link.EmailLinkScreen(),
+        ),
       ),
       GoRoute(
         path: '/support/contact',
-        builder: (context, state) => const ContactScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: support_contact.loadLibrary,
+          builder: () => support_contact.ContactScreen(),
+        ),
       ),
       GoRoute(
         path: '/support/faq',
-        builder: (context, state) => const FaqScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: support_faq.loadLibrary,
+          builder: () => support_faq.FaqScreen(),
+        ),
       ),
       GoRoute(
         path: '/support/legal',
-        builder: (context, state) => const LegalScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: support_legal.loadLibrary,
+          builder: () => support_legal.LegalScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/dashboard',
-        builder: (context, state) => const AdminAccessGuard(
-          child: AdminDashboardScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: admin_dashboard.loadLibrary,
+          builder: () => AdminAccessGuard(
+            child: admin_dashboard.AdminDashboardScreen(),
+          ),
         ),
       ),
       GoRoute(
         path: '/admin/stats',
-        builder: (context, state) => const AdminAccessGuard(
-          child: AdminStatsScreen(),
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: admin_stats.loadLibrary,
+          builder: () => AdminAccessGuard(
+            child: admin_stats.AdminStatsScreen(),
+          ),
         ),
       ),
       GoRoute(
         path: '/admin/tiles',
-        builder: (context, state) => AdminAccessGuard(
-          child: AdminTileManagementScreen(
-            initialTab: state.uri.queryParameters['tab'],
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: admin_tile_management.loadLibrary,
+          builder: () => AdminAccessGuard(
+            child: admin_tile_management.AdminTileManagementScreen(
+              initialTab: state.uri.queryParameters['tab'],
+            ),
           ),
         ),
       ),
       GoRoute(
         path: '/admin/users',
-        builder: (context, state) => AdminAccessGuard(
-          child: UserManagementScreen(
-            initialFilter: state.uri.queryParameters['filter'],
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: admin_users.loadLibrary,
+          builder: () => AdminAccessGuard(
+            child: admin_users.UserManagementScreen(
+              initialFilter: state.uri.queryParameters['filter'],
+            ),
           ),
         ),
       ),
