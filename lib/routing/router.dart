@@ -1,18 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:roofgrid_uk/navigation/app_shell.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/widgets/admin_access_guard.dart';
 import 'package:roofgrid_uk/screens/admin/admin_dashboard_screen.dart';
 import 'package:roofgrid_uk/screens/admin/admin_stats_screen.dart';
 import 'package:roofgrid_uk/screens/admin/admin_tile_management_screen.dart';
 import 'package:roofgrid_uk/screens/admin/user_management_screen.dart';
+import 'package:roofgrid_uk/screens/auth/email_link_screen.dart';
 import 'package:roofgrid_uk/screens/auth/forgot_password_screen.dart';
 import 'package:roofgrid_uk/screens/auth/login_screen.dart';
 import 'package:roofgrid_uk/screens/auth/register_screen.dart';
 import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
+import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/screens/calculator/tile_selector_screen.dart';
 import 'package:roofgrid_uk/screens/home_screen.dart';
+import 'package:roofgrid_uk/screens/profile_screen.dart';
 import 'package:roofgrid_uk/screens/results/result_detail_screen.dart';
 import 'package:roofgrid_uk/screens/results/saved_results_screen.dart';
 import 'package:roofgrid_uk/screens/splash_screen.dart';
@@ -25,66 +34,118 @@ import 'package:roofgrid_uk/screens/support/legal_screen.dart';
 import 'package:roofgrid_uk/screens/tile_management_screen.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  ref.keepAlive();
 
-  return GoRouter(
+  var refreshScheduled = false;
+  late final GoRouter router;
+
+  void scheduleRefresh() {
+    if (refreshScheduled) return;
+    refreshScheduled = true;
+    scheduleMicrotask(() {
+      refreshScheduled = false;
+      router.refresh();
+    });
+  }
+
+  router = GoRouter(
     initialLocation: '/splash',
-    redirect: (context, state) {
-      final isAuthenticated = authState.isAuthenticated;
+    redirect: (context, state) async {
       final isSplash = state.matchedLocation == '/splash';
-      final isAuthRoute = state.matchedLocation.startsWith('/auth');
-
-      print(
-          "Router redirect: matchedLocation=${state.matchedLocation}, authState.isAuthenticated=$isAuthenticated");
+      final location = state.matchedLocation;
 
       if (isSplash) {
-        return isAuthenticated ? '/home' : '/auth/login';
+        await ref.read(authProvider.notifier).applyRememberMePolicy();
+        if (!ref.mounted) return null;
       }
 
-      if (!isAuthenticated && !isAuthRoute) {
-        return '/auth/login';
-      }
+      final currentUser = ref.read(currentUserProvider).value;
+      final devMode = ref.read(developerModeProvider);
+      final effectiveIsPro = resolveEffectiveIsPro(currentUser, devMode);
+      final isAuthenticated = ref.read(authProvider).isAuthenticated;
 
-      if (isAuthenticated && isAuthRoute) {
-        return '/home';
-      }
-
-      return null;
+      return resolveAppRedirect(
+        location: location,
+        isAuthenticated: isAuthenticated,
+        effectiveIsPro: effectiveIsPro,
+        currentUser: currentUser,
+      );
     },
     routes: [
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (context, state) => const HomeScreen(),
-      ),
-      GoRoute(
-        path: '/calculator',
-        builder: (context, state) => CalculatorScreen(
-          savedResult: state.extra as SavedResult?,
-        ),
-        routes: [
-          GoRoute(
-            path: 'tile-select',
-            builder: (context, state) => const TileSelectorScreen(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return AppShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (context, state) => const HomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/calculator',
+                builder: (context, state) {
+                  final savedResult = state.extra is SavedResult
+                      ? state.extra as SavedResult
+                      : null;
+                  return CalculatorScreen(
+                    savedResult: savedResult,
+                    initialMode: savedResult == null
+                        ? parseCalculatorModeQuery(
+                            state.uri.queryParameters['mode'],
+                          )
+                        : null,
+                  );
+                },
+                routes: [
+                  GoRoute(
+                    path: 'tile-select',
+                    builder: (context, state) => const TileSelectorScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/results',
+                builder: (context, state) => const SavedResultsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tiles',
+                builder: (context, state) => const TileManagementScreen(),
+              ),
+            ],
           ),
         ],
       ),
       GoRoute(
-        path: '/results',
-        builder: (context, state) => const SavedResultsScreen(),
+        path: '/profile',
+        builder: (context, state) {
+          final tab =
+              int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+          return ProfileScreen(initialTabIndex: tab);
+        },
       ),
       GoRoute(
         path: '/result-detail',
         builder: (context, state) => ResultDetailScreen(
           result: state.extra as SavedResult,
         ),
-      ),
-      GoRoute(
-        path: '/tiles',
-        builder: (context, state) => const TileManagementScreen(),
       ),
       GoRoute(
         path: '/subscription',
@@ -113,6 +174,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
+        path: '/auth/email-link',
+        builder: (context, state) => const EmailLinkScreen(),
+      ),
+      GoRoute(
         path: '/support/contact',
         builder: (context, state) => const ContactScreen(),
       ),
@@ -126,19 +191,31 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/admin/dashboard',
-        builder: (context, state) => const AdminDashboardScreen(),
+        builder: (context, state) => const AdminAccessGuard(
+          child: AdminDashboardScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/stats',
-        builder: (context, state) => const AdminStatsScreen(),
+        builder: (context, state) => const AdminAccessGuard(
+          child: AdminStatsScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/tiles',
-        builder: (context, state) => const AdminTileManagementScreen(),
+        builder: (context, state) => AdminAccessGuard(
+          child: AdminTileManagementScreen(
+            initialTab: state.uri.queryParameters['tab'],
+          ),
+        ),
       ),
       GoRoute(
         path: '/admin/users',
-        builder: (context, state) => const UserManagementScreen(),
+        builder: (context, state) => AdminAccessGuard(
+          child: UserManagementScreen(
+            initialFilter: state.uri.queryParameters['filter'],
+          ),
+        ),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
@@ -147,4 +224,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
+
+  ref.listen(authProvider, (_, __) => scheduleRefresh());
+  ref.listen(currentUserProvider, (_, __) => scheduleRefresh());
+  ref.listen(developerModeProvider, (_, __) => scheduleRefresh());
+  ref.onDispose(router.dispose);
+
+  return router;
 });
