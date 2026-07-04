@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/calculator_launch_cards.dart';
 import 'package:roofgrid_uk/widgets/selected_tile_row.dart';
@@ -25,9 +26,8 @@ class ChooseCalculationTypeStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 16.0 : 12.0;
+    final isNarrow = isNarrowLayout(context);
+    final padding = isNarrow ? 12.0 : 16.0;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -39,7 +39,7 @@ class ChooseCalculationTypeStep extends ConsumerWidget {
             padding: EdgeInsets.only(top: padding, bottom: 8),
             child: CalculatorStepProgress(
               currentStep: CalculatorFlowStep.selectType,
-              compact: !isLargeScreen,
+              compact: isNarrow,
             ),
           ),
           Text(

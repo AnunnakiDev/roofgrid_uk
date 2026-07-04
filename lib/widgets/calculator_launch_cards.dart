@@ -156,7 +156,7 @@ class _CompactLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 132,
+      height: 140,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

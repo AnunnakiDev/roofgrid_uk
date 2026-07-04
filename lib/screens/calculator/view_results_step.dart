@@ -7,6 +7,7 @@ import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/utils/result_display_registry.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/calculation_results_panel.dart';
@@ -53,10 +54,11 @@ class ViewResultsStep extends ConsumerWidget {
     final tileMaterialType = ref.watch(calculatorProvider.select(
       (state) => state.selectedTile?.materialTypeString,
     ));
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 12.0 : 8.0;
-    final fontSize = isLargeScreen ? 15.0 : 14.0;
+    final isNarrow = isNarrowLayout(context);
+    final padding = isNarrow ? 8.0 : 12.0;
+    final fontSize = isNarrow ? 14.0 : 15.0;
+    final colorScheme = Theme.of(context).colorScheme;
+    final useStickySave = isNarrow;
 
     return Column(
       children: [
@@ -100,7 +102,7 @@ class ViewResultsStep extends ConsumerWidget {
             label: 'Step 3: View Results',
             child: CalculatorStepProgress(
               currentStep: CalculatorFlowStep.viewResults,
-              compact: !isLargeScreen,
+              compact: isNarrow,
             ),
           ),
         ),
@@ -118,6 +120,7 @@ class ViewResultsStep extends ConsumerWidget {
                     effectiveIsPro,
                     tileMaterialType,
                     ref,
+                    includePanelSave: !useStickySave,
                   ),
                 if (_showVerticalResults(calcState) &&
                     _showHorizontalResults(calcState))
@@ -129,6 +132,7 @@ class ViewResultsStep extends ConsumerWidget {
                     fontSize,
                     effectiveIsPro,
                     ref,
+                    includePanelSave: !useStickySave,
                   ),
                 if (calcState.errorMessage != null)
                   Container(
@@ -163,29 +167,102 @@ class ViewResultsStep extends ConsumerWidget {
             ),
           ),
         ),
-        Padding(
-          padding: EdgeInsets.all(padding),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              OutlinedButton.icon(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                label: const Text('Back'),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
               ),
-              if (effectiveIsPro &&
-                  calculationType == CalculationTypeSelection.both &&
-                  _canSaveCombined(calcState))
-                ElevatedButton.icon(
-                  onPressed: () => onSaveCombined(user),
-                  icon: const Icon(Icons.save_outlined, size: 20),
-                  label: const Text('Save Combined'),
-                ),
-            ],
+            ),
+            color: colorScheme.surface,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.all(padding),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                    label: const Text('Back'),
+                  ),
+                  const Spacer(),
+                  ..._buildFooterSaveActions(
+                    context,
+                    calcState,
+                    effectiveIsPro,
+                    fontSize,
+                    includeSingleModeSave: useStickySave,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
     ).animate().fadeIn(duration: 600.ms);
+  }
+
+  List<Widget> _buildFooterSaveActions(
+    BuildContext context,
+    CalculatorState calcState,
+    bool effectiveIsPro,
+    double fontSize, {
+    required bool includeSingleModeSave,
+  }) {
+    if (!effectiveIsPro) return const [];
+
+    if (calculationType == CalculationTypeSelection.both &&
+        _canSaveCombined(calcState)) {
+      return [
+        ElevatedButton.icon(
+          onPressed: () => onSaveCombined(user),
+          icon: const Icon(Icons.save_outlined, size: 20),
+          label: const Text('Save Combined'),
+        ),
+      ];
+    }
+
+    if (!includeSingleModeSave) return const [];
+
+    if (calculationType == CalculationTypeSelection.verticalOnly &&
+        _showVerticalResults(calcState)) {
+      return [
+        ElevatedButton.icon(
+          onPressed: () => _promptSaveResult(
+            lastVerticalCalculationData!,
+            'vertical',
+            context,
+          ),
+          icon: const Icon(Icons.save_outlined, size: 20),
+          label: Text(
+            'Save Result',
+            style: TextStyle(fontSize: fontSize - 2),
+          ),
+        ),
+      ];
+    }
+
+    if (calculationType == CalculationTypeSelection.horizontalOnly &&
+        _showHorizontalResults(calcState)) {
+      return [
+        ElevatedButton.icon(
+          onPressed: () => _promptSaveResult(
+            lastHorizontalCalculationData!,
+            'horizontal',
+            context,
+          ),
+          icon: const Icon(Icons.save_outlined, size: 20),
+          label: Text(
+            'Save Result',
+            style: TextStyle(fontSize: fontSize - 2),
+          ),
+        ),
+      ];
+    }
+
+    return const [];
   }
 
   JobWorkingsData _buildJobWorkingsData(
@@ -252,8 +329,9 @@ class ViewResultsStep extends ConsumerWidget {
     double fontSize,
     bool effectiveIsPro,
     String? tileMaterialType,
-    WidgetRef ref,
-  ) {
+    WidgetRef ref, {
+    required bool includePanelSave,
+  }) {
     final selectedTile =
         ref.watch(calculatorProvider.select((state) => state.selectedTile));
 
@@ -268,9 +346,9 @@ class ViewResultsStep extends ConsumerWidget {
         calcState,
         CalculatorWorkingsScope.vertical,
       ),
-      footer: calculationType == CalculationTypeSelection.both
-          ? null
-          : Row(
+      footer: includePanelSave &&
+              calculationType != CalculationTypeSelection.both
+          ? Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (effectiveIsPro)
@@ -290,7 +368,8 @@ class ViewResultsStep extends ConsumerWidget {
                     ),
                   ),
               ],
-            ),
+            )
+          : null,
     );
   }
 
@@ -299,8 +378,9 @@ class ViewResultsStep extends ConsumerWidget {
     CalculatorState calcState,
     double fontSize,
     bool effectiveIsPro,
-    WidgetRef ref,
-  ) {
+    WidgetRef ref, {
+    required bool includePanelSave,
+  }) {
     final selectedTile =
         ref.watch(calculatorProvider.select((state) => state.selectedTile));
 
@@ -314,9 +394,9 @@ class ViewResultsStep extends ConsumerWidget {
         calcState,
         CalculatorWorkingsScope.horizontal,
       ),
-      footer: calculationType == CalculationTypeSelection.both
-          ? null
-          : Row(
+      footer: includePanelSave &&
+              calculationType != CalculationTypeSelection.both
+          ? Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (effectiveIsPro)
@@ -336,7 +416,8 @@ class ViewResultsStep extends ConsumerWidget {
                     ),
                   ),
               ],
-            ),
+            )
+          : null,
     );
   }
 

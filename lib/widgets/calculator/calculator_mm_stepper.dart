@@ -71,9 +71,11 @@ class CalculatorMmStepper extends StatelessWidget {
     return Semantics(
       label: semanticsLabel,
       value: '$value mm',
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
           IconButton(
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.remove),
@@ -102,6 +104,7 @@ class CalculatorMmStepper extends StatelessWidget {
             tooltip: 'Increase',
           ),
         ],
+        ),
       ),
     );
   }

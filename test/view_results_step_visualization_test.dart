@@ -162,6 +162,38 @@ void main() {
       expect(find.text('Combined'), findsNothing);
     });
 
+    testWidgets('narrow viewport pins save action in sticky footer for vertical-only',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 912));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _wrap(
+          ViewResultsStep(
+            user: _testUser(),
+            verticalInputs: VerticalInputs(
+              rafterHeights: const [
+                {'label': 'Front Slope', 'value': 5000},
+              ],
+            ),
+            horizontalInputs: HorizontalInputs(),
+            calculationType: CalculationTypeSelection.verticalOnly,
+            lastVerticalCalculationData: const {'inputs': {}},
+            lastHorizontalCalculationData: null,
+            onBack: () {},
+            onSaveCombined: (_) {},
+            onSaveResult: (_, __, ___, {saveAction = SaveResultAction.saveAsNew}) async => null,
+          ),
+          _VerticalOnlyCalculatorNotifier.new,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save Result'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+    });
+
     testWidgets('combined mode shows only Save Combined, not per-panel saves',
         (tester) async {
       await tester.pumpWidget(

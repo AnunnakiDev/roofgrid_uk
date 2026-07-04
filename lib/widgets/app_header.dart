@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class AppHeader extends StatelessWidget {
   final String title;
   final List<Widget>? actions;
+  final bool showMenuButton;
 
   const AppHeader({
     super.key,
     required this.title,
     this.actions,
+    this.showMenuButton = true,
   });
 
   @override
@@ -20,16 +22,19 @@ class AppHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Semantics(
-            label: 'Open navigation drawer',
-            child: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: 'Open navigation drawer',
-            ),
-          ),
+          if (showMenuButton)
+            Semantics(
+              label: 'Open navigation drawer',
+              child: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+                tooltip: 'Open navigation drawer',
+              ),
+            )
+          else
+            const SizedBox(width: 8),
           Expanded(
             child: Text(
               title,

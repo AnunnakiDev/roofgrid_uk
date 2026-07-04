@@ -6,6 +6,7 @@ import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_keyboard_context_bar.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/selected_tile_row.dart';
@@ -86,78 +87,59 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
     return _isCombinedMode || _currentStep == index;
   }
 
-  Widget _buildCustomStep({
+  Widget _buildMeasurementSection({
     required int index,
     required String title,
     required bool isCompleted,
     required bool isActive,
     required Widget content,
+    required bool isNarrow,
   }) {
+    if (!isActive) {
+      return const SizedBox.shrink();
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isCompleted
-                      ? colorScheme.primary
-                      : isActive
-                          ? colorScheme.secondary
-                          : colorScheme.onSurface.withValues(alpha: 0.12),
-                ),
-                child: Center(
-                  child: isCompleted
-                      ? Icon(Icons.check, size: 16, color: colorScheme.onPrimary)
-                      : Text(
-                          '${index + 1}',
-                          style: GoogleFonts.poppins(
-                            color: isActive
-                                ? colorScheme.onSecondary
-                                : colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: isActive
-                        ? colorScheme.onSurface
-                        : colorScheme.onSurfaceVariant,
+    if (_isCombinedMode) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: isNarrow ? 14 : 16,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
                   ),
                 ),
-              ),
-              if (isCompleted)
-                Text(
-                  'Ready',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.primary,
+                if (isCompleted)
+                  Text(
+                    'Ready',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
+                    ),
                   ),
-                ),
-            ],
-          ),
-          if (isActive) ...[
-            const SizedBox(height: 12),
+              ],
+            ),
+            const SizedBox(height: 8),
             content,
           ],
-        ],
-      ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: content,
     );
   }
 
@@ -238,10 +220,9 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 16.0 : 12.0;
-    final fontSize = isLargeScreen ? 14.0 : 12.0;
+    final isNarrow = isNarrowLayout(context);
+    final padding = isNarrow ? 12.0 : 16.0;
+    final fontSize = isNarrow ? 12.0 : 14.0;
 
     final steps = _buildSteps(context);
     // Scaffold removes viewInsets from MediaQuery when resizing for the keyboard.
@@ -266,7 +247,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                 children: [
                   CalculatorStepProgress(
                     currentStep: CalculatorFlowStep.enterMeasurements,
-                    compact: !isLargeScreen,
+                    compact: isNarrow,
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -295,11 +276,12 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                         ...steps.asMap().entries.map((entry) {
                           final index = entry.key;
                           final step = entry.value;
-                          return _buildCustomStep(
+                          return _buildMeasurementSection(
                             index: index,
                             title: step['title'],
                             isCompleted: step['isCompleted'],
                             isActive: _isStepExpanded(index),
+                            isNarrow: isNarrow,
                             content: step['content'],
                           );
                         }),

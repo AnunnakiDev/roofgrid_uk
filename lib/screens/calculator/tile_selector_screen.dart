@@ -9,7 +9,6 @@ import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
-import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roofgrid_uk/utils/connectivity_utils.dart';
@@ -84,18 +83,7 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Select Tile'),
-            leading: Builder(
-              builder: (context) => Semantics(
-                label: 'Open navigation drawer',
-                child: IconButton(
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open navigation drawer',
-                ),
-              ),
-            ),
           ),
-          drawer: const MainDrawer(),
           body: canBrowseTileDatabase(
                 user,
                 ref.watch(developerModeProvider),

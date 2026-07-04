@@ -77,7 +77,7 @@ void main() {
 
     expect(find.text('Measurements'), findsOneWidget);
     expect(find.text('Vertical set-out'), findsOneWidget);
-    expect(find.text('Rafter measurements'), findsOneWidget);
+    expect(find.text('Rafter Measurements'), findsOneWidget);
     expect(find.text('Test Pantile'), findsOneWidget);
     expect(find.text('Selected Tile'), findsNothing);
     expect(find.text('Dry Ridge'), findsOneWidget);
@@ -113,7 +113,6 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Width measurements'), findsOneWidget);
     expect(find.text('Width Measurements'), findsOneWidget);
     expect(find.text('Dry Verge'), findsOneWidget);
     expect(find.text('Abutment Side'), findsOneWidget);
@@ -155,6 +154,40 @@ void main() {
     expect(find.text('Dry Verge'), findsOneWidget);
     expect(find.text('Abutment Side'), findsOneWidget);
     expect(find.text('Continue'), findsNothing);
+  });
+
+  testWidgets('EnterMeasurementsStep combined mode uses section headings only',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 912));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: EnterMeasurementsStep(
+              user: _proUser(),
+              effectiveIsPro: true,
+              calculationType: CalculationTypeSelection.both,
+              initialVerticalInputs: VerticalInputs(),
+              initialHorizontalInputs: HorizontalInputs(),
+              onBackToTileSelect: () {},
+              onCalculate: (_, __) {},
+              placeholderImageBuilder: _placeholder,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vertical measurements'), findsOneWidget);
+    expect(find.text('Horizontal measurements'), findsOneWidget);
+    expect(find.byType(CalculatorStepProgress), findsOneWidget);
   });
 
   testWidgets('EnterMeasurementsStep rebuilds when calculation type changes',
@@ -219,7 +252,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Rafter measurements'), findsOneWidget);
+    expect(find.text('Rafter Measurements'), findsOneWidget);
     expect(find.text('Horizontal measurements'), findsNothing);
     expect(find.text('Width Measurements'), findsNothing);
     expect(find.text('Dry Verge'), findsNothing);

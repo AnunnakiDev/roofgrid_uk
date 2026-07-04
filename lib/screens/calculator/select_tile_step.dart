@@ -6,6 +6,7 @@ import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/utils/tile_access.dart';
 import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
@@ -27,8 +28,7 @@ class SelectTileStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final width = MediaQuery.of(context).size.width;
-    final isNarrow = width < 600;
+    final isNarrow = isNarrowLayout(context);
     final padding = isNarrow ? 12.0 : 16.0;
     final canBrowse = canBrowseTileDatabase(
       user,
