@@ -7,6 +7,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/screens/calculator/enter_measurements_step.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 
 TileModel _sampleTile() {
   final now = DateTime(2026, 1, 1);
@@ -221,5 +222,43 @@ void main() {
     expect(find.text('Horizontal measurements'), findsNothing);
     expect(find.text('Width Measurements'), findsNothing);
     expect(find.text('Dry Verge'), findsNothing);
+  });
+
+  testWidgets('EnterMeasurementsStep shows compact context bar when keyboard open',
+      (tester) async {
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 640,
+              child: EnterMeasurementsStep(
+                user: _proUser(),
+                effectiveIsPro: true,
+                calculationType: CalculationTypeSelection.verticalOnly,
+                initialVerticalInputs: VerticalInputs(),
+                initialHorizontalInputs: HorizontalInputs(),
+                onBackToTileSelect: () {},
+                onCalculate: (_, __) {},
+                placeholderImageBuilder: _placeholder,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Test Pantile'), findsOneWidget);
+    expect(find.text('Vertical set-out'), findsOneWidget);
+    expect(find.text('Selected Tile'), findsNothing);
+    expect(find.byType(CalculatorStepProgress), findsNothing);
   });
 }

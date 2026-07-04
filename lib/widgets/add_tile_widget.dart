@@ -304,7 +304,10 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
         title: Text(widget.tile != null ? 'Edit Tile' : 'Add New Tile'),
       ),
       body: SingleChildScrollView(
-        padding: padding,
+        padding: padding.copyWith(
+          bottom: padding.bottom + View.of(context).viewInsets.bottom,
+        ),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Form(
           key: _formKey,
           child: Column(

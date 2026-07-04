@@ -78,4 +78,50 @@ void main() {
 
     expect(find.text('Test Tile'), findsOneWidget);
   });
+
+  testWidgets(
+      'TileSelectorWidget in Expanded lays out without overflow',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(
+            (ref) => Stream.value(_proUser()),
+          ),
+          developerModeProvider.overrideWith(_TestDeveloperModeNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: Column(
+                children: [
+                  const Text('Select your tile'),
+                  Expanded(
+                    child: TileSelectorWidget(
+                      tiles: List.generate(
+                        12,
+                        (i) => _sampleTile().copyWith(
+                          id: 'tile-$i',
+                          name: 'Test Tile $i',
+                        ),
+                      ),
+                      user: _proUser(),
+                      showAddTileButton: false,
+                      onTileSelected: (_) {},
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Test Tile 0'), findsOneWidget);
+  });
 }

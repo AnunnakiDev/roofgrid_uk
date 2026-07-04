@@ -48,4 +48,37 @@ void main() {
     expect(find.text('Rafter Measurements'), findsOneWidget);
     expect(find.text('Gutter Overhang'), findsOneWidget);
   });
+
+  testWidgets('Add rafter button appears below measurement inputs',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: VerticalCalculatorTab(
+                user: _proUser(),
+                canUseMultipleRafters: true,
+                canUseAdvancedOptions: true,
+                canExport: true,
+                canAccessDatabase: true,
+                initialInputs: VerticalInputs(),
+                onInputsChanged: (_, __) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final addButton = tester.getTopLeft(find.text('Add rafter'));
+    final measurementField = tester.getTopLeft(find.text('e.g. 4000'));
+
+    expect(addButton.dy, greaterThan(measurementField.dy));
+  });
 }

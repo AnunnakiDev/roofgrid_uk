@@ -110,7 +110,6 @@ class _ProTilePicker extends ConsumerWidget {
           tiles: tiles,
           user: user,
           onTileSelected: onTileSelected,
-          embeddedInScrollView: true,
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -123,7 +122,6 @@ class _ProTilePicker extends ConsumerWidget {
             tiles: fallback,
             user: user,
             onTileSelected: onTileSelected,
-            embeddedInScrollView: true,
           );
         }
         return Center(

@@ -10,6 +10,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/form_validator.dart';
 import 'package:roofgrid_uk/utils/calculator_input_colors.dart';
+import 'package:roofgrid_uk/utils/keyboard_scroll_utils.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_input_section.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_measurement_field.dart';
 import 'package:roofgrid_uk/widgets/calculator/schematic_preview_strip.dart';
@@ -168,19 +169,21 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
           CalculatorInputSection(
             title: 'Rafter Measurements',
             helperText: 'Measure from top of fascia to ridge.',
-            trailing: widget.canUseMultipleRafters
-                ? Semantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ..._buildRafterInputs(fontSize),
+                if (widget.canUseMultipleRafters) ...[
+                  const SizedBox(height: 4),
+                  Semantics(
                     label: 'Add new rafter input',
                     child: TextButton.icon(
                       onPressed: _addRafter,
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add'),
+                      label: const Text('Add rafter'),
                     ),
-                  )
-                : null,
-            child: Column(
-              children: [
-                ..._buildRafterInputs(fontSize),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SchematicPreviewStrip(
                   axis: SchematicPreviewAxis.verticalBatten,
@@ -280,6 +283,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                             ),
                           ),
                           style: TextStyle(fontSize: fontSize),
+                          onTap: () => ensureFieldVisible(context),
                           onChanged: (value) {
                             setState(() {
                               _rafterNames[i] = value.isNotEmpty

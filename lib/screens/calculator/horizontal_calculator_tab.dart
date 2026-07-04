@@ -11,6 +11,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/form_validator.dart';
 import 'package:roofgrid_uk/utils/calculator_input_colors.dart';
+import 'package:roofgrid_uk/utils/keyboard_scroll_utils.dart';
 import 'package:roofgrid_uk/utils/calculator_input_visibility.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_input_section.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_measurement_field.dart';
@@ -196,19 +197,21 @@ class HorizontalCalculatorTabState
           CalculatorInputSection(
             title: 'Width Measurements',
             helperText: 'Measure verge to verge before overhangs are added.',
-            trailing: widget.canUseMultipleWidths
-                ? Semantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ..._buildWidthInputs(fontSize),
+                if (widget.canUseMultipleWidths) ...[
+                  const SizedBox(height: 4),
+                  Semantics(
                     label: 'Add new width input',
                     child: TextButton.icon(
                       onPressed: _addWidth,
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add'),
+                      label: const Text('Add width'),
                     ),
-                  )
-                : null,
-            child: Column(
-              children: [
-                ..._buildWidthInputs(fontSize),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SchematicPreviewStrip(
                   axis: SchematicPreviewAxis.horizontalCourse,
@@ -368,6 +371,7 @@ class HorizontalCalculatorTabState
                             ),
                           ),
                           style: TextStyle(fontSize: fontSize),
+                          onTap: () => ensureFieldVisible(context),
                           onChanged: (value) {
                             setState(() {
                               _widthNames[i] = value.isNotEmpty

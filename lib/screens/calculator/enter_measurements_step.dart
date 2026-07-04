@@ -6,6 +6,7 @@ import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_keyboard_context_bar.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/selected_tile_row.dart';
 
@@ -41,6 +42,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
   HorizontalInputs _horizontalInputs;
   bool _isVerticalInputsValid = false;
   bool _isHorizontalInputsValid = false;
+  final ScrollController _scrollController = ScrollController();
 
   _EnterMeasurementsStepState()
       : _verticalInputs = VerticalInputs(),
@@ -51,6 +53,12 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
     super.initState();
     _verticalInputs = widget.initialVerticalInputs;
     _horizontalInputs = widget.initialHorizontalInputs;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _updateVerticalInputs(VerticalInputs inputs, bool isValid) {
@@ -236,49 +244,62 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
     final fontSize = isLargeScreen ? 14.0 : 12.0;
 
     final steps = _buildSteps(context);
+    // Scaffold removes viewInsets from MediaQuery when resizing for the keyboard.
+    final keyboardInset = View.of(context).viewInsets.bottom;
+    final keyboardOpen = keyboardInset > 0;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: padding),
       child: Column(
         children: [
-          Padding(
-            padding: EdgeInsets.only(top: padding, bottom: 8),
-            child: const CalculatorStepProgress(
-              currentStep: CalculatorFlowStep.enterMeasurements,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: SelectedTileRow(
-              user: widget.user,
-              effectiveIsPro: widget.effectiveIsPro,
-              previewSize: isLargeScreen ? 88 : 72,
-              placeholderImageBuilder: widget.placeholderImageBuilder,
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Chip(
-              avatar: Icon(
-                Icons.straighten,
-                size: 16,
-                color: Theme.of(context).colorScheme.secondary,
+          if (keyboardOpen)
+            CalculatorKeyboardContextBar(
+              calculationType: widget.calculationType,
+            )
+          else ...[
+            Padding(
+              padding: EdgeInsets.only(top: padding, bottom: 8),
+              child: const CalculatorStepProgress(
+                currentStep: CalculatorFlowStep.enterMeasurements,
               ),
-              label: Text(
-                calculationTypeLabel(widget.calculationType),
-                style: GoogleFonts.poppins(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w600,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: SelectedTileRow(
+                user: widget.user,
+                effectiveIsPro: widget.effectiveIsPro,
+                previewSize: isLargeScreen ? 88 : 72,
+                placeholderImageBuilder: widget.placeholderImageBuilder,
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                avatar: Icon(
+                  Icons.straighten,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                label: Text(
+                  calculationTypeLabel(widget.calculationType),
+                  style: GoogleFonts.poppins(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: Column(
               children: [
                 Expanded(
                   child: SingleChildScrollView(
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(bottom: keyboardInset + 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
