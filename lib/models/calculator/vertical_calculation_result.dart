@@ -1,3 +1,5 @@
+import 'rafter_calculation_detail.dart';
+
 class VerticalCalculationResult {
   final int inputRafter;
   final int totalCourses;
@@ -10,6 +12,7 @@ class VerticalCalculationResult {
   final String gauge;
   final String? splitGauge;
   final String? warning;
+  final List<RafterCalculationDetail>? rafterDetails;
 
   const VerticalCalculationResult({
     required this.inputRafter,
@@ -23,6 +26,7 @@ class VerticalCalculationResult {
     required this.gauge,
     this.splitGauge,
     this.warning,
+    this.rafterDetails,
   });
 
   VerticalCalculationResult copyWith({
@@ -37,6 +41,7 @@ class VerticalCalculationResult {
     String? gauge,
     String? splitGauge,
     String? warning,
+    List<RafterCalculationDetail>? rafterDetails,
   }) {
     return VerticalCalculationResult(
       inputRafter: inputRafter ?? this.inputRafter,
@@ -50,6 +55,7 @@ class VerticalCalculationResult {
       gauge: gauge ?? this.gauge,
       splitGauge: splitGauge ?? this.splitGauge,
       warning: warning ?? this.warning,
+      rafterDetails: rafterDetails ?? this.rafterDetails,
     );
   }
 
@@ -66,6 +72,8 @@ class VerticalCalculationResult {
       'gauge': gauge,
       'splitGauge': splitGauge,
       'warning': warning,
+      if (rafterDetails != null)
+        'rafterDetails': rafterDetails!.map((d) => d.toJson()).toList(),
     };
   }
 
@@ -81,12 +89,20 @@ class VerticalCalculationResult {
       eaveBatten: json['eaveBatten'] != null
           ? (json['eaveBatten'] as num).toInt()
           : null,
-      firstBatten: (json['firstBatten'] as num).toInt(),
+      firstBatten: json['firstBatten'] != null
+          ? (json['firstBatten'] as num).toInt()
+          : json['eaveBatten'] != null
+              ? (json['eaveBatten'] as num).toInt()
+              : 0,
       cutCourse:
           json['cutCourse'] != null ? (json['cutCourse'] as num).toInt() : null,
-      gauge: json['gauge'] as String,
+      gauge: json['gauge'] as String? ?? 'N/A',
       splitGauge: json['splitGauge'] as String?,
       warning: json['warning'] as String?,
+      rafterDetails: (json['rafterDetails'] as List<dynamic>?)
+          ?.map((item) =>
+              RafterCalculationDetail.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

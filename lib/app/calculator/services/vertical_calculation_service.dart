@@ -1,11 +1,11 @@
 import 'dart:math';
+import 'package:roofgrid_uk/models/calculator/rafter_calculation_detail.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_input.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
+import 'package:roofgrid_uk/utils/tile_calculation_profile.dart';
 
-/// Calculates the vertical batten gauge for roof tiles based on input measurements
-/// and tile specifications.
+/// Vertical batten gauge from fascia-top → ridge; per-position gauge with stack balance.
 class VerticalCalculationService {
-  /// Performs the vertical batten gauge calculation
   static Future<VerticalCalculationResult> calculateVertical({
     required VerticalCalculationInput input,
     required String materialType,
@@ -13,240 +13,120 @@ class VerticalCalculationService {
     required double maxGauge,
     required double minGauge,
   }) async {
-    // Step 1: Validate inputs
     if (input.rafterHeights.isEmpty ||
         input.rafterHeights.any((h) => h < 500)) {
-      return VerticalCalculationResult(
-        inputRafter:
-            input.rafterHeights.isNotEmpty ? input.rafterHeights[0].round() : 0,
-        solution: 'Invalid',
-        totalCourses: 0,
-        firstBatten: 0,
-        ridgeOffset: 0, // Provide default value
-        gauge: 'N/A',
-        warning:
-            'Rafter height values must be at least 500mm to calculate a valid vertical solution.',
+      return _invalidResult(
+        input,
+        'Rafter height values must be at least 500mm to calculate a valid vertical solution.',
       );
     }
 
-    // Step 2: Initialize constants based on material type
-    final int maxCourses = materialType == 'Fibre Cement Slate' ? 2 : 3;
-    final int underBatten = materialType == 'Fibre Cement Slate' ? 75 : 38;
-    final int eaveAdjustment = materialType == 'Fibre Cement Slate' ? 50 : 0;
+    final datum = resolveVerticalBattenDatum(
+      materialType: materialType,
+      tileHeight: slateTileHeight,
+      gutterOverhang: input.gutterOverhang,
+      maxGauge: maxGauge,
+    );
 
-    // Step 3: Calculate initial measurements
-    final int maxInputRafter =
-        input.rafterHeights.reduce(max).round(); // Convert double to int
-    int remainingLength = (maxInputRafter - input.gutterOverhang).round();
-    int ridgeOffset = input.useDryRidge == 'YES' ? 61 : 71;
-    remainingLength -= ridgeOffset;
+    final int maxInputRafter = input.rafterHeights.reduce(max).round();
+    final int minGaugeInt = minGauge.round();
+    final int maxGaugeInt = maxGauge.round();
+    final rafterInts =
+        input.rafterHeights.map((height) => height.round()).toList();
+    final gaugeZones = rafterInts
+        .map((rafter) => rafter - datum.gaugeZoneBottomMm)
+        .toList();
 
-    if (remainingLength < 500) {
-      return VerticalCalculationResult(
+    if (gaugeZones.any((zone) => zone <= 0)) {
+      return _invalidResult(
+        input,
+        'Rafter height is too short for eave and first gauge batten placement at this gutter overhang.',
         inputRafter: maxInputRafter,
-        solution: 'Invalid',
-        totalCourses: 0,
-        firstBatten: 0,
-        ridgeOffset: 0, // Provide default value
-        gauge: 'N/A',
-        warning:
-            'Remaining length after gutter overhang and ridge offset must be at least 500mm.',
       );
     }
 
-    // Step 4: Compute eave batten and first batten
-    int eaveBatten = (slateTileHeight / 2 + eaveAdjustment).round();
-    remainingLength -= eaveBatten;
-    int firstBatten = (eaveBatten + underBatten).round();
-
-    // Step 5: Find min and max courses
-    int minCourses = (remainingLength / maxGauge).floor();
-    int maxCoursesPossible = (remainingLength / minGauge).floor();
+    final minZone = gaugeZones.reduce(min);
+    var minBattens = max(1, (minZone / maxGaugeInt).ceil());
+    var maxBattens = (minZone / minGaugeInt).floor();
 
     if (materialType == 'Fibre Cement Slate') {
-      minCourses = max(minCourses, 2);
-      maxCoursesPossible = max(maxCoursesPossible, 2);
+      minBattens = max(minBattens, 1);
+      maxBattens = max(maxBattens, 1);
     }
 
-    // Step 6: Test each course count for full courses
-    dynamic solution;
-    int courses = 0;
-
-    for (int courseCount = minCourses;
-        courseCount <= maxCoursesPossible;
-        courseCount++) {
-      courses = courseCount + 1; // Include the eave course
-      final int battens = courses - 1;
-      if (battens <= 0) continue;
-
-      final double actualGauge = remainingLength / battens;
-      final int roundedGauge = actualGauge.floor();
-
-      if (roundedGauge < minGauge || roundedGauge > maxGauge) {
-        continue;
-      }
-
-      final List<Map<String, dynamic>> rafterResults = [];
-      bool validResult = true;
-
-      for (int index = 0; index < input.rafterHeights.length; index++) {
-        final int rafterHeight = input.rafterHeights[index].round();
-        int adjustedRemainingLength =
-            (rafterHeight - input.gutterOverhang - ridgeOffset).round();
-        adjustedRemainingLength -= eaveBatten;
-
-        final int tiledHeight = battens * roundedGauge;
-        final int remainingHeight = adjustedRemainingLength - tiledHeight;
-        int adjustedRidgeOffset = ridgeOffset + remainingHeight;
-
-        if (adjustedRidgeOffset < 0) {
-          validResult = false;
-          break;
-        }
-
-        rafterResults.add({
-          'rafterHeight': rafterHeight,
-          'ridgeOffset': adjustedRidgeOffset,
-          'gauge': roundedGauge,
-        });
-      }
-
-      if (!validResult) {
-        continue;
-      }
-
-      solution = {'type': 'full', 'rafterResults': rafterResults};
-      break;
+    if (maxBattens < minBattens) {
+      return _invalidResult(
+        input,
+        'Cannot tile full courses from eave batten to ridge within gauge and ridge limits.',
+        inputRafter: maxInputRafter,
+      );
     }
 
-    // Step 7: Split courses (if full courses fail)
-    if (solution == null) {
-      for (int n1 = 1; n1 <= courses - 2; n1++) {
-        final int n2 = (courses - 1) - n1;
-        if (n2 <= 0) continue;
+    Map<String, dynamic>? solved;
 
-        final List<Map<String, dynamic>> rafterResultsSplit = [];
-        bool validResult = true;
-
-        for (int index = 0; index < input.rafterHeights.length; index++) {
-          final int rafterHeight = input.rafterHeights[index].round();
-          int adjustedRemainingLength =
-              (rafterHeight - input.gutterOverhang - ridgeOffset).round();
-          adjustedRemainingLength -= eaveBatten;
-
-          int gauge1 = maxGauge.round();
-          double gauge2 = (adjustedRemainingLength - n1 * gauge1) / n2;
-
-          gauge2 = min(max(gauge2, minGauge), maxGauge);
-          int roundedGauge2 = gauge2.round();
-
-          if (roundedGauge2 < (minGauge + maxGauge) / 2) {
-            final double totalGauge = adjustedRemainingLength / (courses - 1);
-            gauge1 = min(max(totalGauge, minGauge), maxGauge).round();
-            roundedGauge2 = gauge1;
-          }
-
-          final int tiledHeight = n1 * gauge1 + n2 * roundedGauge2;
-          final int remainingHeight = adjustedRemainingLength - tiledHeight;
-          int adjustedRidgeOffset = ridgeOffset + remainingHeight;
-
-          if (adjustedRidgeOffset < 0) {
-            validResult = false;
-            break;
-          }
-
-          rafterResultsSplit.add({
-            'rafterHeight': rafterHeight,
-            'ridgeOffset': adjustedRidgeOffset,
-            'gauge1': gauge1,
-            'gauge2': roundedGauge2,
-            'courses1': n1,
-            'courses2': n2,
-          });
-        }
-
-        if (!validResult) {
-          continue;
-        }
-
-        solution = {'type': 'split', 'rafterResults': rafterResultsSplit};
+    for (var battens = minBattens; battens <= maxBattens; battens++) {
+      final even = _solveEven(
+        rafterHeights: rafterInts,
+        gaugeZones: gaugeZones,
+        battens: battens,
+        minGauge: minGaugeInt,
+        maxGauge: maxGaugeInt,
+        useDryRidge: input.useDryRidge,
+        datum: datum,
+      );
+      if (even != null) {
+        solved = even;
         break;
       }
     }
 
-    // Step 8: Cut course (if split courses fail)
-    if (solution == null) {
-      final int maxRafterHeight =
-          input.rafterHeights.reduce(max).round(); // Convert double to int
-      int adjustedRemainingLength =
-          (maxRafterHeight - input.gutterOverhang - ridgeOffset).round();
-      adjustedRemainingLength -= eaveBatten;
-
-      int actualGauge = maxGauge.round();
-      int tiledHeight = (courses - 1) * actualGauge;
-
-      if (tiledHeight > adjustedRemainingLength) {
-        final int excessHeight = tiledHeight - adjustedRemainingLength;
-        final double gaugeReduction = excessHeight / (courses - 1);
-        actualGauge = (maxGauge - gaugeReduction).round();
-        actualGauge = max(actualGauge, minGauge.round());
+    if (solved == null) {
+      for (var battens = minBattens; battens <= maxBattens; battens++) {
+        final split = _solveSplit(
+          rafterHeights: rafterInts,
+          gaugeZones: gaugeZones,
+          battens: battens,
+          minGauge: minGaugeInt,
+          maxGauge: maxGaugeInt,
+          useDryRidge: input.useDryRidge,
+          datum: datum,
+        );
+        if (split != null) {
+          solved = split;
+          break;
+        }
       }
-
-      int cutCourse =
-          (adjustedRemainingLength - (courses - 2) * actualGauge).round();
-
-      if (cutCourse < slateTileHeight / 2 && cutCourse < 100) {
-        final int targetCutHeight = max(slateTileHeight / 2, 100).round();
-        final int targetTiledHeight = adjustedRemainingLength - targetCutHeight;
-
-        final double totalGauge =
-            targetTiledHeight / (courses > 1 ? courses - 2 : 1);
-        actualGauge = min(max(totalGauge, minGauge), maxGauge).round();
-
-        cutCourse = adjustedRemainingLength - (courses - 2) * actualGauge;
-      }
-
-      final List<Map<String, dynamic>> rafterResultsCut = [];
-
-      for (int index = 0; index < input.rafterHeights.length; index++) {
-        final int rafterHeight = input.rafterHeights[index].round();
-        adjustedRemainingLength =
-            (rafterHeight - input.gutterOverhang - ridgeOffset).round();
-        adjustedRemainingLength -= eaveBatten;
-
-        final int adjustedTiledHeight = (courses - 2) * actualGauge + cutCourse;
-        final int remainingHeight =
-            adjustedRemainingLength - adjustedTiledHeight;
-        int adjustedRidgeOffset = ridgeOffset + remainingHeight;
-
-        rafterResultsCut.add({
-          'rafterHeight': rafterHeight,
-          'ridgeOffset': adjustedRidgeOffset,
-          'gauge': actualGauge,
-          'cutCourse': cutCourse,
-        });
-      }
-
-      solution = {'type': 'cut', 'rafterResults': rafterResultsCut};
     }
 
-    // Step 9: Verify solution exists
-    if (solution == null) {
-      return VerticalCalculationResult(
-        inputRafter: maxInputRafter,
-        solution: 'Invalid',
-        totalCourses: 0,
-        firstBatten: 0,
-        ridgeOffset: 0, // Provide default value
-        gauge: 'N/A',
-        warning:
-            'Unable to find a solution. Please check your inputs: ensure rafter heights are valid and tile specifications (max/min gauge) are appropriate.',
+    if (solved == null) {
+      solved = _solveBottomCut(
+        rafterHeights: rafterInts,
+        gaugeZones: gaugeZones,
+        minGauge: minGaugeInt,
+        maxGauge: maxGaugeInt,
+        useDryRidge: input.useDryRidge,
+        tileHeight: slateTileHeight,
+        datum: datum,
       );
     }
 
-    // Create result object
-    final result = solution['rafterResults'][0];
-    final solutionType = solution['type'];
+    if (solved == null) {
+      return _invalidResult(
+        input,
+        'Cannot tile full courses from eave batten to ridge within gauge and ridge limits. '
+        'Measurement positions may be too far apart for the same course count.',
+        inputRafter: maxInputRafter,
+      );
+    }
+
+    final solutionType = solved['type'] as String;
+    final courses = solved['courses'] as int;
+    final rafterResults =
+        (solved['rafterResults'] as List).cast<Map<String, dynamic>>();
+    final first = rafterResults.first;
+    final rafterDetails = _buildRafterDetails(rafterResults, solutionType);
+
+    final int? underEaveForResult = datum.underEaveBattenPositionMm;
 
     return VerticalCalculationResult(
       inputRafter: maxInputRafter,
@@ -256,17 +136,374 @@ class VerticalCalculationService {
               ? 'Split Courses'
               : 'Cut Course',
       totalCourses: courses,
-      eaveBatten: eaveBatten,
-      firstBatten: firstBatten,
-      ridgeOffset: result['ridgeOffset'] as int,
-      cutCourse: solutionType == 'cut' ? result['cutCourse'] as int : null,
-      gauge: solutionType == 'split'
-          ? '${result['courses2']} @ ${result['gauge2']}'
-          : '${courses - 1} @ ${result['gauge']}',
+      underEaveBatten: underEaveForResult,
+      eaveBatten: datum.eaveBattenMm,
+      firstBatten: datum.firstGaugeBattenMm,
+      ridgeOffset: first['ridgeOffset'] as int,
+      cutCourse: solutionType == 'cut' ? first['cutCourse'] as int? : null,
+      gauge: _formatGaugeSummary(solutionType, courses, first),
       splitGauge: solutionType == 'split'
-          ? '${result['courses1']} @ ${result['gauge1']}'
+          ? '${first['courses1']} @ ${first['gauge1']}'
           : null,
-      warning: null,
+      warning: _resolveNearBoundWarning(
+        rafterResults: rafterResults,
+        useDryRidge: input.useDryRidge,
+        solutionType: solutionType,
+        tileHeight: slateTileHeight,
+      ),
+      rafterDetails: rafterDetails,
     );
   }
+
+  static String? _resolveNearBoundWarning({
+    required List<Map<String, dynamic>> rafterResults,
+    required String useDryRidge,
+    required String solutionType,
+    required double tileHeight,
+  }) {
+    final messages = <String>[];
+    final maxRidge = ridgeOffsetMaxMm(useDryRidge);
+    final ridges =
+        rafterResults.map((entry) => entry['ridgeOffset'] as int).toList();
+
+    if (ridges.any((ridge) => ridge >= maxRidge - 5)) {
+      messages.add(
+        'Ridge offset is within 5 mm of the $maxRidge mm limit at one or more positions.',
+      );
+    }
+    if (ridges.any((ridge) => ridge <= kRidgeOffsetMinMm + 1)) {
+      messages.add(
+        'Ridge offset is at the ${kRidgeOffsetMinMm} mm minimum at one or more positions.',
+      );
+    }
+
+    if (ridges.length > 1) {
+      final spread = ridges.reduce(max) - ridges.reduce(min);
+      if (spread > 40) {
+        messages.add(
+          'Ridge offsets vary by $spread mm across positions — check squaring on site.',
+        );
+      }
+    }
+
+    if (solutionType == 'cut') {
+      final minCut = max(tileHeight / 2, 100).round();
+      for (final entry in rafterResults) {
+        final cut = entry['cutCourse'] as int? ?? 0;
+        if (cut > 0 && cut <= minCut + 10) {
+          messages.add(
+            'Cut course gauge is near the minimum tile size ($minCut mm) above eave.',
+          );
+          break;
+        }
+      }
+    }
+
+    if (messages.isEmpty) return null;
+    return messages.join(' ');
+  }
+
+  static String _formatGaugeSummary(
+    String solutionType,
+    int courses,
+    Map<String, dynamic> first,
+  ) {
+    switch (solutionType) {
+      case 'split':
+        return '${first['courses2']} @ ${first['gauge2']}';
+      case 'cut':
+        return '${first['fullBattens']} @ ${first['gauge']}';
+      default:
+        return '${courses - 1} @ ${first['gauge']}';
+    }
+  }
+
+  static Map<String, dynamic>? _solveEven({
+    required List<int> rafterHeights,
+    required List<int> gaugeZones,
+    required int battens,
+    required int minGauge,
+    required int maxGauge,
+    required String useDryRidge,
+    required VerticalBattenDatum datum,
+  }) {
+    final results = <Map<String, dynamic>>[];
+
+    for (var i = 0; i < gaugeZones.length; i++) {
+      final gauge = _resolveIntegerGauge(
+        gaugeZone: gaugeZones[i],
+        battens: battens,
+        minGauge: minGauge,
+        maxGauge: maxGauge,
+        useDryRidge: useDryRidge,
+      );
+      if (gauge == null) {
+        return null;
+      }
+      final ridgeOffset = gaugeZones[i] - battens * gauge;
+      results.add({
+        'rafterHeight': rafterHeights[i],
+        'ridgeOffset': ridgeOffset,
+        'gauge': gauge,
+      });
+    }
+
+    if (!_validateStackBalance(
+      results: results,
+      datum: datum,
+      tiledHeightFor: (entry) => battens * (entry['gauge'] as int),
+    )) {
+      return null;
+    }
+
+    return {
+      'type': 'full',
+      'courses': battens + 1,
+      'rafterResults': results,
+    };
+  }
+
+  static Map<String, dynamic>? _solveSplit({
+    required List<int> rafterHeights,
+    required List<int> gaugeZones,
+    required int battens,
+    required int minGauge,
+    required int maxGauge,
+    required String useDryRidge,
+    required VerticalBattenDatum datum,
+  }) {
+    for (var n1 = 1; n1 <= battens - 1; n1++) {
+      final n2 = battens - n1;
+      final results = <Map<String, dynamic>>[];
+      var valid = true;
+
+      for (var i = 0; i < gaugeZones.length; i++) {
+        final zone = gaugeZones[i];
+        final split = _resolveSplitGauges(
+          gaugeZone: zone,
+          n1: n1,
+          n2: n2,
+          minGauge: minGauge,
+          maxGauge: maxGauge,
+          useDryRidge: useDryRidge,
+        );
+        if (split == null) {
+          valid = false;
+          break;
+        }
+        results.add({
+          'rafterHeight': rafterHeights[i],
+          'ridgeOffset': split.ridgeOffset,
+          'gauge1': split.gauge1,
+          'gauge2': split.gauge2,
+          'courses1': n1,
+          'courses2': n2,
+          'gauge': split.gauge2,
+        });
+      }
+
+      if (!valid) continue;
+
+      if (!_validateStackBalance(
+        results: results,
+        datum: datum,
+        tiledHeightFor: (entry) =>
+            (entry['courses1'] as int) * (entry['gauge1'] as int) +
+            (entry['courses2'] as int) * (entry['gauge2'] as int),
+      )) {
+        continue;
+      }
+
+      return {
+        'type': 'split',
+        'courses': battens + 1,
+        'rafterResults': results,
+      };
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _solveBottomCut({
+    required List<int> rafterHeights,
+    required List<int> gaugeZones,
+    required int minGauge,
+    required int maxGauge,
+    required String useDryRidge,
+    required double tileHeight,
+    required VerticalBattenDatum datum,
+  }) {
+    final ridgeStart = baseRidgeOffsetMm(useDryRidge);
+    final minCut = max(tileHeight / 2, 100).round();
+    final results = <Map<String, dynamic>>[];
+
+    for (var i = 0; i < gaugeZones.length; i++) {
+      final zone = gaugeZones[i];
+      var fullBattens = (zone - ridgeStart) ~/ maxGauge;
+      var cutCourse = zone - ridgeStart - fullBattens * maxGauge;
+
+      while (cutCourse > 0 &&
+          cutCourse < minCut &&
+          fullBattens > 0) {
+        fullBattens--;
+        cutCourse = zone - ridgeStart - fullBattens * maxGauge;
+      }
+
+      if (cutCourse > 0 && cutCourse < minCut) {
+        return null;
+      }
+
+      if (cutCourse == 0 && fullBattens == 0) {
+        return null;
+      }
+
+      final ridgeOffset = ridgeStart;
+      results.add({
+        'rafterHeight': rafterHeights[i],
+        'ridgeOffset': ridgeOffset,
+        'gauge': maxGauge,
+        'fullBattens': fullBattens,
+        'cutCourse': cutCourse,
+      });
+    }
+
+    if (!_validateStackBalance(
+      results: results,
+      datum: datum,
+      tiledHeightFor: (entry) =>
+          (entry['cutCourse'] as int) +
+          (entry['fullBattens'] as int) * (entry['gauge'] as int),
+    )) {
+      return null;
+    }
+
+    final maxFull = results
+        .map((entry) => entry['fullBattens'] as int)
+        .reduce(max);
+    final courses = maxFull + (results.first['cutCourse'] as int > 0 ? 2 : 1);
+
+    return {
+      'type': 'cut',
+      'courses': courses,
+      'rafterResults': results,
+    };
+  }
+
+  static int? _resolveIntegerGauge({
+    required int gaugeZone,
+    required int battens,
+    required int minGauge,
+    required int maxGauge,
+    required String useDryRidge,
+  }) {
+    final candidates = <int>{};
+    final ideal = gaugeZone / battens;
+    candidates.add(ideal.floor());
+    candidates.add(ideal.ceil());
+    for (var g = minGauge; g <= maxGauge; g++) {
+      candidates.add(g);
+    }
+
+    final ordered = candidates.toList()
+      ..sort((a, b) =>
+          (a - ideal).abs().compareTo((b - ideal).abs()));
+
+    for (final gauge in ordered) {
+      if (gauge < minGauge || gauge > maxGauge) continue;
+      final ridge = gaugeZone - battens * gauge;
+      if (isRidgeOffsetInBounds(ridge, useDryRidge)) {
+        return gauge;
+      }
+    }
+    return null;
+  }
+
+  static _SplitGauges? _resolveSplitGauges({
+    required int gaugeZone,
+    required int n1,
+    required int n2,
+    required int minGauge,
+    required int maxGauge,
+    required String useDryRidge,
+  }) {
+    for (var g1 = maxGauge; g1 >= minGauge; g1--) {
+      final remainder = gaugeZone - n1 * g1;
+      if (n2 == 0) continue;
+      final g2Ideal = remainder / n2;
+      final g2Candidates = {g2Ideal.floor(), g2Ideal.ceil(), g1};
+      for (final g2 in g2Candidates) {
+        if (g2 < minGauge || g2 > maxGauge) continue;
+        final ridge = gaugeZone - n1 * g1 - n2 * g2;
+        if (isRidgeOffsetInBounds(ridge, useDryRidge)) {
+          return _SplitGauges(gauge1: g1, gauge2: g2, ridgeOffset: ridge);
+        }
+      }
+    }
+    return null;
+  }
+
+  static bool _validateStackBalance({
+    required List<Map<String, dynamic>> results,
+    required VerticalBattenDatum datum,
+    required int Function(Map<String, dynamic> entry) tiledHeightFor,
+  }) {
+    for (final entry in results) {
+      final rafter = entry['rafterHeight'] as int;
+      final tiled = tiledHeightFor(entry);
+      final ridge = entry['ridgeOffset'] as int;
+      final expected = datum.firstGaugeBattenMm + tiled + ridge;
+      if (rafter != expected) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static VerticalCalculationResult _invalidResult(
+    VerticalCalculationInput input,
+    String warning, {
+    int inputRafter = 0,
+  }) {
+    return VerticalCalculationResult(
+      inputRafter: input.rafterHeights.isNotEmpty
+          ? input.rafterHeights.reduce(max).round()
+          : inputRafter,
+      solution: 'Invalid',
+      totalCourses: 0,
+      firstBatten: 0,
+      ridgeOffset: 0,
+      gauge: 'N/A',
+      warning: warning,
+    );
+  }
+
+  static List<RafterCalculationDetail> _buildRafterDetails(
+    List<Map<String, dynamic>> rafterResults,
+    String solutionType,
+  ) {
+    return rafterResults
+        .map(
+          (entry) => RafterCalculationDetail(
+            rafterHeight: entry['rafterHeight'] as int,
+            gauge: entry['gauge'] as int? ?? 0,
+            ridgeOffset: entry['ridgeOffset'] as int,
+            gauge1: solutionType == 'split' ? entry['gauge1'] as int? : null,
+            gauge2: solutionType == 'split' ? entry['gauge2'] as int? : null,
+            cutCourse:
+                solutionType == 'cut' ? entry['cutCourse'] as int? : null,
+          ),
+        )
+        .toList();
+  }
+}
+
+class _SplitGauges {
+  final int gauge1;
+  final int gauge2;
+  final int ridgeOffset;
+
+  const _SplitGauges({
+    required this.gauge1,
+    required this.gauge2,
+    required this.ridgeOffset,
+  });
 }

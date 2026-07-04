@@ -44,7 +44,25 @@ class ResultsService {
         .doc(userId)
         .collection('saved_results')
         .doc(result.id)
-        .set(result.toJson());
+        .set(result.toFirestoreJson());
+  }
+
+  Future<void> updateResult(SavedResult result) async {
+    final now = DateTime.now();
+    await _firestore
+        .collection('users')
+        .doc(result.userId)
+        .collection('saved_results')
+        .doc(result.id)
+        .update({
+      'projectName': result.projectName,
+      'type': result.type.index,
+      'timestamp': Timestamp.fromDate(now),
+      'inputs': result.inputs,
+      'outputs': result.outputs,
+      'tile': result.tile,
+      'updatedAt': Timestamp.fromDate(now),
+    });
   }
 
   Future<void> deleteResult(String userId, String resultId) async {

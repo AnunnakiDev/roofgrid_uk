@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:roofgrid_uk/app/calculator/services/horizontal_calculation_service.dart';
@@ -92,6 +92,7 @@ class CalculationService {
         abutmentSide: abutmentSide,
         useLHTile: useLHTile,
         crossBonded: crossBonded,
+        materialType: materialType,
       ),
     );
 
@@ -139,8 +140,7 @@ class CalculationService {
     };
 
     // Check connectivity
-    final connectivityResult = await Connectivity().checkConnectivity();
-    final isOnline = connectivityResult != ConnectivityResult.none;
+    final isOnline = await isDeviceOnline();
 
     if (isOnline) {
       // Save to Firestore
@@ -149,9 +149,9 @@ class CalculationService {
             .collection('calculations')
             .doc(id)
             .set(calculationForFirestore);
-        print("Calculation $id saved to Firestore");
+        // print("Calculation $id saved to Firestore"); // removed for prod
       } catch (e) {
-        print("Error saving calculation to Firestore: $e");
+        // print("Error saving calculation to Firestore: $e"); // removed for prod
         // Fall back to Hive if Firestore fails
         await _saveToHive(id, calculationForHive);
         throw Exception("Failed to save calculation to Firestore: $e");
@@ -159,7 +159,7 @@ class CalculationService {
     } else {
       // Save to Hive if offline
       await _saveToHive(id, calculationForHive);
-      print("Calculation $id saved to Hive (offline)");
+      // print("Calculation $id saved to Hive (offline)"); // removed for prod
     }
 
     // Save to Hive for local caching
@@ -173,17 +173,16 @@ class CalculationService {
 
   /// Syncs locally stored calculations to Firestore when online
   Future<void> syncCalculations() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    final isOnline = connectivityResult != ConnectivityResult.none;
+    final isOnline = await isDeviceOnline();
 
     if (!isOnline) {
-      print("Cannot sync calculations: Device is offline");
+      // print("Cannot sync calculations: Device is offline"); // removed for prod
       return;
     }
 
     final calculationsToSync = _calculationsBox.values.toList();
     if (calculationsToSync.isEmpty) {
-      print("No calculations to sync");
+      // print("No calculations to sync"); // removed for prod
       return;
     }
 
@@ -200,9 +199,9 @@ class CalculationService {
       final id = calculation['id'] as String;
       try {
         await _firestore.collection('calculations').doc(id).set(calculation);
-        print("Synced calculation $id to Firestore");
+        // print("Synced calculation $id to Firestore"); // removed for prod
       } catch (e) {
-        print("Error syncing calculation $id: $e");
+        // print("Error syncing calculation $id: $e"); // removed for prod
       }
     }
 
