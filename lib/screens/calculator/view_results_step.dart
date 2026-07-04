@@ -174,8 +174,7 @@ class ViewResultsStep extends ConsumerWidget {
               ),
               if (effectiveIsPro &&
                   calculationType == CalculationTypeSelection.both &&
-                  calcState.verticalResult != null &&
-                  calcState.horizontalResult != null)
+                  _canSaveCombined(calcState))
                 ElevatedButton.icon(
                   onPressed: () => onSaveCombined(user),
                   icon: const Icon(Icons.save_outlined, size: 20),
@@ -219,6 +218,18 @@ class ViewResultsStep extends ConsumerWidget {
       horizontalResult: includeHorizontal ? calcState.horizontalResult : null,
       scope: scope,
     );
+  }
+
+  bool _canSaveCombined(CalculatorState calcState) {
+    final vertical = calcState.verticalResult;
+    final horizontal = calcState.horizontalResult;
+    if (vertical == null ||
+        horizontal == null ||
+        lastVerticalCalculationData == null ||
+        lastHorizontalCalculationData == null) {
+      return false;
+    }
+    return vertical.solution != 'Invalid' && horizontal.solution != 'Invalid';
   }
 
   bool _showVerticalResults(CalculatorState calcState) {

@@ -488,7 +488,7 @@ class HorizontalCalculationService {
     );
 
     assert(() {
-      if (horizontalResult.solution != 'Even Sets') return true;
+      if (horizontalResult.solution == 'Invalid') return true;
       final issues = validateHorizontalReconciles(
         input: inputs,
         result: horizontalResult,

@@ -70,6 +70,38 @@ void main() {
       expect(state.useLHTile, 'NO');
     });
 
+    test('both preserves vertical and horizontal option fields', () {
+      final container = ProviderContainer(
+        overrides: [
+          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(calculatorProvider.notifier);
+      notifier.hydrateCalculatorOptionsFromInputs(
+        vertical: const VerticalInputs(
+          gutterOverhang: 25.0,
+          useDryRidge: 'YES',
+        ),
+        horizontal: const HorizontalInputs(
+          useDryVerge: 'YES',
+          abutmentSide: 'LEFT',
+          useLHTile: 'NO',
+          crossBonded: 'YES',
+        ),
+      );
+
+      notifier.resetOptionsForMode(CalculationTypeSelection.both);
+
+      final state = container.read(calculatorProvider);
+      expect(state.gutterOverhang, 25.0);
+      expect(state.useDryRidge, 'YES');
+      expect(state.useDryVerge, 'YES');
+      expect(state.abutmentSide, 'LEFT');
+      expect(state.crossBonded, 'YES');
+    });
+
     test('horizontalOnly clears vertical option fields', () {
       final container = ProviderContainer(
         overrides: [

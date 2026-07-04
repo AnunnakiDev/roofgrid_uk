@@ -150,6 +150,9 @@ void main() {
       expect(result.cutTile, isNotNull);
       expect(result.newWidth, 601);
       expect(adjustedWidthFromResult(result), isNotNull);
+
+      final issues = validateHorizontalReconciles(input: input, result: result);
+      expect(issues, isEmpty, reason: issues.map((i) => i.message).join('; '));
     });
   });
 }

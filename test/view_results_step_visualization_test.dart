@@ -51,6 +51,21 @@ class _VerticalOnlyCalculatorNotifier extends CalculatorNotifier {
       CalculatorState(verticalResult: _verticalResult);
 }
 
+class _CombinedInvalidHorizontalNotifier extends CalculatorNotifier {
+  @override
+  CalculatorState build() => CalculatorState(
+        verticalResult: _verticalResult,
+        horizontalResult: const HorizontalCalculationResult(
+          width: 400,
+          solution: 'Invalid',
+          newWidth: 0,
+          firstMark: 0,
+          marks: 'N/A',
+          warning: 'Width values must be at least 500mm.',
+        ),
+      );
+}
+
 class _InvalidVerticalCalculatorNotifier extends CalculatorNotifier {
   @override
   CalculatorState build() => CalculatorState(
@@ -207,6 +222,40 @@ void main() {
       expect(find.text('Vertical set-out'), findsOneWidget);
       expect(find.text('No valid vertical solution'), findsOneWidget);
       expect(find.text('Visualization'), findsNothing);
+    });
+
+    testWidgets('combined mode hides Save Combined when horizontal is invalid',
+        (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          ViewResultsStep(
+            user: _testUser(),
+            verticalInputs: VerticalInputs(
+              rafterHeights: const [
+                {'label': 'Front Slope', 'value': 5000},
+              ],
+            ),
+            horizontalInputs: HorizontalInputs(
+              widths: const [
+                {'label': 'Main Roof', 'value': 400},
+              ],
+            ),
+            calculationType: CalculationTypeSelection.both,
+            lastVerticalCalculationData: const {'inputs': {}},
+            lastHorizontalCalculationData: const {'inputs': {}},
+            onBack: () {},
+            onSaveCombined: (_) {},
+            onSaveResult: (_, __, ___, {saveAction = SaveResultAction.saveAsNew}) async => null,
+          ),
+          _CombinedInvalidHorizontalNotifier.new,
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vertical set-out'), findsOneWidget);
+      expect(find.text('Horizontal set-out'), findsOneWidget);
+      expect(find.text('Save Combined'), findsNothing);
     });
 
     testWidgets('never renders visualization on calculator results step',

@@ -6,6 +6,32 @@ import 'package:roofgrid_uk/models/calculator/width_calculation_detail.dart';
 import 'package:roofgrid_uk/utils/calculation_geometry.dart';
 import 'package:roofgrid_uk/utils/tile_calculation_profile.dart';
 
+bool _isDegenerateSplitSolution(HorizontalCalculationResult result) {
+  if (result.solution != 'Split Sets') return false;
+
+  final split = parseSetsNotation(result.splitMarks);
+  if (split == null || split.setCount <= 0) return true;
+
+  final primary = parseSetsNotation(result.marks);
+  if (primary != null && primary.spacingMm == split.spacingMm) {
+    return true;
+  }
+
+  return false;
+}
+
+(int, int) _tileCountBounds({
+  required int targetWidth,
+  required HorizontalCalculationInput input,
+}) {
+  final cover = input.tileCoverWidth.round();
+  final minUnit = cover + input.minSpacing.round();
+  final maxUnit = cover + input.maxSpacing.round();
+  final minCount = max(1, (targetWidth / maxUnit).floor());
+  final maxCount = max(minCount, (targetWidth / minUnit).ceil() + 1);
+  return (minCount, maxCount);
+}
+
 const int kWetVergeTargetOverhangMm = 50;
 const int kWetVergeMinOverhangMm = 25;
 const int kWetVergeMaxOverhangMm = 75;
@@ -119,6 +145,125 @@ int? inferTilesWideFromMarks({
   return null;
 }
 
+int? inferTilesWideForCut({
+  required int adjustedWidth,
+  required HorizontalCalculationInput input,
+  required int spacing,
+  required int cutTileWidth,
+}) {
+  final (minCount, maxCount) = _tileCountBounds(
+    targetWidth: adjustedWidth,
+    input: input,
+  );
+
+  for (var tilesWide = minCount; tilesWide <= maxCount; tilesWide++) {
+    final run = reconstructCutTiledRunLength(
+      tilesWide: tilesWide,
+      input: input,
+      spacing: spacing,
+      cutTileWidth: cutTileWidth,
+    );
+    if (run == adjustedWidth) return tilesWide;
+  }
+  return null;
+}
+
+int? _spacingFromAdjustedMarks({
+  required int adjustedMarks,
+  required int setSize,
+  required double tileCoverWidth,
+}) {
+  return (adjustedMarks / setSize - tileCoverWidth).round();
+}
+
+int? reconstructSplitTiledRunLength({
+  required HorizontalCalculationResult result,
+  required HorizontalCalculationInput input,
+  required int setSize,
+  required int adjustedWidth,
+}) {
+  final spacing = result.actualSpacing;
+  if (spacing == null) return null;
+
+  if (_isDegenerateSplitSolution(result)) {
+    final evenFromMarks = reconstructEvenTiledRunLength(
+      result: result,
+      input: input,
+      setSize: setSize,
+      adjustedWidth: adjustedWidth,
+    );
+    if (evenFromMarks > 0) return evenFromMarks;
+
+    final alternateMarks = result.splitMarks;
+    if (alternateMarks != null && alternateMarks != result.marks) {
+      return reconstructEvenTiledRunLength(
+        result: HorizontalCalculationResult(
+          width: result.width,
+          solution: 'Even Sets',
+          newWidth: result.newWidth,
+          lhOverhang: result.lhOverhang,
+          rhOverhang: result.rhOverhang,
+          firstMark: result.firstMark,
+          secondMark: result.secondMark,
+          marks: alternateMarks,
+          actualSpacing: result.actualSpacing,
+          widthDetails: result.widthDetails,
+        ),
+        input: input,
+        setSize: setSize,
+        adjustedWidth: adjustedWidth,
+      );
+    }
+    return null;
+  }
+
+  final portion1 = parseSetsNotation(result.splitMarks);
+  final portion2 = parseSetsNotation(result.marks);
+  if (portion1 == null || portion2 == null) return null;
+
+  final spacing1 = _spacingFromAdjustedMarks(
+    adjustedMarks: portion1.spacingMm,
+    setSize: setSize,
+    tileCoverWidth: input.tileCoverWidth,
+  );
+  final spacing2 = _spacingFromAdjustedMarks(
+    adjustedMarks: portion2.spacingMm,
+    setSize: setSize,
+    tileCoverWidth: input.tileCoverWidth,
+  );
+  if (spacing1 == null || spacing2 == null) return null;
+
+  final (minCount, maxCount) = _tileCountBounds(
+    targetWidth: adjustedWidth,
+    input: input,
+  );
+  final useLh = input.useLHTile == 'YES';
+  final cover = input.tileCoverWidth.round();
+  final lh = input.lhTileWidth.round();
+
+  for (var tilesWide = minCount; tilesWide <= maxCount; tilesWide++) {
+    final gapCount = tilesWide - 1;
+    if (gapCount <= 0) continue;
+
+    for (var n1 = 1; n1 <= gapCount - 1; n1++) {
+      final n2 = gapCount - n1;
+      if (n1 ~/ setSize != portion1.setCount) continue;
+      if (n2 ~/ setSize != portion2.setCount) continue;
+
+      final regularTiles = tilesWide - (useLh ? 1 : 0);
+      if (regularTiles <= 0) continue;
+
+      final run = regularTiles * cover +
+          (useLh ? lh : 0) +
+          n1 * spacing1 +
+          n2 * spacing2;
+      if (run == adjustedWidth) return run;
+    }
+  }
+
+  return null;
+}
+
 int reconstructCutTiledRunLength({
   required int tilesWide,
   required HorizontalCalculationInput input,
@@ -132,6 +277,35 @@ int reconstructCutTiledRunLength({
           ? input.lhTileWidth.round()
           : input.tileCoverWidth.round()) +
       cutTileWidth;
+}
+
+int reconstructEvenTiledRunLength({
+  required HorizontalCalculationResult result,
+  required HorizontalCalculationInput input,
+  required int setSize,
+  int? adjustedWidth,
+}) {
+  final spacing = result.actualSpacing;
+  if (spacing == null) return 0;
+
+  final width = adjustedWidth ??
+      adjustedWidthFromResult(result) ??
+      result.width;
+
+  final tilesWide = inferTilesWideFromMarks(
+    marks: result.marks,
+    setSize: setSize,
+    adjustedWidth: width,
+    tileCoverWidth: input.tileCoverWidth,
+    spacing: spacing,
+    useLhTile: input.useLHTile == 'YES',
+    lhTileWidth: input.lhTileWidth.round(),
+  );
+  if (tilesWide == null) return 0;
+
+  final regularTiles = tilesWide - (input.useLHTile == 'YES' ? 1 : 0);
+  return regularTiles * (input.tileCoverWidth.round() + spacing) +
+      (input.useLHTile == 'YES' ? input.lhTileWidth.round() : 0);
 }
 
 int reconstructTiledRunLength({
@@ -148,14 +322,11 @@ int reconstructTiledRunLength({
       result.width;
 
   if (result.solution == 'Cut Tile' && result.cutTile != null) {
-    final tilesWide = inferTilesWideFromMarks(
-      marks: result.marks,
-      setSize: setSize,
+    final tilesWide = inferTilesWideForCut(
       adjustedWidth: width,
-      tileCoverWidth: input.tileCoverWidth,
+      input: input,
       spacing: spacing,
-      useLhTile: input.useLHTile == 'YES',
-      lhTileWidth: input.lhTileWidth.round(),
+      cutTileWidth: result.cutTile!,
     );
     if (tilesWide == null) return 0;
     return reconstructCutTiledRunLength(
@@ -166,24 +337,26 @@ int reconstructTiledRunLength({
     );
   }
 
+  if (result.solution == 'Split Sets') {
+    return reconstructSplitTiledRunLength(
+      result: result,
+      input: input,
+      setSize: setSize,
+      adjustedWidth: width,
+    ) ??
+        0;
+  }
+
   if (result.solution != 'Even Sets') {
     return 0;
   }
 
-  final tilesWide = inferTilesWideFromMarks(
-    marks: result.marks,
+  return reconstructEvenTiledRunLength(
+    result: result,
+    input: input,
     setSize: setSize,
     adjustedWidth: width,
-    tileCoverWidth: input.tileCoverWidth,
-    spacing: spacing,
-    useLhTile: input.useLHTile == 'YES',
-    lhTileWidth: input.lhTileWidth.round(),
   );
-  if (tilesWide == null) return 0;
-
-  final regularTiles = tilesWide - (input.useLHTile == 'YES' ? 1 : 0);
-  return regularTiles * (input.tileCoverWidth.round() + spacing) +
-      (input.useLHTile == 'YES' ? input.lhTileWidth.round() : 0);
 }
 
 int expectedMarksIncrement({
@@ -320,9 +493,10 @@ List<HorizontalValidationIssue> validateHorizontalReconciles({
         setSize: setSize,
         adjustedWidth: adjusted,
       );
-      final isPrimaryWidth = detail.inputWidth == primaryInputWidth;
-      if (result.solution == 'Even Sets' &&
-          isPrimaryWidth &&
+      final reconcilesTiledRun = result.solution == 'Even Sets' ||
+          result.solution == 'Cut Tile' ||
+          (result.solution == 'Split Sets' && !_isDegenerateSplitSolution(result));
+      if (reconcilesTiledRun &&
           tiledRun > 0 &&
           (adjusted - tiledRun).abs() > toleranceMm) {
         issues.add(HorizontalValidationIssue(
