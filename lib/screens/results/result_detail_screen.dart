@@ -6,8 +6,16 @@ import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/widgets/visulization_toggle.dart';
+import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/result_display_registry.dart';
+import 'package:roofgrid_uk/utils/saved_result_dates.dart';
+import 'package:roofgrid_uk/utils/saved_result_inputs.dart';
+import 'package:roofgrid_uk/utils/vertical_result_fields.dart';
+import 'package:roofgrid_uk/widgets/calculation_results_panel.dart';
+import 'package:roofgrid_uk/widgets/results/results_visualization_card.dart';
+import 'package:roofgrid_uk/widgets/visualization_toggle.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -25,13 +33,22 @@ class ResultDetailScreen extends ConsumerStatefulWidget {
 class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
   final ScreenshotController _screenshotController = ScreenshotController();
   bool _isExporting = false;
+  late SavedResult _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _result = normalizeSavedResult(widget.result);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final result = widget.result; // Use result from constructor
-    final isVertical = result.type == CalculationType.vertical;
-    final dateFormat = DateFormat('dd MMMM yyyy, HH:mm');
-    final formattedDate = dateFormat.format(result.timestamp);
+    final result = _result;
+    final typeLabel = savedCalculationTypeLabel(result.type);
+    final formattedDate = formatSavedDateTime(result.createdAt);
+    final updatedLine =
+        formatSavedUpdatedLine(result.createdAt, result.updatedAt);
+    final tileName = result.tile['name']?.toString();
     final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
 
     // Extract vertical and horizontal results from savedResult
@@ -64,6 +81,7 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       appBar: AppBar(
         title: Text(result.projectName),
         actions: [
+          const HomeBackButton(),
           IconButton(
             icon: const Icon(Icons.share),
             onPressed:
@@ -71,11 +89,17 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
             tooltip: 'Export',
           ),
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.calculate_outlined),
             onPressed: _isExporting
                 ? null
-                : () => _navigateToEditScreen(context, result),
-            tooltip: 'Edit',
+                : () => context.push('/calculator', extra: _result),
+            tooltip: 'Recalculate',
+          ),
+          IconButton(
+            icon: const Icon(Icons.drive_file_rename_outline),
+            onPressed:
+                _isExporting ? null : () => _navigateToEditScreen(context),
+            tooltip: 'Rename project',
           ),
         ],
       ),
@@ -104,23 +128,35 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isVertical
-                          ? 'Vertical Calculation'
-                          : result.type == CalculationType.combined
-                              ? 'Combined Calculation'
-                              : 'Horizontal Calculation',
+                      typeLabel,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
                     ),
+                    if (tileName != null && tileName.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        tileName,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.white70,
+                            ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
-                      'Created on $formattedDate',
+                      'Saved $formattedDate',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Colors.white70,
                           ),
                     ),
+                    if (updatedLine != null)
+                      Text(
+                        updatedLine,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white60,
+                            ),
+                      ),
                   ],
                 ),
               ),
@@ -129,120 +165,28 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Calculation Context Section
-                    _buildCalculationContext(context, result, fontSize),
-                    const SizedBox(height: 16),
-                    // Single Visualization with Toggle Buttons
-                    _buildVisualizationSection(context, verticalResult,
-                        horizontalResult, gutterOverhang, fontSize),
-                    const SizedBox(height: 16),
-                    // Results Summary and Details
                     if (verticalResult != null)
                       _buildVerticalResultsSection(
                           context, verticalResult, result, fontSize),
                     if (horizontalResult != null)
                       _buildHorizontalResultsSection(
                           context, horizontalResult, result, fontSize),
+                    if (verticalResult != null || horizontalResult != null) ...[
+                      const SizedBox(height: 16),
+                      _buildVisualizationSection(
+                        context,
+                        verticalResult,
+                        horizontalResult,
+                        gutterOverhang,
+                        result,
+                        fontSize,
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCalculationContext(
-      BuildContext context, SavedResult result, double fontSize) {
-    List<Widget> contextRows = [];
-
-    // Tile Information
-    contextRows
-        .add(_infoRow('Tile Name', result.tile['name']?.toString() ?? 'N/A'));
-    contextRows.add(_infoRow(
-        'Material Type', result.tile['materialType']?.toString() ?? 'N/A'));
-    if (result.tile['tileCoverWidth'] != null) {
-      contextRows
-          .add(_infoRow('Cover Width', '${result.tile['tileCoverWidth']} mm'));
-    }
-    if (result.tile['slateTileHeight'] != null) {
-      contextRows
-          .add(_infoRow('Height', '${result.tile['slateTileHeight']} mm'));
-    }
-
-    // Vertical Inputs
-    if (result.inputs['vertical_inputs'] != null) {
-      final verticalInputs =
-          result.inputs['vertical_inputs'] as Map<String, dynamic>;
-      contextRows.add(const Divider());
-      if (verticalInputs['gutterOverhang'] != null) {
-        contextRows.add(_infoRow(
-            'Gutter Overhang', '${verticalInputs['gutterOverhang']} mm'));
-      }
-      if (verticalInputs['useDryRidge'] != null) {
-        contextRows.add(_infoRow('Dry Ridge',
-            verticalInputs['useDryRidge'] == 'YES' ? 'Yes' : 'No'));
-      }
-      if (verticalInputs['rafterHeights'] != null) {
-        final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
-        for (int i = 0; i < rafters.length; i++) {
-          final rafter = rafters[i];
-          contextRows.add(_infoRow(
-              rafter['label'] ?? 'Rafter ${i + 1}', '${rafter['value']} mm'));
-        }
-      }
-    }
-
-    // Horizontal Inputs
-    if (result.inputs['horizontal_inputs'] != null) {
-      final horizontalInputs =
-          result.inputs['horizontal_inputs'] as Map<String, dynamic>;
-      contextRows.add(const Divider());
-      if (horizontalInputs['widths'] != null) {
-        final widths = horizontalInputs['widths'] as List<dynamic>;
-        for (int i = 0; i < widths.length; i++) {
-          final width = widths[i];
-          contextRows.add(_infoRow(
-              width['label'] ?? 'Width ${i + 1}', '${width['value']} mm'));
-        }
-      }
-      if (horizontalInputs['useDryVerge'] != null) {
-        contextRows.add(_infoRow('Dry Verge',
-            horizontalInputs['useDryVerge'] == 'YES' ? 'Yes' : 'No'));
-      }
-      if (horizontalInputs['abutmentSide'] != null) {
-        contextRows
-            .add(_infoRow('Abutment Side', horizontalInputs['abutmentSide']));
-      }
-      if (horizontalInputs['useLHTile'] != null) {
-        contextRows.add(_infoRow('Left Hand Tile',
-            horizontalInputs['useLHTile'] == 'YES' ? 'Yes' : 'No'));
-      }
-      if (horizontalInputs['crossBonded'] != null) {
-        contextRows.add(_infoRow('Cross Bonded',
-            horizontalInputs['crossBonded'] == 'YES' ? 'Yes' : 'No'));
-      }
-    }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Calculation Context',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: fontSize,
-                  ),
-            ),
-            const Divider(),
-            ...contextRows,
-          ],
         ),
       ),
     );
@@ -253,43 +197,26 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       VerticalCalculationResult? verticalResult,
       HorizontalCalculationResult? horizontalResult,
       double? gutterOverhang,
+      SavedResult savedResult,
       double fontSize) {
     final hasVertical = verticalResult != null;
     final hasHorizontal = horizontalResult != null;
 
-    // Default to Combined if both are available, otherwise the available result
     final defaultMode = hasVertical && hasHorizontal
         ? ViewMode.combined
         : hasVertical
             ? ViewMode.vertical
             : ViewMode.horizontal;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Visualization',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: fontSize,
-                  ),
-            ),
-            const Divider(),
-            if (hasVertical || hasHorizontal)
-              VisualizationWithToggle(
-                verticalResult: verticalResult,
-                horizontalResult: horizontalResult,
-                gutterOverhang: gutterOverhang ?? 0,
-                defaultMode: defaultMode,
-              ),
-          ],
-        ),
-      ),
+    return ResultsVisualizationCard(
+      verticalResult: verticalResult,
+      horizontalResult: horizontalResult,
+      gutterOverhang: gutterOverhang ?? 0,
+      defaultMode: defaultMode,
+      savedResult: savedResult,
+      tileMaterialType: materialTypeFromTileJson(savedResult.tile),
+      showCombinedToggle: savedResult.type == CalculationType.combined,
+      fontSize: fontSize,
     );
   }
 
@@ -298,100 +225,21 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       VerticalCalculationResult result,
       SavedResult savedResult,
       double fontSize) {
-    // Summary Metrics
-    List<Widget> summaryRows = [
-      _infoRow('Total Courses', result.totalCourses.toString()),
-      _infoRow('Gauge', '${result.gauge} mm'),
-      if (result.splitGauge != null)
-        _infoRow('Split Gauge', '${result.splitGauge} mm'),
-    ];
+    final tileMaterialType = materialTypeFromTileJson(savedResult.tile);
+    final slopes = _savedSlopeEntries(savedResult);
 
-    // Detailed Results for Each Rafter Height
-    List<Widget> detailRows = [];
-    if (savedResult.inputs['vertical_inputs'] != null) {
-      final verticalInputs =
-          savedResult.inputs['vertical_inputs'] as Map<String, dynamic>;
-      if (verticalInputs['rafterHeights'] != null) {
-        final rafters = verticalInputs['rafterHeights'] as List<dynamic>;
-        for (int i = 0; i < rafters.length; i++) {
-          final rafter = rafters[i];
-          detailRows.add(_infoRow(
-              rafter['label'] ?? 'Rafter ${i + 1}', '${rafter['value']} mm'));
-          detailRows.add(_infoRow('Ridge Offset', '${result.ridgeOffset} mm'));
-          if (result.eaveBatten != null) {
-            detailRows.add(_infoRow('Eave Batten', '${result.eaveBatten} mm'));
-          }
-          detailRows.add(_infoRow('First Batten', '${result.firstBatten} mm'));
-          if (result.cutCourse != null) {
-            detailRows.add(_infoRow('Cut Course', '${result.cutCourse} mm'));
-          }
-          if (i < rafters.length - 1) {
-            detailRows.add(const Divider());
-          }
-        }
-      }
-    }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Vertical Calculation Results',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: fontSize,
-                  ),
-            ),
-            const Divider(),
-            // Summary
-            Column(children: summaryRows),
-            if (result.warning != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        result.warning!,
-                        style: TextStyle(fontSize: fontSize - 2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            // Expandable Details
-            if (detailRows.isNotEmpty)
-              ExpansionTile(
-                title: Text(
-                  'Detailed Results per Rafter',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(children: detailRows),
-                  ),
-                ],
-              ),
-          ],
-        ),
+    return VerticalResultsPanel(
+      result: result,
+      tileMaterialType: tileMaterialType,
+      tileName: savedResult.tile['name']?.toString(),
+      slopes: slopes,
+      fontSize: fontSize,
+      padding: const EdgeInsets.all(16.0),
+      workingsData: buildJobWorkingsDataFromSavedResult(
+        savedResult,
+        scope: savedResult.type == CalculationType.combined
+            ? CalculatorWorkingsScope.vertical
+            : null,
       ),
     );
   }
@@ -401,136 +249,66 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       HorizontalCalculationResult result,
       SavedResult savedResult,
       double fontSize) {
-    // Summary Metrics
-    List<Widget> summaryRows = [
-      _infoRow('New Width', '${result.newWidth} mm'),
-      _infoRow('Marks', '${result.marks} mm'),
-      if (result.splitMarks != null)
-        _infoRow('Split Marks', '${result.splitMarks} mm'),
-    ];
+    return HorizontalResultsPanel(
+      result: result,
+      widths: _savedWidthEntries(savedResult),
+      tileName: savedResult.tile['name']?.toString(),
+      fontSize: fontSize,
+      padding: const EdgeInsets.all(16.0),
+      workingsData: buildJobWorkingsDataFromSavedResult(
+        savedResult,
+        scope: savedResult.type == CalculationType.combined
+            ? CalculatorWorkingsScope.horizontal
+            : null,
+      ),
+    );
+  }
 
-    // Detailed Results for Each Width
-    List<Widget> detailRows = [];
-    if (savedResult.inputs['horizontal_inputs'] != null) {
-      final horizontalInputs =
-          savedResult.inputs['horizontal_inputs'] as Map<String, dynamic>;
-      if (horizontalInputs['widths'] != null) {
-        final widths = horizontalInputs['widths'] as List<dynamic>;
-        for (int i = 0; i < widths.length; i++) {
-          final width = widths[i];
-          detailRows.add(_infoRow(
-              width['label'] ?? 'Width ${i + 1}', '${width['value']} mm'));
-          if (result.lhOverhang != null) {
-            detailRows.add(_infoRow('LH Overhang', '${result.lhOverhang} mm'));
-          }
-          if (result.rhOverhang != null) {
-            detailRows.add(_infoRow('RH Overhang', '${result.rhOverhang} mm'));
-          }
-          if (result.cutTile != null) {
-            detailRows.add(_infoRow('Cut Tile', '${result.cutTile} mm'));
-          }
-          detailRows.add(_infoRow('First Mark', '${result.firstMark} mm'));
-          if (result.secondMark != null) {
-            detailRows.add(_infoRow('Second Mark', '${result.secondMark} mm'));
-          }
-          if (i < widths.length - 1) {
-            detailRows.add(const Divider());
-          }
-        }
-      }
+  List<SlopeInputEntry> _savedSlopeEntries(SavedResult savedResult) {
+    final verticalInputs =
+        savedResult.inputs['vertical_inputs'] as Map<String, dynamic>?;
+    final rafters = verticalInputs?['rafterHeights'] as List<dynamic>?;
+    if (rafters == null) {
+      return const [];
     }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Horizontal Calculation Results',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: fontSize,
-                  ),
-            ),
-            const Divider(),
-            // Summary
-            Column(children: summaryRows),
-            if (result.warning != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        result.warning!,
-                        style: TextStyle(fontSize: fontSize - 2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            // Expandable Details
-            if (detailRows.isNotEmpty)
-              ExpansionTile(
-                title: Text(
-                  'Detailed Results per Width',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(children: detailRows),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
+    return slopeEntriesFromSavedInputs(rafters);
   }
 
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(value),
-          ),
-        ],
-      ),
-    );
+  List<WidthInputEntry> _savedWidthEntries(SavedResult savedResult) {
+    final horizontalInputs =
+        savedResult.inputs['horizontal_inputs'] as Map<String, dynamic>?;
+    final widths = horizontalInputs?['widths'] as List<dynamic>?;
+    if (widths == null) {
+      return const [];
+    }
+    return widthEntriesFromSavedInputs(widths);
   }
 
-  void _navigateToEditScreen(BuildContext context, SavedResult result) {
+
+
+  void _navigateToEditScreen(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => EditResultSheet(result: result),
+      builder: (context) => EditResultSheet(
+        result: _result,
+        onRenamed: (newName) {
+          setState(() {
+            _result = SavedResult(
+              id: _result.id,
+              userId: _result.userId,
+              projectName: newName,
+              type: _result.type,
+              timestamp: _result.timestamp,
+              inputs: _result.inputs,
+              outputs: _result.outputs,
+              tile: _result.tile,
+              createdAt: _result.createdAt,
+              updatedAt: DateTime.now(),
+            );
+          });
+        },
+      ),
     );
   }
 
@@ -594,9 +372,11 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       final file = File(imagePath);
       await file.writeAsBytes(image);
 
-      await Share.shareXFiles(
-        [XFile(imagePath)],
-        text: 'RoofGrid UK Calculation Result',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(imagePath)],
+          text: 'RoofGrid UK Calculation Result',
+        ),
       );
     } catch (e) {
       if (mounted) {
@@ -626,9 +406,11 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
       final pdfPath = await resultsService.exportResultAsPdf(result);
 
       if (pdfPath != null) {
-        await Share.shareXFiles(
-          [XFile(pdfPath)],
-          text: 'RoofGrid UK Calculation Result',
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(pdfPath)],
+            text: 'RoofGrid UK Calculation Result',
+          ),
         );
       } else {
         if (mounted) {
@@ -691,9 +473,11 @@ Type: ${isVertical ? 'Vertical' : result.type == CalculationType.combined ? 'Com
 Tile: ${result.tile['name'] ?? 'N/A'}
 ''';
 
-      await Share.share(
-        emailBody,
-        subject: 'RoofGrid UK - ${result.projectName}',
+      await SharePlus.instance.share(
+        ShareParams(
+          text: emailBody,
+          subject: 'RoofGrid UK - ${result.projectName}',
+        ),
       );
     } catch (e) {
       if (mounted) {
@@ -716,8 +500,13 @@ Tile: ${result.tile['name'] ?? 'N/A'}
 
 class EditResultSheet extends ConsumerStatefulWidget {
   final SavedResult result;
+  final ValueChanged<String>? onRenamed;
 
-  const EditResultSheet({super.key, required this.result});
+  const EditResultSheet({
+    super.key,
+    required this.result,
+    this.onRenamed,
+  });
 
   @override
   ConsumerState<EditResultSheet> createState() => _EditResultSheetState();
@@ -746,10 +535,13 @@ class _EditResultSheetState extends ConsumerState<EditResultSheet> {
 
     try {
       final resultsService = ref.read(resultsServiceProvider);
+      final newName = _projectNameController.text.trim();
       await resultsService.updateProjectName(
         widget.result,
-        _projectNameController.text.trim(),
+        newName,
       );
+      ref.invalidate(savedResultsProvider(widget.result.userId));
+      widget.onRenamed?.call(newName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Project name updated')),
@@ -788,7 +580,7 @@ class _EditResultSheetState extends ConsumerState<EditResultSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Edit Result',
+            'Rename Project',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/header_widget.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 class AdminStatsScreen extends StatefulWidget {
@@ -99,7 +101,9 @@ class _AdminStatsScreenState extends State<AdminStatsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detailed Statistics'),
+        actions: const [HomeBackButton()],
       ),
+      drawer: const MainDrawer(),
       body: SingleChildScrollView(
         padding: padding,
         child: Column(

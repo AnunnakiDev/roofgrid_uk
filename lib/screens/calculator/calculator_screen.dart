@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,96 +8,41 @@ import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/screens/calculator/select_calculation_type_step.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/screens/calculator/enter_measurements_step.dart';
+import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/saved_result_inputs.dart';
 import 'package:roofgrid_uk/screens/calculator/view_results_step.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
+import 'package:roofgrid_uk/utils/calculator_input_visibility.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
 import 'package:roofgrid_uk/widgets/app_header.dart';
+import 'package:roofgrid_uk/widgets/save_result_dialog.dart';
 
 // Define CalculatorStep enum for step-based flow
 enum CalculatorStep {
   confirmTile,
-  selectCalculationType,
   enterMeasurements,
   viewResults,
 }
 
-// Enum for calculation type selection
-enum CalculationTypeSelection {
-  verticalOnly,
-  horizontalOnly,
-  both,
-}
-
-// Define a class to hold vertical inputs
-class VerticalInputs {
-  final List<Map<String, dynamic>> rafterHeights; // List of {label, value}
-  final double gutterOverhang;
-  final String useDryRidge;
-
-  VerticalInputs({
-    this.rafterHeights = const [],
-    this.gutterOverhang = 50.0,
-    this.useDryRidge = 'NO',
-  });
-
-  VerticalInputs copyWith({
-    List<Map<String, dynamic>>? rafterHeights,
-    double? gutterOverhang,
-    String? useDryRidge,
-  }) {
-    return VerticalInputs(
-      rafterHeights: rafterHeights ?? this.rafterHeights,
-      gutterOverhang: gutterOverhang ?? this.gutterOverhang,
-      useDryRidge: useDryRidge ?? this.useDryRidge,
-    );
-  }
-}
-
-// Define a class to hold horizontal inputs
-class HorizontalInputs {
-  final List<Map<String, dynamic>> widths; // List of {label, value}
-  final String useDryVerge;
-  final String abutmentSide;
-  final String useLHTile;
-  final String crossBonded;
-
-  HorizontalInputs({
-    this.widths = const [],
-    this.useDryVerge = 'NO',
-    this.abutmentSide = 'NONE',
-    this.useLHTile = 'NO',
-    this.crossBonded = 'NO',
-  });
-
-  HorizontalInputs copyWith({
-    List<Map<String, dynamic>>? widths,
-    String? useDryVerge,
-    String? abutmentSide,
-    String? useLHTile,
-    String? crossBonded,
-  }) {
-    return HorizontalInputs(
-      widths: widths ?? this.widths,
-      useDryVerge: useDryVerge ?? this.useDryVerge,
-      abutmentSide: abutmentSide ?? this.abutmentSide,
-      useLHTile: useLHTile ?? this.useLHTile,
-      crossBonded: crossBonded ?? this.crossBonded,
-    );
-  }
-}
-
 class CalculatorScreen extends ConsumerWidget {
-  final SavedResult? savedResult; // Optional parameter for editing
+  final SavedResult? savedResult;
+  final CalculationTypeSelection? initialMode;
 
-  const CalculatorScreen({super.key, this.savedResult});
+  const CalculatorScreen({
+    super.key,
+    this.savedResult,
+    this.initialMode,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -104,7 +51,7 @@ class CalculatorScreen extends ConsumerWidget {
 
     if (!authState.isAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        print("User not authenticated, redirecting to /auth/login");
+        // print("User not authenticated, redirecting to /auth/login"); // removed for prod
         context.go('/auth/login');
       });
       return const Scaffold(
@@ -116,6 +63,7 @@ class CalculatorScreen extends ConsumerWidget {
       data: (user) => CalculatorContent(
         user: user,
         savedResult: savedResult,
+        initialMode: initialMode,
       ),
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -136,11 +84,13 @@ class CalculatorScreen extends ConsumerWidget {
 class CalculatorContent extends ConsumerStatefulWidget {
   final UserModel? user;
   final SavedResult? savedResult;
+  final CalculationTypeSelection? initialMode;
 
   const CalculatorContent({
     super.key,
     required this.user,
     this.savedResult,
+    this.initialMode,
   });
 
   @override
@@ -150,6 +100,8 @@ class CalculatorContent extends ConsumerStatefulWidget {
 class _CalculatorContentState extends ConsumerState<CalculatorContent> {
   bool _isOnline = true;
   bool _hasRedirectedToTileSelect = false;
+  bool _tileSelectScheduled = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   CalculatorStep _currentStep = CalculatorStep.confirmTile;
   CalculationTypeSelection? _calculationType;
   VerticalInputs _verticalInputs = VerticalInputs();
@@ -160,107 +112,207 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
   @override
   void initState() {
     super.initState();
-    // Initialize inputs from savedResult, if present
     if (widget.savedResult != null) {
-      if (widget.savedResult!.type == CalculationType.vertical) {
-        _calculationType = CalculationTypeSelection.verticalOnly;
+      final savedResult = normalizeSavedResult(widget.savedResult!);
+      final savedTile = TileModel.fromJson(savedResult.tile);
+      _calculationType = calculationTypeFromSavedResult(savedResult.type);
+
+      final verticalInputs =
+          savedResult.inputs['vertical_inputs'] as Map<String, dynamic>?;
+      final horizontalInputs =
+          savedResult.inputs['horizontal_inputs'] as Map<String, dynamic>?;
+
+      if (_calculationType == CalculationTypeSelection.verticalOnly ||
+          _calculationType == CalculationTypeSelection.both) {
         _verticalInputs = VerticalInputs(
-          rafterHeights: (widget.savedResult!.inputs['vertical_inputs']
-                      ?['rafterHeights'] as List<dynamic>?)
+          rafterHeights: (verticalInputs?['rafterHeights'] as List<dynamic>?)
                   ?.map((item) => item as Map<String, dynamic>)
                   .toList() ??
               [],
-          gutterOverhang: widget.savedResult!.inputs['vertical_inputs']
-                  ?['gutterOverhang'] ??
+          gutterOverhang: (verticalInputs?['gutterOverhang'] as num?)
+                  ?.toDouble() ??
               50.0,
-          useDryRidge: widget.savedResult!.inputs['vertical_inputs']
-                  ?['useDryRidge'] ??
-              'NO',
-        );
-      } else if (widget.savedResult!.type == CalculationType.horizontal) {
-        _calculationType = CalculationTypeSelection.horizontalOnly;
-        _horizontalInputs = HorizontalInputs(
-          widths: (widget.savedResult!.inputs['horizontal_inputs']?['widths']
-                      as List<dynamic>?)
-                  ?.map((item) => item as Map<String, dynamic>)
-                  .toList() ??
-              [],
-          useDryVerge: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['useDryVerge'] ??
-              'NO',
-          abutmentSide: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['abutmentSide'] ??
-              'NONE',
-          useLHTile: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['useLHTile'] ??
-              'NO',
-          crossBonded: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['crossBonded'] ??
-              'NO',
-        );
-      } else if (widget.savedResult!.type == CalculationType.combined) {
-        _calculationType = CalculationTypeSelection.both;
-        _verticalInputs = VerticalInputs(
-          rafterHeights: (widget.savedResult!.inputs['vertical_inputs']
-                      ?['rafterHeights'] as List<dynamic>?)
-                  ?.map((item) => item as Map<String, dynamic>)
-                  .toList() ??
-              [],
-          gutterOverhang: widget.savedResult!.inputs['vertical_inputs']
-                  ?['gutterOverhang'] ??
-              50.0,
-          useDryRidge: widget.savedResult!.inputs['vertical_inputs']
-                  ?['useDryRidge'] ??
-              'NO',
-        );
-        _horizontalInputs = HorizontalInputs(
-          widths: (widget.savedResult!.inputs['horizontal_inputs']?['widths']
-                      as List<dynamic>?)
-                  ?.map((item) => item as Map<String, dynamic>)
-                  .toList() ??
-              [],
-          useDryVerge: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['useDryVerge'] ??
-              'NO',
-          abutmentSide: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['abutmentSide'] ??
-              'NONE',
-          useLHTile: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['useLHTile'] ??
-              'NO',
-          crossBonded: widget.savedResult!.inputs['horizontal_inputs']
-                  ?['crossBonded'] ??
-              'NO',
+          useDryRidge: verticalInputs?['useDryRidge'] as String? ?? 'NO',
         );
       }
-      // Skip to enterMeasurements if editing a saved result
+
+      if (_calculationType == CalculationTypeSelection.horizontalOnly ||
+          _calculationType == CalculationTypeSelection.both) {
+        _horizontalInputs = HorizontalInputs(
+          widths: (horizontalInputs?['widths'] as List<dynamic>?)
+                  ?.map((item) => item as Map<String, dynamic>)
+                  .toList() ??
+              [],
+          useDryVerge: horizontalInputs?['useDryVerge'] as String? ?? 'NO',
+          abutmentSide:
+              horizontalInputs?['abutmentSide'] as String? ?? 'NONE',
+          useLHTile: horizontalInputs?['useLHTile'] as String? ?? 'NO',
+          crossBonded: resolveCrossBonded(
+            saved: horizontalInputs?['crossBonded'] as String?,
+            tile: savedTile,
+          ),
+        );
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(calculatorProvider.notifier).setTile(savedTile);
+        _hydrateProviderFromInputs();
+      });
+
+      _resetModeScopedCalculationData(_calculationType!);
       _currentStep = CalculatorStep.enterMeasurements;
       _hasRedirectedToTileSelect = true;
+    } else if (widget.initialMode != null) {
+      _setCalculationMode(widget.initialMode!);
+      _scheduleTileSelection();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.go('/home');
+      });
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(calculatorProvider.notifier).clearResults();
+      final mode = _calculationType;
+      if (mode != null && widget.savedResult == null) {
+        ref.read(calculatorProvider.notifier).resetOptionsForMode(mode);
+        _hydrateProviderFromInputs();
+      }
+    });
 
     // Check initial connectivity
     _checkConnectivity();
-    // Listen to connectivity changes
-    Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (!mounted) return;
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = isOnlineFromResults(result);
       });
       if (_isOnline) {
-        // Sync calculations when going online
         ref.read(calculationServiceProvider).syncCalculations();
       }
     });
   }
 
+  @override
+  void didUpdateWidget(CalculatorContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.savedResult != null) return;
+
+    final newMode = widget.initialMode;
+    if (newMode == null || newMode == _calculationType) return;
+
+    _applyCalculationMode(newMode);
+  }
+
+  void _setCalculationMode(CalculationTypeSelection mode) {
+    _calculationType = mode;
+    _resetModeScopedCalculationData(mode);
+    if (_currentStep == CalculatorStep.viewResults) {
+      _currentStep = CalculatorStep.enterMeasurements;
+    }
+  }
+
+  void _applyCalculationMode(CalculationTypeSelection mode) {
+    setState(() => _setCalculationMode(mode));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(calculatorProvider.notifier).clearResults();
+      ref.read(calculatorProvider.notifier).resetOptionsForMode(mode);
+      _hydrateProviderFromInputs();
+    });
+  }
+
+  void _hydrateProviderFromInputs() {
+    final mode = _calculationType;
+    if (mode == null) return;
+
+    ref.read(calculatorProvider.notifier).hydrateCalculatorOptionsFromInputs(
+          vertical: includesVertical(mode) ? _verticalInputs : null,
+          horizontal: includesHorizontal(mode) ? _horizontalInputs : null,
+        );
+  }
+
+  void _resetModeScopedCalculationData(CalculationTypeSelection mode) {
+    if (mode == CalculationTypeSelection.verticalOnly) {
+      _horizontalInputs = HorizontalInputs();
+      _lastHorizontalCalculationData = null;
+    } else if (mode == CalculationTypeSelection.horizontalOnly) {
+      _verticalInputs = VerticalInputs();
+      _lastVerticalCalculationData = null;
+    }
+  }
+
+  Future<void> _openTileSelection() async {
+    try {
+      final selectedTile = await context.push('/calculator/tile-select');
+      if (!mounted) return;
+      if (selectedTile != null && selectedTile is TileModel) {
+        ref.read(calculatorProvider.notifier).setTile(selectedTile);
+        setState(() {
+          _horizontalInputs = _horizontalInputs.copyWith(
+            crossBonded: crossBondedFromTile(selectedTile),
+          );
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackbar(
+        'Error selecting tile: $e',
+        backgroundColor: Theme.of(context).colorScheme.error,
+      );
+    }
+  }
+
+  void _scheduleTileSelection() {
+    if (_tileSelectScheduled || _hasRedirectedToTileSelect) return;
+    _tileSelectScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        final selectedTile = await context.push('/calculator/tile-select');
+        if (!mounted) return;
+        if (selectedTile != null && selectedTile is TileModel) {
+          ref.read(calculatorProvider.notifier).setTile(selectedTile);
+          setState(() {
+            _horizontalInputs = _horizontalInputs.copyWith(
+              crossBonded: crossBondedFromTile(selectedTile),
+            );
+            _currentStep = CalculatorStep.enterMeasurements;
+            _hasRedirectedToTileSelect = true;
+          });
+        } else {
+          context.go('/home');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting tile: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        context.go('/home');
+      }
+    });
+  }
+
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
+    if (!mounted) return;
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -338,7 +390,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
     // Handle null user case
     if (widget.user == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        print("User data not found, redirecting to /auth/login");
+        // print("User data not found, redirecting to /auth/login"); // removed for prod
         context.go('/auth/login');
       });
       return const Scaffold(
@@ -347,42 +399,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
     }
 
     final user = widget.user!;
-
-    // Redirect to tile selection if not already done
-    if (!_hasRedirectedToTileSelect) {
-      setState(() {
-        _currentStep = CalculatorStep.confirmTile;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        try {
-          final selectedTile = await context.push('/calculator/tile-select');
-          if (selectedTile != null && selectedTile is TileModel) {
-            print(
-                "Tile selected: ${selectedTile.name}, Image URL: ${selectedTile.image}");
-            ref.read(calculatorProvider.notifier).setTile(selectedTile);
-            setState(() {
-              _currentStep = CalculatorStep.selectCalculationType;
-            });
-          } else {
-            debugPrint('No tile selected or invalid tile data returned');
-            // Redirect back to home if no tile is selected
-            context.go('/home');
-          }
-        } catch (e) {
-          debugPrint('Error selecting tile: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error selecting tile: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-          context.go('/home');
-        }
-      });
-      setState(() {
-        _hasRedirectedToTileSelect = true;
-      });
-    }
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
 
     return Scaffold(
       drawer: const MainDrawer(),
@@ -406,7 +423,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
                 ],
               ),
               Expanded(
-                child: _buildStepContent(context, user),
+                child: _buildStepContent(context, user, effectiveIsPro),
               ),
             ],
           ),
@@ -417,7 +434,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
                   calculatorProvider.select((state) => state.errorMessage));
               if (errorMessage != null) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  print("Showing error message: $errorMessage");
+                  // print("Showing error message: $errorMessage"); // removed for prod
                   _showSnackbar(errorMessage,
                       backgroundColor: Theme.of(context).colorScheme.error);
                   ref.read(calculatorProvider.notifier).clearResults();
@@ -428,97 +445,23 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: 1, // Highlight Calculator tab
-        onTap: (index) {
-          if (index == 0) {
-            print("Navigating to /home from bottom navigation");
-            context.go('/home');
-          }
-          if (index == 1) {
-            print(
-                "Navigating to /home from bottom navigation (profile redirect)");
-            context.go('/home');
-          }
-          if (index == 2) {
-            // Tiles
-            if (user.isPro != true) {
-              _showSnackbar('Upgrade to Pro to access this feature',
-                  backgroundColor: Theme.of(context).colorScheme.error);
-              print("User not Pro, redirecting to /subscription");
-              context.go('/subscription');
-            } else {
-              print("Navigating to /tiles from bottom navigation");
-              context.go('/tiles');
-            }
-          }
-          if (index == 3) {
-            // Results
-            if (user.isPro != true) {
-              _showSnackbar('Upgrade to Pro to access this feature',
-                  backgroundColor: Theme.of(context).colorScheme.error);
-              print("User not Pro, redirecting to /subscription");
-              context.go('/subscription');
-            } else {
-              print("Navigating to /results from bottom navigation");
-              context.go('/results');
-            }
-          }
-        },
-        items: [
-          const BottomNavItem(
-            label: 'Home',
-            icon: Icons.home,
-            activeIcon: Icons.home_filled,
-          ),
-          const BottomNavItem(
-            label: 'Profile',
-            icon: Icons.person,
-            activeIcon: Icons.person,
-          ),
-          BottomNavItem(
-            label: 'Tiles',
-            icon: Icons.grid_view,
-            activeIcon: Icons.grid_view,
-            tooltip: user.isPro ? 'Tiles' : 'Upgrade to Pro to access tiles',
-          ),
-          BottomNavItem(
-            label: 'Results',
-            icon: Icons.save,
-            activeIcon: Icons.save,
-            tooltip: user.isPro
-                ? 'Saved Results'
-                : 'Upgrade to Pro to access saved results',
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildStepContent(BuildContext context, UserModel user) {
+  Widget _buildStepContent(
+      BuildContext context, UserModel user, bool effectiveIsPro) {
     switch (_currentStep) {
       case CalculatorStep.confirmTile:
         return const Center(child: CircularProgressIndicator());
-      case CalculatorStep.selectCalculationType:
-        return SelectCalculationTypeStep(
-          onTypeSelected: (type) {
-            setState(() {
-              _calculationType = type;
-              _currentStep = CalculatorStep.enterMeasurements;
-            });
-          },
-        ).animate().fadeIn(duration: 600.ms);
       case CalculatorStep.enterMeasurements:
         return EnterMeasurementsStep(
+          key: ValueKey(_calculationType),
           user: user,
+          effectiveIsPro: effectiveIsPro,
           calculationType: _calculationType!,
           initialVerticalInputs: _verticalInputs,
           initialHorizontalInputs: _horizontalInputs,
-          onChangeType: () {
-            setState(() {
-              _currentStep = CalculatorStep.selectCalculationType;
-            });
-          },
+          onBackToTileSelect: _openTileSelection,
           onCalculate: (verticalInputs, horizontalInputs) {
             setState(() {
               _verticalInputs = verticalInputs;
@@ -548,6 +491,8 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
           calculationType: _calculationType!,
           lastVerticalCalculationData: _lastVerticalCalculationData,
           lastHorizontalCalculationData: _lastHorizontalCalculationData,
+          existingSavedResultId: widget.savedResult?.id,
+          existingProjectName: widget.savedResult?.projectName,
           onBack: () {
             setState(() {
               _currentStep = CalculatorStep.enterMeasurements;
@@ -555,6 +500,13 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
             });
           },
           onSaveCombined: (user) => _promptSaveCombinedResult(user),
+          onSaveResult: (user, calculationData, type, {saveAction = SaveResultAction.saveAsNew}) =>
+              _saveResult(
+            user,
+            calculationData,
+            type,
+            saveAction: saveAction,
+          ),
         );
       default:
         return const SizedBox.shrink();
@@ -562,13 +514,24 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
   }
 
   void _showCalculatorInfo(BuildContext context) {
-    final isVertical =
-        _calculationType == CalculationTypeSelection.verticalOnly;
+    final mode = _calculationType;
+    final title = mode == null
+        ? 'Roofing Calculator'
+        : calculationTypeLabel(mode);
+    final description = switch (mode) {
+      CalculationTypeSelection.verticalOnly =>
+        'Determine batten gauge (spacing) from rafter heights.',
+      CalculationTypeSelection.horizontalOnly =>
+        'Determine tile marking out from width measurements.',
+      CalculationTypeSelection.both =>
+        'Full roof layout — vertical batten gauge and horizontal tile set-out.',
+      null => 'Select a calculation type from the home screen to begin.',
+    };
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          isVertical ? 'Vertical Calculator' : 'Horizontal Calculator',
+          title,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: SingleChildScrollView(
@@ -576,11 +539,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                isVertical
-                    ? 'The Vertical Calculator helps determine batten gauge (spacing) based on rafter height.'
-                    : 'The Horizontal Calculator helps determine tile spacing based on width measurements.',
-              ),
+              Text(description),
               const SizedBox(height: 16),
               Text(
                 'How to use:',
@@ -589,25 +548,38 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
                     ),
               ),
               const SizedBox(height: 8),
-              isVertical
-                  ? const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('1. Select a tile type'),
-                        Text('2. Enter your rafter height(s)'),
-                        Text('3. Tap Calculate'),
-                        Text('4. View your batten gauge and results'),
-                      ],
-                    )
-                  : const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('1. Select a tile type'),
-                        Text('2. Enter your width measurement(s)'),
-                        Text('3. Tap Calculate'),
-                        Text('4. View your tile spacing and results'),
-                      ],
-                    ),
+              switch (mode) {
+                CalculationTypeSelection.verticalOnly => const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('1. Select a tile type'),
+                      Text(
+                          '2. Enter rafter height(s) — fascia top to ridge'),
+                      Text('3. Tap Calculate'),
+                      Text('4. View your batten gauge and results'),
+                    ],
+                  ),
+                CalculationTypeSelection.horizontalOnly => const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('1. Select a tile type'),
+                      Text(
+                          '2. Enter width(s) — verge to verge before overhangs'),
+                      Text('3. Tap Calculate'),
+                      Text('4. View your tile spacing and results'),
+                    ],
+                  ),
+                CalculationTypeSelection.both => const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('1. Select a tile type'),
+                      Text('2. Enter rafter heights, then widths'),
+                      Text('3. Tap Calculate'),
+                      Text('4. View combined vertical and horizontal results'),
+                    ],
+                  ),
+                null => const SizedBox.shrink(),
+              },
             ],
           ),
         ),
@@ -632,23 +604,20 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
       return;
     }
 
-    final List<double> rafterHeights = _verticalInputs.rafterHeights
-        .map((entry) => entry['value'] as double)
-        .toList();
-    if (rafterHeights.isEmpty) {
+    if (_verticalInputs.rafterHeights.isEmpty) {
       debugPrint('No rafter heights provided');
       _showSnackbar('Please enter at least one rafter height',
           backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
-    debugPrint('Rafter heights: $rafterHeights');
     final result = await ref
         .read(calculatorProvider.notifier)
-        .calculateVertical(rafterHeights);
+        .calculateVertical(_verticalInputs);
     debugPrint('Result from calculateVertical: $result');
     setState(() {
       _lastVerticalCalculationData = result;
+      _lastHorizontalCalculationData = null;
       _currentStep = CalculatorStep.viewResults;
     });
   }
@@ -664,22 +633,20 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
       return;
     }
 
-    final List<double> widths = _horizontalInputs.widths
-        .map((entry) => entry['value'] as double)
-        .toList();
-    if (widths.isEmpty) {
+    if (_horizontalInputs.widths.isEmpty) {
       debugPrint('No widths provided');
       _showSnackbar('Please enter at least one width',
           backgroundColor: Theme.of(context).colorScheme.error);
       return;
     }
 
-    debugPrint('Widths: $widths');
-    final result =
-        await ref.read(calculatorProvider.notifier).calculateHorizontal(widths);
+    final result = await ref
+        .read(calculatorProvider.notifier)
+        .calculateHorizontal(_horizontalInputs);
     debugPrint('Result from calculateHorizontal: $result');
     setState(() {
       _lastHorizontalCalculationData = result;
+      _lastVerticalCalculationData = null;
       _currentStep = CalculatorStep.viewResults;
     });
   }
@@ -793,77 +760,71 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
     }
   }
 
-  void _promptSaveCombinedResult(UserModel user) {
-    final TextEditingController projectNameController = TextEditingController();
-
-    showDialog(
+  Future<void> _promptSaveCombinedResult(UserModel user) async {
+    final dialogResult = await showSaveResultDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save Combined Calculation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                'Would you like to save this combined calculation result?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: projectNameController,
-              decoration: const InputDecoration(
-                labelText: 'Project Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context), // Skip saving
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (projectNameController.text.trim().isEmpty) {
-                _showSnackbar('Please enter a project name',
-                    backgroundColor: Theme.of(context).colorScheme.error);
-                return;
-              }
-              final combinedCalculationData = {
-                'id': 'calc_${DateTime.now().millisecondsSinceEpoch}',
-                'inputs': {
-                  'vertical_inputs': _lastVerticalCalculationData!['inputs'],
-                  'horizontal_inputs':
-                      _lastHorizontalCalculationData!['inputs'],
-                },
-                'outputs': {
-                  'vertical': _lastVerticalCalculationData!['outputs'],
-                  'horizontal': _lastHorizontalCalculationData!['outputs'],
-                },
-                'tile': _lastVerticalCalculationData!['tile'],
-                'projectName': projectNameController.text.trim(),
-              };
-              await _saveResult(user, combinedCalculationData, 'combined');
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      title: 'Save Combined Calculation',
+      initialProjectName: widget.savedResult?.projectName,
+      allowUpdateExisting: widget.savedResult != null,
+    );
+    if (dialogResult == null) return;
+
+    final combinedCalculationData = <String, dynamic>{
+      'id': dialogResult.action == SaveResultAction.updateExisting &&
+              widget.savedResult != null
+          ? widget.savedResult!.id
+          : 'calc_${DateTime.now().millisecondsSinceEpoch}',
+      'inputs': {
+        'vertical_inputs': _lastVerticalCalculationData!['inputs'],
+        'horizontal_inputs': _lastHorizontalCalculationData!['inputs'],
+      },
+      'outputs': {
+        'vertical': _lastVerticalCalculationData!['outputs'],
+        'horizontal': _lastHorizontalCalculationData!['outputs'],
+      },
+      'tile': _lastVerticalCalculationData!['tile'],
+      'projectName': dialogResult.projectName,
+    };
+
+    await _saveResult(
+      user,
+      combinedCalculationData,
+      'combined',
+      saveAction: dialogResult.action,
     );
   }
 
-  Future<void> _saveResult(
-      UserModel user, Map<String, dynamic> calculationData, String type) async {
+  Future<SavedResult?> _saveResult(
+    UserModel user,
+    Map<String, dynamic> calculationData,
+    String type, {
+    SaveResultAction saveAction = SaveResultAction.saveAsNew,
+  }) async {
+    if (widget.savedResult?.type == CalculationType.combined &&
+        type != 'combined') {
+      _showSnackbar(
+        'Use Save Combined to update this job',
+        backgroundColor: Theme.of(context).colorScheme.error,
+      );
+      return null;
+    }
+
     // Wait for HiveService initialization to complete
     await ref.read(hiveServiceInitializerProvider.future);
 
-    final calculationId = calculationData['id'] as String? ??
-        'calc_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
+    final isUpdate = saveAction == SaveResultAction.updateExisting &&
+        widget.savedResult != null;
+    final now = DateTime.now();
+    final calculationId = isUpdate
+        ? widget.savedResult!.id
+        : (calculationData['id'] as String? ??
+            'calc_${user.id}_${now.millisecondsSinceEpoch}');
+    final normalizedInputs = normalizeCalculationInputsForSave(
+      type,
+      Map<String, dynamic>.from(
+        calculationData['inputs'] as Map<String, dynamic>,
+      ),
+    );
 
     final savedResult = SavedResult(
       id: calculationId,
@@ -874,12 +835,12 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
           : type == 'horizontal'
               ? CalculationType.horizontal
               : CalculationType.combined,
-      timestamp: DateTime.now(),
-      inputs: calculationData['inputs'] as Map<String, dynamic>,
+      timestamp: now,
+      inputs: normalizedInputs,
       outputs: calculationData['outputs'] as Map<String, dynamic>,
       tile: calculationData['tile'] as Map<String, dynamic>,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      createdAt: isUpdate ? widget.savedResult!.createdAt : now,
+      updatedAt: now,
     );
 
     // Save to the calculations collection
@@ -890,12 +851,12 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
             userId: user.id,
             tileId: savedResult.tile['id'] as String,
             type: type,
-            inputs: calculationData['inputs'] as Map<String, dynamic>,
+            inputs: normalizedInputs,
             result: calculationData['outputs'] as Map<String, dynamic>,
             tile: calculationData['tile'] as Map<String, dynamic>,
             success: (calculationData['outputs']
-                    as Map<String, dynamic>)['warning'] ==
-                null,
+                    as Map<String, dynamic>)['solution'] !=
+                'Invalid',
           );
     } catch (e) {
       debugPrint('Error saving calculation: $e');
@@ -905,33 +866,55 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
       }
     }
 
-    // Save to the saved_results collection
+    var savedToCloud = false;
     try {
       debugPrint('Saving result to Firestore: ${savedResult.id}');
-      await ref.read(resultsServiceProvider).saveResult(user.id, savedResult);
-      // Save to Hive for offline caching
-      final hiveService = ref.read(hiveServiceProvider);
-      final resultsBox = hiveService.resultsBox;
-      debugPrint('Saving result to Hive: ${savedResult.id}');
-      try {
-        await resultsBox.put(savedResult.id, savedResult);
-        debugPrint('Result saved to Hive successfully');
-      } catch (e) {
-        debugPrint('Error saving to Hive: $e');
-        if (mounted) {
-          _showSnackbar('Saved to Firestore, but failed to save offline: $e',
-              backgroundColor: Theme.of(context).colorScheme.error);
-        }
+      if (isUpdate) {
+        await ref.read(resultsServiceProvider).updateResult(savedResult);
+      } else {
+        await ref.read(resultsServiceProvider).saveResult(user.id, savedResult);
       }
-      if (mounted) {
-        _showSnackbar('Calculation result saved successfully');
-      }
+      savedToCloud = true;
     } catch (e) {
-      debugPrint('Error saving result: $e');
-      if (mounted) {
-        _showSnackbar('Failed to save result: $e',
-            backgroundColor: Theme.of(context).colorScheme.error);
-      }
+      debugPrint('Error saving result to Firestore: $e');
     }
+
+    var savedLocally = false;
+    try {
+      final hiveService = ref.read(hiveServiceProvider);
+      await hiveService.resultsBox.put(savedResult.id, savedResult);
+      savedLocally = true;
+    } catch (e) {
+      debugPrint('Error saving to Hive: $e');
+    }
+
+    if (!savedToCloud && !savedLocally) {
+      if (mounted) {
+        _showSnackbar(
+          'Failed to save result',
+          backgroundColor: Theme.of(context).colorScheme.error,
+        );
+      }
+      return null;
+    }
+
+    if (mounted) {
+      final actionLabel = isUpdate ? 'Updated' : 'Saved';
+      final cloudNote = savedToCloud
+          ? ''
+          : ' (offline only — cloud sync failed)';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$actionLabel "${savedResult.projectName}"$cloudNote'),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () {
+              context.push('/result-detail', extra: savedResult);
+            },
+          ),
+        ),
+      );
+    }
+    return savedResult;
   }
 }

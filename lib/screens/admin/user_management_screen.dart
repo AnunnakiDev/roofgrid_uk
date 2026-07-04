@@ -3,12 +3,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/services/admin_user_service.dart';
+import 'package:roofgrid_uk/utils/admin_user_guards.dart';
 import 'package:roofgrid_uk/widgets/custom_expansion_tile.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/header_widget.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:intl/intl.dart';
 
 class UserManagementScreen extends ConsumerStatefulWidget {
-  const UserManagementScreen({super.key});
+  final String? initialFilter;
+
+  const UserManagementScreen({super.key, this.initialFilter});
 
   @override
   ConsumerState<UserManagementScreen> createState() =>
@@ -16,6 +22,7 @@ class UserManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
+  final _adminUserService = AdminUserService();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<UserModel> _expiringUsers = [];
@@ -138,29 +145,34 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   }
 
   Future<void> _deleteUser(UserModel user) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final guardMessage = validateAdminDeleteTarget(
+      target: user,
+      currentUserId: FirebaseAuth.instance.currentUser?.uid,
+    );
+    if (guardMessage != null) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(guardMessage)),
+      );
+      return;
+    }
+
     try {
-      // Delete from Firebase Auth
-      await FirebaseAuth.instance.currentUser?.delete();
-      // Delete from Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .delete();
-      // Delete user's tiles subcollection
-      final tilesSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('tiles')
-          .get();
-      for (var doc in tilesSnapshot.docs) {
-        await doc.reference.delete();
-      }
+      await _adminUserService.deleteUser(user.id);
+      if (!mounted) return;
       await _fetchUsers();
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger?.showSnackBar(
         const SnackBar(content: Text('User deleted successfully')),
       );
+    } on AdminUserServiceException catch (e) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger?.showSnackBar(
         SnackBar(content: Text('Error deleting user: $e')),
       );
     }
@@ -168,30 +180,19 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
   Future<void> _addUser(String email, String password) async {
     try {
-      // Create user in Firebase Auth
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
-      final userId = userCredential.user?.uid;
-      if (userId == null) throw Exception('Failed to create user');
-
-      // Create user in Firestore
-      final newUser = UserModel(
-        id: userId,
-        email: email,
-        role: UserRole.free,
-        createdAt: DateTime.now(),
-        lastLoginAt: DateTime.now(),
-      );
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .set(newUser.toJson());
-
+      await _adminUserService.createUser(email: email, password: password);
       await _fetchUsers();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('User added successfully')),
       );
+    } on AdminUserServiceException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error adding user: $e')),
       );
@@ -320,8 +321,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
             onPressed: _showAddUserDialog,
             tooltip: 'Add New User',
           ),
+          const HomeBackButton(),
         ],
       ),
+      drawer: const MainDrawer(),
       body: _isLoadingUsers
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -480,29 +483,30 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.2)
-                : Colors.black.withOpacity(0.1),
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.1),
             blurRadius: 5,
             offset: const Offset(2, 2),
           ),
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.1)
-                : Colors.white.withOpacity(0.3),
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.white.withValues(alpha: 0.3),
             blurRadius: 5,
             offset: const Offset(-2, -2),
           ),
         ],
       ),
       child: CustomExpansionTile(
+        initiallyExpanded: widget.initialFilter == 'expiring',
         title: Text(
           'Expiring Subscriptions (${_expiringUsers.length})',
         ),
@@ -538,7 +542,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
           statusColor = Colors.green;
           statusText = 'Pro';
         } else if (user.isTrialActive) {
-          statusColor = Colors.blue;
+          statusColor = Theme.of(context).colorScheme.primary;
           statusText = 'Trial';
         } else {
           statusColor = Colors.grey;
@@ -548,23 +552,23 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
             boxShadow: [
               BoxShadow(
                 color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.black.withOpacity(0.1),
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.1),
                 blurRadius: 5,
                 offset: const Offset(2, 2),
               ),
               BoxShadow(
                 color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.white.withOpacity(0.3),
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.3),
                 blurRadius: 5,
                 offset: const Offset(-2, -2),
               ),
@@ -828,6 +832,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              if (!mounted) return;
               await _deleteUser(user);
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),

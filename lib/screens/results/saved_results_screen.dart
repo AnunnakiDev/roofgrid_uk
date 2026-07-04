@@ -1,14 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/result_display_registry.dart';
+import 'package:roofgrid_uk/utils/saved_result_dates.dart';
+
+import 'package:roofgrid_uk/theme/app_color_schemes.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/widgets/bottom_nav_bar.dart';
+
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class SavedResultsScreen extends ConsumerStatefulWidget {
@@ -22,31 +32,38 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
   String _searchQuery = '';
   bool _isOnline = true;
   final TextEditingController _searchController = TextEditingController();
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _checkConnectivity();
-    Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (!mounted) return;
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = isOnlineFromResults(result);
       });
-      if (_isOnline) {
+      if (_isOnline && ref.read(effectiveIsProProvider)) {
         final userId = ref.read(currentUserProvider).value?.id ?? '';
-        ref.invalidate(savedResultsProvider(userId));
+        if (userId.isNotEmpty) {
+          ref.invalidate(savedResultsProvider(userId));
+        }
       }
     });
   }
 
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
+    if (!mounted) return;
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -74,92 +91,21 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
           );
         }
 
-        // Redirect free users to subscription screen
-        if (!user.isPro) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Upgrade to Pro to access this feature'),
-              ),
-            );
-            context.go('/subscription');
-          });
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+        final effectiveIsPro = ref.watch(effectiveIsProProvider);
 
         return Scaffold(
           appBar: AppBar(
             title: const Text('Saved Results'),
           ),
           drawer: const MainDrawer(),
-          body: Column(
-            children: [
-              _buildSearchBar(),
-              Expanded(
-                child: _buildResultsList(user),
-              ),
-            ],
-          ),
-          bottomNavigationBar: BottomNavBar(
-            currentIndex: 3,
-            onTap: (index) {
-              if (index == 0) context.go('/home');
-              if (index == 1) context.go('/home');
-              if (index == 2) {
-                if (user.isPro) {
-                  context.go('/tiles');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Upgrade to Pro to access this feature'),
-                    ),
-                  );
-                  context.go('/subscription');
-                }
-              }
-              if (index == 3) {
-                if (user.isPro) {
-                  context.go('/results');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Upgrade to Pro to access this feature'),
-                    ),
-                  );
-                  context.go('/subscription');
-                }
-              }
-            },
-            items: [
-              const BottomNavItem(
-                label: 'Home',
-                icon: Icons.home,
-                activeIcon: Icons.home_filled,
-              ),
-              const BottomNavItem(
-                label: 'Profile',
-                icon: Icons.person,
-                activeIcon: Icons.person,
-              ),
-              BottomNavItem(
-                label: 'Tiles',
-                icon: Icons.grid_view,
-                activeIcon: Icons.grid_view,
-                tooltip:
-                    user.isPro ? 'Tiles' : 'Upgrade to Pro to access tiles',
-              ),
-              BottomNavItem(
-                label: 'Results',
-                icon: Icons.save,
-                activeIcon: Icons.save,
-                tooltip: user.isPro
-                    ? 'Saved Results'
-                    : 'Upgrade to Pro to access saved results',
-              ),
-            ],
-          ),
+          body: effectiveIsPro
+              ? Column(
+                  children: [
+                    _buildSearchBar(),
+                    Expanded(child: _buildResultsList(user)),
+                  ],
+                )
+              : _buildFreeUserContent(),
         );
       },
       loading: () => const Scaffold(
@@ -199,9 +145,8 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
                   )
                 : null,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30.0),
-              borderSide:
-                  BorderSide(color: Theme.of(context).colorScheme.primary),
+              borderRadius:
+                  BorderRadius.circular(AppColorSchemes.inputRadius),
             ),
             filled: true,
             fillColor: Theme.of(context).colorScheme.surface,
@@ -213,6 +158,43 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
               _searchQuery = value;
             });
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFreeUserContent() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.folder_open_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Saved Results',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Upgrade to Pro to save and manage calculation results.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => context.go('/subscription'),
+              icon: const Icon(Icons.workspace_premium_outlined),
+              label: const Text('Upgrade to Pro'),
+            ),
+          ],
         ),
       ),
     );
@@ -286,22 +268,12 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
   }
 
   Widget _buildResultCard(SavedResult result) {
-    String typeText;
-    switch (result.type) {
-      case CalculationType.vertical:
-        typeText = 'Vertical';
-        break;
-      case CalculationType.horizontal:
-        typeText = 'Horizontal';
-        break;
-      case CalculationType.combined:
-        typeText = 'Combined (Vert + Horiz)';
-        break;
-    }
+    final typeText = savedCalculationTypeLabel(result.type);
+    final updatedLine =
+        formatSavedUpdatedLine(result.createdAt, result.updatedAt);
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: ListTile(
         title: Text(
           result.projectName,
@@ -311,24 +283,53 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
               ?.copyWith(fontWeight: FontWeight.bold),
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
-          'Type: $typeText | Saved: ${_formatDateTime(result.createdAt)}',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${result.tile['name'] ?? 'Unknown tile'} · $typeText',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (savedResultSetoutSnippet(result).isNotEmpty)
+              Text(
+                savedResultSetoutSnippet(result),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.secondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-          overflow: TextOverflow.ellipsis,
+            Text(
+              'Saved: ${formatSavedDate(result.createdAt)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            if (updatedLine != null)
+              Text(
+                updatedLine,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+          ],
         ),
+        isThreeLine: true,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Semantics(
-              label: 'Edit result ${result.projectName}',
+              label: 'Recalculate result ${result.projectName}',
               child: IconButton(
-                icon: const Icon(Icons.edit),
+                icon: const Icon(Icons.calculate_outlined),
                 onPressed: () {
                   context.push('/calculator', extra: result);
                 },
-                tooltip: 'Edit',
+                tooltip: 'Recalculate',
               ),
             ),
             Semantics(
@@ -336,9 +337,9 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
               child: IconButton(
                 icon: const Icon(Icons.visibility),
                 onPressed: () {
-                  context.push('/result-visualization', extra: result);
+                  context.push('/result-detail', extra: result);
                 },
-                tooltip: 'Visualize',
+                tooltip: 'View',
               ),
             ),
             Semantics(

@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
-import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
+import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/form_validator.dart';
+import 'package:roofgrid_uk/utils/calculator_input_colors.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_input_section.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_measurement_field.dart';
+import 'package:roofgrid_uk/widgets/calculator/schematic_preview_strip.dart';
 import 'package:roofgrid_uk/widgets/on_off_toggle.dart';
 
 class VerticalCalculatorTab extends ConsumerStatefulWidget {
@@ -40,6 +47,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
   bool _isOnline = true;
   List<Color> _rafterColors = [];
   bool _isInputsValid = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
@@ -63,13 +71,15 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
     _rafterColors = _rafterNames
         .asMap()
         .entries
-        .map((entry) => _getColorForIndex(entry.key))
+        .map((entry) => calculatorInputColorForIndex(entry.key))
         .toList();
 
     _checkConnectivity();
-    Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (!mounted) return;
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = isOnlineFromResults(result);
       });
     });
 
@@ -79,28 +89,19 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
       });
     }
 
-    // Validate initial inputs
-    _validateInputs();
-  }
-
-  Color _getColorForIndex(int index) {
-    const colors = [
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.purple,
-      Colors.orange,
-      Colors.teal,
-      Colors.pink,
-      Colors.cyan,
-    ];
-    return colors[index % colors.length];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(calculatorProvider.notifier).hydrateCalculatorOptionsFromInputs(
+            vertical: widget.initialInputs,
+          );
+      _validateInputs();
+    });
   }
 
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
+    if (!mounted) return;
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
@@ -127,6 +128,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     for (final controller in _rafterControllers) {
       controller.dispose();
     }
@@ -140,86 +142,53 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
     final padding = isLargeScreen ? 16.0 : 12.0;
     final fontSize = isLargeScreen ? 14.0 : 12.0;
 
+    final rafterValues = _rafterControllers
+        .map((controller) => double.tryParse(controller.text) ?? 0)
+        .toList();
+
     return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Options',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: fontSize,
-                ),
+          CalculatorInputSection(
+            title: 'Options',
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _buildDryRidgeToggle(fontSize)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildGutterOverhangControl(fontSize)),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          _buildDryRidgeToggle(fontSize),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Gutter Overhang',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: fontSize,
+          const SizedBox(height: 14),
+          CalculatorInputSection(
+            title: 'Rafter Measurements',
+            helperText: 'Measure from top of fascia to ridge.',
+            trailing: widget.canUseMultipleRafters
+                ? Semantics(
+                    label: 'Add new rafter input',
+                    child: TextButton.icon(
+                      onPressed: _addRafter,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add'),
                     ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _gutterOverhang,
-                  min: 0.0,
-                  max: 100.0,
-                  divisions: 100,
-                  label: '${_gutterOverhang.round()} mm',
-                  onChanged: (value) {
-                    setState(() {
-                      _gutterOverhang = value;
-                    });
-                    ref
-                        .read(calculatorProvider.notifier)
-                        .setGutterOverhang(value);
-                    _validateInputs();
-                  },
+                  )
+                : null,
+            child: Column(
+              children: [
+                ..._buildRafterInputs(fontSize),
+                const SizedBox(height: 12),
+                SchematicPreviewStrip(
+                  axis: SchematicPreviewAxis.verticalBatten,
+                  dimensionsMm: rafterValues,
                 ),
-              ),
-              Text(
-                '${_gutterOverhang.round()} mm',
-                style: TextStyle(fontSize: fontSize - 2),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Rafter Measurements',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: fontSize,
-                    ),
-              ),
-              if (widget.canUseMultipleRafters)
-                Semantics(
-                  label: 'Add new rafter input',
-                  child: TextButton(
-                    onPressed: _addRafter,
-                    child: Text(
-                      'Add Rafter',
-                      style: TextStyle(fontSize: fontSize - 2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ..._buildRafterInputs(fontSize),
           if (!widget.canUseMultipleRafters) _buildProFeaturePrompt(fontSize),
         ],
       ),
@@ -227,26 +196,49 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
   }
 
   Widget _buildDryRidgeToggle(double fontSize) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'Use Dry Ridge:',
-          style: TextStyle(fontSize: fontSize - 2),
-        ),
-        OnOffToggle(
-          label: 'Use Dry Ridge',
-          value: _useDryRidge == 'YES',
-          onChanged: (value) {
-            setState(() {
-              _useDryRidge = value ? 'YES' : 'NO';
-            });
-            ref.read(calculatorProvider.notifier).setUseDryRidge(_useDryRidge);
-            _validateInputs();
-          },
-          fontSize: fontSize - 2,
-        ),
-      ],
+    return CalculatorOptionTile(
+      title: 'Dry Ridge',
+      subtitle: 'Use dry ridge allowance',
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('Enabled', style: TextStyle(fontSize: fontSize - 1)),
+          OnOffToggle(
+            label: 'Use Dry Ridge',
+            value: _useDryRidge == 'YES',
+            onChanged: (value) {
+              setState(() {
+                _useDryRidge = value ? 'YES' : 'NO';
+              });
+              ref.read(calculatorProvider.notifier).setUseDryRidge(_useDryRidge);
+              _validateInputs();
+            },
+            fontSize: fontSize - 2,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGutterOverhangControl(double fontSize) {
+    return CalculatorOptionTile(
+      title: 'Gutter Overhang',
+      subtitle: '${_gutterOverhang.round()} mm',
+      child: Slider(
+        value: _gutterOverhang,
+        min: 0.0,
+        max: 100.0,
+        divisions: 100,
+        label: '${_gutterOverhang.round()} mm',
+        activeColor: Theme.of(context).colorScheme.secondary,
+        onChanged: (value) {
+          setState(() {
+            _gutterOverhang = value;
+          });
+          ref.read(calculatorProvider.notifier).setGutterOverhang(value);
+          _validateInputs();
+        },
+      ),
     );
   }
 
@@ -256,77 +248,80 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
         widget.canUseMultipleRafters ? _rafterControllers.length : 1;
 
     for (int i = 0; i < displayCount; i++) {
+      final accent = calculatorInputColorFromTheme(context, i);
+
       rafterInputs.add(
         Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: Row(
-            children: [
-              if (widget.canUseMultipleRafters) ...[
-                Expanded(
-                  flex: 4,
-                  child: Semantics(
-                    label: 'Rafter Name ${i + 1}',
-                    child: TextField(
-                      controller: TextEditingController(text: _rafterNames[i]),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.only(bottom: 10),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: accent, width: 3),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.canUseMultipleRafters) ...[
+                    Expanded(
+                      flex: 4,
+                      child: Semantics(
+                        label: 'Rafter Name ${i + 1}',
+                        child: TextField(
+                          controller:
+                              TextEditingController(text: _rafterNames[i]),
+                          decoration: const InputDecoration(
+                            labelText: 'Label',
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
+                          ),
+                          style: TextStyle(fontSize: fontSize),
+                          onChanged: (value) {
+                            setState(() {
+                              _rafterNames[i] = value.isNotEmpty
+                                  ? value
+                                  : 'Rafter ${i + 1}';
+                            });
+                            _validateInputs();
+                          },
+                        ),
                       ),
-                      style: TextStyle(fontSize: fontSize - 2),
-                      onChanged: (value) {
-                        setState(() {
-                          _rafterNames[i] = value.isNotEmpty
-                              ? value
-                              : 'Rafter ${i + 1}'; // Default name if empty
-                        });
-                        _validateInputs();
-                      },
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                flex: widget.canUseMultipleRafters ? 3 : 8,
-                child: Semantics(
-                  label: 'Rafter Measurement ${i + 1}',
-                  child: TextField(
-                    controller: _rafterControllers[i],
-                    decoration: InputDecoration(
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    flex: widget.canUseMultipleRafters ? 3 : 1,
+                    child: CalculatorMeasurementField(
+                      controller: _rafterControllers[i],
+                      semanticsLabel: 'Rafter Measurement ${i + 1}',
                       labelText: widget.canUseMultipleRafters
                           ? null
-                          : 'Rafter Height in mm',
-                      hintText: 'e.g., 4000',
-                      suffixText: 'mm',
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                          : 'Rafter height',
+                      accentColor:
+                          widget.canUseMultipleRafters ? accent : null,
+                      onChanged: (_) => _validateInputs(),
                     ),
-                    style: TextStyle(fontSize: fontSize - 2),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (value) {
-                      _validateInputs();
-                    },
                   ),
-                ),
+                  if (widget.canUseMultipleRafters &&
+                      _rafterControllers.length > 1) ...[
+                    const SizedBox(width: 4),
+                    Semantics(
+                      label: 'Remove Rafter ${i + 1}',
+                      child: IconButton(
+                        onPressed: () => _removeRafter(i),
+                        icon: const Icon(Icons.delete_outline),
+                        color: Theme.of(context).colorScheme.error,
+                        tooltip: 'Remove rafter',
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              if (widget.canUseMultipleRafters &&
-                  _rafterControllers.length > 1) ...[
-                const SizedBox(width: 8),
-                Semantics(
-                  label: 'Remove Rafter ${i + 1}',
-                  child: IconButton(
-                    onPressed: () => _removeRafter(i),
-                    icon: const Icon(Icons.delete_outline),
-                    color: Theme.of(context).colorScheme.error,
-                    tooltip: 'Remove rafter',
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       );
@@ -340,7 +335,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color:
-            Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5),
+            Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
         border:
             Border.all(color: Theme.of(context).colorScheme.secondaryContainer),
@@ -415,7 +410,8 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
     setState(() {
       _rafterControllers.add(TextEditingController());
       _rafterNames.add('Rafter ${_rafterControllers.length}');
-      _rafterColors.add(_getColorForIndex(_rafterControllers.length - 1));
+      _rafterColors.add(
+          calculatorInputColorForIndex(_rafterControllers.length - 1));
     });
     _validateInputs();
   }

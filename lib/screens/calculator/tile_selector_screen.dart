@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
 import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/tile_selector_widget.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:roofgrid_uk/utils/tile_access.dart';
 
 class TileSelectorScreen extends ConsumerStatefulWidget {
   const TileSelectorScreen({super.key});
@@ -20,26 +25,38 @@ class TileSelectorScreen extends ConsumerStatefulWidget {
 
 class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
   bool _isOnline = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _checkConnectivity();
-    Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (!mounted) return;
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = isOnlineFromResults(result);
       });
       if (_isOnline) {
         final userId = ref.read(currentUserProvider).value?.id ?? '';
-        ref.invalidate(allAvailableTilesProvider(userId));
+        if (userId.isNotEmpty) {
+          ref.invalidate(allAvailableTilesProvider(userId));
+        }
       }
     });
   }
 
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
+    if (!mounted) return;
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
@@ -79,7 +96,10 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
             ),
           ),
           drawer: const MainDrawer(),
-          body: user.isPro || user.role == UserRole.admin
+          body: canBrowseTileDatabase(
+                user,
+                ref.watch(developerModeProvider),
+              )
               ? _buildProUserContent(user)
               : _buildFreeUserContent(user),
         );
@@ -106,15 +126,15 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
     final tilesAsync = ref.watch(allAvailableTilesProvider(user.id));
     return tilesAsync.when(
       data: (tiles) {
-        if (_isOnline) {
+        if (Hive.isBoxOpen('tilesBox')) {
           final tilesBox = Hive.box<TileModel>('tilesBox');
-          for (var tile in tiles) {
-            tilesBox.put(tile.id, tile);
+          if (_isOnline) {
+            for (var tile in tiles) {
+              tilesBox.put(tile.id, tile);
+            }
+          } else {
+            tiles = tilesBox.values.toList();
           }
-        }
-        if (!_isOnline) {
-          final tilesBox = Hive.box<TileModel>('tilesBox');
-          tiles = tilesBox.values.toList();
         }
         if (initialTile != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -171,8 +191,9 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           return const Center(
               child: Text('Please log in to access this feature'));
         }
-        final tilesBox = Hive.box<TileModel>('tilesBox');
-        final tiles = tilesBox.values.toList();
+        final tiles = Hive.isBoxOpen('tilesBox')
+            ? Hive.box<TileModel>('tilesBox').values.toList()
+            : <TileModel>[];
         if (tiles.isNotEmpty) {
           return TileSelectorWidget(
             tiles: tiles,
@@ -230,22 +251,33 @@ class _TileSelectorScreenState extends ConsumerState<TileSelectorScreen> {
           Container(
             padding: const EdgeInsets.all(16.0),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.shade200),
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.35),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade800),
+                    Icon(
+                      Icons.info_outline,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Manual Tile Input',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade900,
+                        color: Theme.of(context).colorScheme.primary,
                         fontSize: 16,
                       ),
                     ),

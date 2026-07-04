@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
+import 'package:roofgrid_uk/navigation/subscription_nav.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
+import 'package:roofgrid_uk/widgets/section_header.dart';
+import 'package:roofgrid_uk/widgets/settings/plan_status_card.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
@@ -19,6 +26,30 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   bool _isLoading = false;
   String? _errorMessage;
+
+  Future<void> _launchStripeUrl(String? url, {required String label}) async {
+    if (url == null || url.isEmpty) {
+      throw Exception('No $label URL returned from payment service');
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      throw Exception('Invalid $label URL received');
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      throw Exception('Could not open $label in your browser');
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    setState(() => _errorMessage = message);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   // Function to initiate Stripe Checkout
   Future<void> _startCheckoutSession(String plan) async {
@@ -48,23 +79,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final sessionUrl = data['sessionUrl'];
-
-        // Redirect to Stripe Checkout (you'll need a mechanism to open the URL, e.g., url_launcher)
-        // For simplicity, we'll assume the redirect happens in the app
-        context.go('/subscription/success'); // Simulate redirect after payment
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _launchStripeUrl(
+          data['sessionUrl'] as String?,
+          label: 'checkout',
+        );
       } else {
         throw Exception('Failed to create checkout session: ${response.body}');
       }
     } catch (error) {
-      setState(() {
-        _errorMessage = error.toString();
-      });
+      _showError(error.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -97,49 +125,52 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final portalUrl = data['portalUrl'];
-
-        // Redirect to the Stripe Customer Portal (you'll need a mechanism to open the URL, e.g., url_launcher)
-        // For simplicity, we'll assume the redirect happens in the app
-        context.go(
-            '/subscription/success'); // Simulate redirect after portal access
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _launchStripeUrl(
+          data['portalUrl'] as String?,
+          label: 'customer portal',
+        );
       } else {
         throw Exception(
             'Failed to create customer portal session: ${response.body}');
       }
     } catch (error) {
-      setState(() {
-        _errorMessage = error.toString();
-      });
+      _showError(error.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
 
     return Scaffold(
       appBar: AppBar(
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+        leading: effectiveIsPro
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/profile');
+                  }
+                },
+              )
+            : Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+        actions: effectiveIsPro ? const [HomeBackButton()] : null,
+        title: BrandWordmark.compact(
+          color: Theme.of(context).colorScheme.onPrimary,
         ),
-        title: Text(
-          'RoofGrid UK',
-          style: GoogleFonts.roboto(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E88E5),
       ),
       drawer: const MainDrawer(),
       body: SingleChildScrollView(
@@ -151,47 +182,47 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               Semantics(
                 label: 'Subscription page description',
                 child: Container(
-                  padding: const EdgeInsets.all(12.0),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8.0),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .secondary
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 1.0,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .secondary
+                          .withValues(alpha: 0.35),
                     ),
                   ),
                   child: Text(
-                    user?.isPro == true
-                        ? 'You’re a Pro Member!'
-                        : 'Upgrade to Pro for Advanced Features',
-                    style: GoogleFonts.roboto(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E88E5),
+                    effectiveIsPro
+                        ? 'You’re a Pro member — thank you for your support!'
+                        : 'Upgrade to Pro for advanced roofing tools',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ).animate().fadeIn(duration: 600.ms),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Free vs Pro Features',
-                style: GoogleFonts.roboto(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E88E5),
-                ),
+              const SectionHeader(
+                title: 'Free vs Pro',
+                subtitle: 'Compare what’s included in each plan',
               ),
               const SizedBox(height: 16),
               Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.0)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
+                      _buildFeatureHeader(context),
+                      const Divider(height: 24),
                       _buildFeatureRow(
                         context,
                         'Basic Calculations',
@@ -239,169 +270,117 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (user != null) ...[
+                const SectionHeader(title: 'Your plan'),
+                const SizedBox(height: 12),
+                PlanStatusCard(
+                  user: user,
+                  effectiveIsPro: effectiveIsPro,
+                ),
+                const SizedBox(height: 16),
+              ],
               Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.0)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Your Plan: ${user?.isPro == true ? "Pro" : "Free"}',
-                        style: GoogleFonts.roboto(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              user?.isPro == true ? Colors.green : Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (user?.isTrialActive == true)
-                        Text(
-                          'Trial Active - ${user!.remainingTrialDays} days remaining',
-                          style: GoogleFonts.roboto(
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      if (user?.isTrialExpired == true)
-                        Text(
-                          'Trial Expired',
-                          style: GoogleFonts.roboto(
-                            fontSize: 16,
-                            color: Colors.red,
-                          ),
-                        ),
-                      if (user?.isSubscribed == true)
-                        Text(
-                          'Subscribed until ${user!.subscriptionEndDate?.toLocal().toString().split(' ')[0]}',
-                          style: GoogleFonts.roboto(
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      const SizedBox(height: 16),
                       if (_errorMessage != null)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
+                          padding: const EdgeInsets.only(bottom: 16),
                           child: Text(
                             _errorMessage!,
-                            style: GoogleFonts.roboto(
+                            style: GoogleFonts.poppins(
                               fontSize: 14,
-                              color: Colors.red,
+                              color: Theme.of(context).colorScheme.error,
                             ),
                           ),
                         ),
                       if (user?.isPro != true) ...[
                         Text(
-                          'Choose Your Plan:',
-                          style: GoogleFonts.roboto(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E88E5),
+                          'Choose your plan',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            ElevatedButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => _startCheckoutSession('monthly'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E88E5),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _startCheckoutSession('monthly'),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('Monthly — £9.99'),
                               ),
-                              child: _isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white)
-                                  : Text(
-                                      'Monthly - £9.99',
-                                      style: GoogleFonts.roboto(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
                             ),
-                            ElevatedButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => _startCheckoutSession('annual'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E88E5),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _startCheckoutSession('annual'),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('Annual — £99.99'),
                               ),
-                              child: _isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white)
-                                  : Text(
-                                      'Annual - £99.99',
-                                      style: GoogleFonts.roboto(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
                             ),
                           ],
                         ),
                       ] else ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            ElevatedButton(
-                              onPressed:
-                                  _isLoading ? null : _openCustomerPortal,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E88E5),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              child: _isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white)
-                                  : Text(
-                                      'Manage Subscription',
-                                      style: GoogleFonts.roboto(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                _isLoading ? null : _openCustomerPortal,
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                            ),
-                            ElevatedButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => context.go('/subscription/cancel'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                                  )
+                                : const Icon(Icons.manage_accounts_outlined),
+                            label: const Text('Manage Subscription'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading
+                                ? null
+                                : () => context.go('/subscription/cancel'),
+                            icon: const Icon(Icons.cancel_outlined),
+                            label: const Text('Cancel Subscription'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor:
+                                  Theme.of(context).colorScheme.error,
+                              side: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .error
+                                    .withValues(alpha: 0.6),
                               ),
-                              child: Text(
-                                'Cancel Subscription',
-                                style: GoogleFonts.roboto(
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ],
@@ -412,52 +391,88 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 3, // Highlight Subscription tab
-        onTap: (index) {
-          if (index == 0) context.go('/home');
-          if (index == 1) context.go('/surveys');
-          if (index == 2) context.go('/profile');
-          if (index == 3) context.go('/subscription');
-        },
-        selectedItemColor: const Color(0xFF1E88E5),
-        unselectedItemColor: const Color(0xFFB0BEC5),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Surveys'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.subscriptions), label: 'Subscription'),
-        ],
-      ),
+      bottomNavigationBar:
+          effectiveIsPro ? null : const FreeSubscriptionNav(currentIndex: 1),
+    );
+  }
+
+  Widget _buildFeatureHeader(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Text(
+            'Feature',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            'Free',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            'Pro',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: colorScheme.secondary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildFeatureRow(
       BuildContext context, String feature, bool free, bool pro) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
+            flex: 3,
             child: Text(
               feature,
-              style: GoogleFonts.roboto(fontSize: 16, color: Colors.black87),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: colorScheme.onSurface,
+              ),
             ),
           ),
-          Row(
-            children: [
-              Icon(
-                free ? Icons.check_circle : Icons.cancel,
-                color: free ? Colors.green : Colors.grey,
-              ),
-              const SizedBox(width: 16),
-              Icon(
-                pro ? Icons.check_circle : Icons.cancel,
-                color: pro ? Colors.green : Colors.grey,
-              ),
-            ],
+          Expanded(
+            child: Icon(
+              free ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              color: free
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+              size: 22,
+            ),
+          ),
+          Expanded(
+            child: Icon(
+              pro ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              color: pro
+                  ? colorScheme.secondary
+                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+              size: 22,
+            ),
           ),
         ],
       ),

@@ -1,28 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
-import 'package:roofgrid_uk/screens/calculator/calculator_screen.dart';
-import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
+import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
+import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
+import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/selected_tile_row.dart';
 
 class EnterMeasurementsStep extends StatefulWidget {
   final UserModel user;
+  final bool effectiveIsPro;
   final CalculationTypeSelection calculationType;
   final VerticalInputs initialVerticalInputs;
   final HorizontalInputs initialHorizontalInputs;
-  final VoidCallback onChangeType;
+  final VoidCallback onBackToTileSelect;
   final Function(VerticalInputs, HorizontalInputs) onCalculate;
   final Widget Function(TileSlateType) placeholderImageBuilder;
 
   const EnterMeasurementsStep({
     super.key,
     required this.user,
+    required this.effectiveIsPro,
     required this.calculationType,
     required this.initialVerticalInputs,
     required this.initialHorizontalInputs,
-    required this.onChangeType,
+    required this.onBackToTileSelect,
     required this.onCalculate,
     required this.placeholderImageBuilder,
   });
@@ -67,145 +71,128 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
     });
   }
 
+  bool get _isCombinedMode =>
+      widget.calculationType == CalculationTypeSelection.both;
+
+  bool _isStepExpanded(int index) {
+    return _isCombinedMode || _currentStep == index;
+  }
+
   Widget _buildCustomStep({
     required int index,
     required String title,
     required bool isCompleted,
     required bool isActive,
     required Widget content,
-    required double fontSize,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              margin: const EdgeInsets.only(right: 8.0),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isCompleted
-                    ? Colors.green
-                    : isActive
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.grey,
-              ),
-              child: Center(
-                child: isCompleted
-                    ? const Icon(
-                        Icons.check,
-                        size: 16,
-                        color: Colors.white,
-                      )
-                    : Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: fontSize + 2, // Increased font size
-                color: isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.black,
-              ),
-            ),
-            if (isCompleted) ...[
-              const SizedBox(width: 8),
-              Text(
-                'Completed',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontSize: fontSize - 4,
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isCompleted
+                      ? colorScheme.primary
+                      : isActive
+                          ? colorScheme.secondary
+                          : colorScheme.onSurface.withValues(alpha: 0.12),
                 ),
-              ).animate().fadeIn(duration: 300.ms),
+                child: Center(
+                  child: isCompleted
+                      ? Icon(Icons.check, size: 16, color: colorScheme.onPrimary)
+                      : Text(
+                          '${index + 1}',
+                          style: GoogleFonts.poppins(
+                            color: isActive
+                                ? colorScheme.onSecondary
+                                : colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: isActive
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (isCompleted)
+                Text(
+                  'Ready',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.primary,
+                  ),
+                ),
             ],
+          ),
+          if (isActive) ...[
+            const SizedBox(height: 12),
+            content,
           ],
-        ),
-        if (isActive)
-          Padding(
-            padding: const EdgeInsets.only(left: 32.0), // Align with title
-            child: content,
-          ),
-        if (index < _buildSteps(context).length - 1)
-          Container(
-            margin: const EdgeInsets.only(left: 11.5),
-            width: 1,
-            height: 16,
-            color: Colors.grey,
-          ),
-      ],
+        ],
+      ),
     );
   }
 
   List<Map<String, dynamic>> _buildSteps(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final fontSize = isLargeScreen ? 14.0 : 12.0;
-
     final List<Map<String, dynamic>> steps = [];
 
     if (widget.calculationType == CalculationTypeSelection.verticalOnly ||
         widget.calculationType == CalculationTypeSelection.both) {
       steps.add({
-        'title': 'Vertical Measurements',
+        'title': measurementStepTitle(
+          widget.calculationType,
+          isVerticalStep: true,
+        ),
         'isCompleted': _isVerticalInputsValid,
-        'content': Animate(
-          effects: [
-            FadeEffect(duration: 300.ms),
-            SlideEffect(
-              begin: const Offset(-0.2, 0),
-              end: Offset.zero,
-              duration: 300.ms,
-            ),
-          ],
-          child: VerticalCalculatorTab(
+        'content': VerticalCalculatorTab(
             user: widget.user,
-            canUseMultipleRafters: widget.user.isPro,
-            canUseAdvancedOptions: widget.user.isPro,
-            canExport: widget.user.isPro,
-            canAccessDatabase: widget.user.isPro,
+            canUseMultipleRafters: widget.effectiveIsPro,
+            canUseAdvancedOptions: widget.effectiveIsPro,
+            canExport: widget.effectiveIsPro,
+            canAccessDatabase: widget.effectiveIsPro,
             initialInputs: _verticalInputs,
             onInputsChanged: _updateVerticalInputs,
           ),
-        ),
-        'fontSize': fontSize,
       });
     }
 
     if (widget.calculationType == CalculationTypeSelection.horizontalOnly ||
         widget.calculationType == CalculationTypeSelection.both) {
       steps.add({
-        'title': 'Horizontal Measurements',
+        'title': measurementStepTitle(
+          widget.calculationType,
+          isVerticalStep: false,
+        ),
         'isCompleted': _isHorizontalInputsValid,
-        'content': Animate(
-          effects: [
-            FadeEffect(duration: 300.ms),
-            SlideEffect(
-              begin: const Offset(-0.2, 0),
-              end: Offset.zero,
-              duration: 300.ms,
-            ),
-          ],
-          child: HorizontalCalculatorTab(
+        'content': HorizontalCalculatorTab(
             user: widget.user,
-            canUseMultipleWidths: widget.user.isPro,
-            canUseAdvancedOptions: widget.user.isPro,
-            canExport: widget.user.isPro,
-            canAccessDatabase: widget.user.isPro,
+            canUseMultipleWidths: widget.effectiveIsPro,
+            canUseAdvancedOptions: widget.effectiveIsPro,
+            canExport: widget.effectiveIsPro,
+            canAccessDatabase: widget.effectiveIsPro,
             initialInputs: _horizontalInputs,
             onInputsChanged: _updateHorizontalInputs,
           ),
-        ),
-        'fontSize': fontSize,
       });
     }
 
@@ -255,60 +242,38 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(vertical: padding),
-            child: Semantics(
-              label: 'Step 3: Enter Your Measurements',
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8.0),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 1.0,
-                  ),
-                ),
-                child: const Text(
-                  'Step 3: Enter Your Measurements',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ).animate().fadeIn(duration: 600.ms),
+            padding: EdgeInsets.only(top: padding, bottom: 8),
+            child: const CalculatorStepProgress(
+              currentStep: CalculatorFlowStep.enterMeasurements,
             ),
           ),
           Padding(
-            padding: EdgeInsets.symmetric(vertical: 2.0),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: SelectedTileRow(
               user: widget.user,
+              effectiveIsPro: widget.effectiveIsPro,
+              previewSize: isLargeScreen ? 88 : 72,
               placeholderImageBuilder: widget.placeholderImageBuilder,
             ),
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 0.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Calculation Type: ${widget.calculationType.toString().split('.').last.replaceAll('Only', '').replaceAll('both', 'Both (Combined)')}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: fontSize - 2,
-                      ),
-                  overflow: TextOverflow.ellipsis,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Chip(
+              avatar: Icon(
+                Icons.straighten,
+                size: 16,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+              label: Text(
+                calculationTypeLabel(widget.calculationType),
+                style: GoogleFonts.poppins(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
                 ),
-                TextButton(
-                  onPressed: widget.onChangeType,
-                  child: Text(
-                    'Change',
-                    style: TextStyle(fontSize: fontSize - 4),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
+          const SizedBox(height: 8),
           Expanded(
             child: Column(
               children: [
@@ -324,75 +289,64 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                             index: index,
                             title: step['title'],
                             isCompleted: step['isCompleted'],
-                            isActive: _currentStep == index,
+                            isActive: _isStepExpanded(index),
                             content: step['content'],
-                            fontSize: step['fontSize'],
                           );
                         }),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              ElevatedButton(
-                                onPressed: () {
-                                  if (_currentStep > 0) {
-                                    setState(() {
-                                      _currentStep -= 1;
-                                    });
-                                  } else {
-                                    widget.onChangeType();
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  minimumSize: const Size(100, 36),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                        if (!_isCombinedMode)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () {
+                                    if (_currentStep > 0) {
+                                      setState(() {
+                                        _currentStep -= 1;
+                                      });
+                                    } else {
+                                      widget.onBackToTileSelect();
+                                    }
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(110, 48),
                                   ),
-                                  elevation: 4,
-                                  backgroundColor: Colors.grey,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 8),
+                                  child: Text(
+                                    _currentStep == 0 ? 'Back' : 'Previous',
+                                  ),
                                 ),
-                                child: Text(
-                                  _currentStep == 0 ? 'Back' : 'Previous',
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              if (_currentStep < steps.length - 1)
-                                ElevatedButton(
-                                  onPressed: _canProceed()
-                                      ? () {
-                                          setState(() {
-                                            _currentStep += 1;
-                                          });
-                                        }
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    minimumSize: const Size(100, 36),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                if (_currentStep < steps.length - 1)
+                                  ElevatedButton(
+                                    onPressed: _canProceed()
+                                        ? () {
+                                            setState(() {
+                                              _currentStep += 1;
+                                            });
+                                          }
+                                        : null,
+                                    style: ElevatedButton.styleFrom(
+                                      minimumSize: const Size(110, 48),
                                     ),
-                                    elevation: 4,
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withOpacity(0.9),
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 8),
+                                    child: const Text('Continue'),
                                   ),
-                                  child: const Text(
-                                    'Continue',
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold),
-                                  ),
+                              ],
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton(
+                                onPressed: widget.onBackToTileSelect,
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(110, 48),
                                 ),
-                            ],
+                                child: const Text('Back'),
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -402,30 +356,22 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                   bottom: true,
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: padding),
-                    child: AnimatedScale(
-                      scale: _isCalculateEnabled() ? 1.0 : 0.8,
-                      duration: const Duration(milliseconds: 200),
-                      child: ElevatedButton(
-                        onPressed: _isCalculateEnabled()
-                            ? () => widget.onCalculate(
-                                _verticalInputs, _horizontalInputs)
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 4,
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.9),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: Text(
-                          _getCalculateButtonLabel(),
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+                    child: ElevatedButton.icon(
+                      onPressed: _isCalculateEnabled()
+                          ? () => widget.onCalculate(
+                                _verticalInputs,
+                                _horizontalInputs,
+                              )
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 52),
+                      ),
+                      icon: const Icon(Icons.calculate_rounded),
+                      label: Text(
+                        _getCalculateButtonLabel(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),

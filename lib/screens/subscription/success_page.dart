@@ -1,37 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
+import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
+import 'package:roofgrid_uk/navigation/subscription_nav.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/widgets/main_drawer.dart';
 
-class SuccessPage extends StatelessWidget {
+class SuccessPage extends ConsumerWidget {
   const SuccessPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'RoofGrid UK',
-          style: GoogleFonts.roboto(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E88E5),
+        title: BrandWordmark.compact(color: colorScheme.onPrimary),
         automaticallyImplyLeading: false,
+        actions: const [HomeBackButton()],
       ),
+      drawer: effectiveIsPro ? null : const MainDrawer(),
       body: Container(
-        color: const Color(0xFFF5F5F5),
+        color: theme.scaffoldBackgroundColor,
         padding: const EdgeInsets.all(16.0),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Success Icon with Animation
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF1E88E5),
+              Icon(
+                Icons.check_circle_rounded,
+                color: colorScheme.secondary,
                 size: 100,
               )
                   .animate()
@@ -43,13 +46,12 @@ class SuccessPage extends StatelessWidget {
                     duration: 600.ms,
                   ),
               const SizedBox(height: 20),
-              // Success Message with Fade-In Animation
               Text(
                 'Subscription Successful!',
-                style: GoogleFonts.roboto(
+                style: GoogleFonts.poppins(
                   fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1E88E5),
+                  fontWeight: FontWeight.w700,
+                  color: colorScheme.onSurface,
                 ),
               ).animate().fadeIn(
                     duration: 800.ms,
@@ -59,35 +61,20 @@ class SuccessPage extends StatelessWidget {
               Text(
                 'Welcome to RoofGrid Pro! You now have access to advanced roof survey features and more.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.roboto(
+                style: GoogleFonts.poppins(
                   fontSize: 16,
-                  color: Colors.black87,
+                  height: 1.45,
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ).animate().fadeIn(
                     duration: 800.ms,
                     delay: 400.ms,
                   ),
               const SizedBox(height: 30),
-              // Button to Return to Home with Slide Animation
-              ElevatedButton(
-                onPressed: () {
-                  context.go('/home'); // Navigate to Home screen
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Get Started',
-                  style: GoogleFonts.roboto(
-                    fontSize: 18,
-                    color: Colors.white,
-                  ),
-                ),
+              ElevatedButton.icon(
+                onPressed: () => context.go('/home'),
+                icon: const Icon(Icons.home_outlined),
+                label: const Text('Get Started'),
               ).animate().slideY(
                     begin: 1.0,
                     end: 0.0,
@@ -99,24 +86,8 @@ class SuccessPage extends StatelessWidget {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 3, // Highlight Subscription tab
-        onTap: (index) {
-          if (index == 0) context.go('/home');
-          if (index == 1) context.go('/surveys');
-          if (index == 2) context.go('/profile');
-          if (index == 3) context.go('/subscription');
-        },
-        selectedItemColor: const Color(0xFF1E88E5),
-        unselectedItemColor: const Color(0xFFB0BEC5),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Surveys'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.subscriptions), label: 'Subscription'),
-        ],
-      ),
+      bottomNavigationBar:
+          effectiveIsPro ? null : const FreeSubscriptionNav(currentIndex: 1),
     );
   }
 }

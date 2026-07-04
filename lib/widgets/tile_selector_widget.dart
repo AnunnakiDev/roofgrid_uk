@@ -5,13 +5,18 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/widgets/add_tile_widget.dart';
 import 'package:roofgrid_uk/widgets/custom_expansion_tile.dart';
 import 'package:roofgrid_uk/widgets/header_widget.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/utils/connectivity_utils.dart';
+import 'package:roofgrid_uk/utils/tile_access.dart';
+import 'package:roofgrid_uk/utils/tile_image_utils.dart';
 
 class TileSelectorWidget extends ConsumerStatefulWidget {
   final List<TileModel> tiles;
   final UserModel user;
   final Function(TileModel) onTileSelected;
   final bool showAddTileButton;
+  final bool embeddedInScrollView;
+  final bool showSectionHeaders;
 
   const TileSelectorWidget({
     super.key,
@@ -19,6 +24,8 @@ class TileSelectorWidget extends ConsumerStatefulWidget {
     required this.user,
     required this.onTileSelected,
     this.showAddTileButton = true,
+    this.embeddedInScrollView = false,
+    this.showSectionHeaders = true,
   });
 
   @override
@@ -39,9 +46,10 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
   }
 
   Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
+    final online = await isDeviceOnline();
+    if (!mounted) return;
     setState(() {
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = online;
     });
   }
 
@@ -128,8 +136,79 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
     }
   }
 
+  void _openAddTileDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: AddTileWidget(
+          userRole: widget.user.role,
+          userId: widget.user.id,
+          onTileCreated: (tile) {
+            widget.onTileSelected(tile);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildTileSections({
+    required List<TileModel> filteredTiles,
+    required bool effectiveIsPro,
+  }) {
+    final defaultTiles = partitionDefaultTiles(filteredTiles);
+    final personalTiles = partitionPersonalTiles(filteredTiles, widget.user.id);
+    final showHeaders = widget.showSectionHeaders &&
+        defaultTiles.isNotEmpty &&
+        personalTiles.isNotEmpty;
+
+    final sections = <Widget>[];
+
+    void addSection(String title, List<TileModel> sectionTiles) {
+      if (sectionTiles.isEmpty) return;
+      sections.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ),
+      );
+      for (var i = 0; i < sectionTiles.length; i++) {
+        sections.add(
+          _buildTileCard(
+            sectionTiles[i],
+            i,
+            effectiveIsPro: effectiveIsPro,
+          ),
+        );
+      }
+    }
+
+    if (showHeaders) {
+      addSection('Default tiles', defaultTiles);
+      addSection('My tiles', personalTiles);
+    } else {
+      for (var i = 0; i < filteredTiles.length; i++) {
+        sections.add(
+          _buildTileCard(
+            filteredTiles[i],
+            i,
+            effectiveIsPro: effectiveIsPro,
+          ),
+        );
+      }
+    }
+
+    return sections;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
     final filteredTiles = widget.tiles.where((tile) {
       final matchesSearch = _searchField == 'Name'
           ? tile.name.toLowerCase().contains(_searchQuery.toLowerCase())
@@ -147,9 +226,11 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize:
+          widget.embeddedInScrollView ? MainAxisSize.min : MainAxisSize.max,
       children: [
         HeaderWidget(
-            title: widget.user.isPro
+            title: effectiveIsPro || widget.user.isAdmin
                 ? 'Select Tile'
                 : 'Manual Tile Input (Free User)'),
         const SizedBox(height: 16),
@@ -157,41 +238,45 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
         const SizedBox(height: 16),
         _buildFilterChips(),
         const SizedBox(height: 16),
-        if (widget.showAddTileButton && widget.user.isPro) ...[
+        if (widget.showAddTileButton &&
+            canAddTilesInList(
+              user: widget.user,
+              effectiveIsPro: effectiveIsPro,
+            )) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: ElevatedButton(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => Dialog(
-                    child: AddTileWidget(
-                      userRole: widget.user.role,
-                      userId: widget.user.id,
-                      onTileCreated: (tile) {
-                        widget.onTileSelected(tile);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                );
-              },
+              onPressed: _openAddTileDialog,
               child: const Text('Add New Tile'),
             ),
           ),
           const SizedBox(height: 16),
         ],
-        Expanded(
-          child: filteredTiles.isEmpty
-              ? const Center(child: Text('No tiles found'))
-              : ListView.builder(
-                  itemCount: filteredTiles.length,
-                  itemBuilder: (context, index) {
-                    final tile = filteredTiles[index];
-                    return _buildTileCard(tile, index);
-                  },
-                ),
-        ),
+        if (widget.embeddedInScrollView)
+          filteredTiles.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: Text('No tiles found')),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: _buildTileSections(
+                    filteredTiles: filteredTiles,
+                    effectiveIsPro: effectiveIsPro,
+                  ),
+                )
+        else
+          Expanded(
+            child: filteredTiles.isEmpty
+                ? const Center(child: Text('No tiles found'))
+                : ListView(
+                    children: _buildTileSections(
+                      filteredTiles: filteredTiles,
+                      effectiveIsPro: effectiveIsPro,
+                    ),
+                  ),
+          ),
       ],
     );
   }
@@ -345,7 +430,7 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
                         color: Theme.of(context).colorScheme.primary),
                   ),
                   selectedColor:
-                      Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                   labelStyle: TextStyle(
                     color: _selectedFilter == type
                         ? Theme.of(context).colorScheme.primary
@@ -360,27 +445,36 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
     );
   }
 
-  Widget _buildTileCard(TileModel tile, int index) {
+  Widget _buildTileCard(
+    TileModel tile,
+    int index, {
+    required bool effectiveIsPro,
+  }) {
+    final canEdit = canEditTileInList(
+      tile: tile,
+      user: widget.user,
+      effectiveIsPro: effectiveIsPro,
+    );
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.2)
-                : Colors.black.withOpacity(0.1),
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.1),
             blurRadius: 5,
             offset: const Offset(2, 2),
           ),
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.1)
-                : Colors.white.withOpacity(0.3),
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.white.withValues(alpha: 0.3),
             blurRadius: 5,
             offset: const Offset(-2, -2),
           ),
@@ -395,19 +489,18 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
             borderRadius: BorderRadius.circular(8.0),
             color: Colors.grey[200],
           ),
-          child: (!_isOnline || tile.image == null || tile.image!.isEmpty)
+          child: (!_isOnline && !isBundledTileImage(tile.image))
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8.0),
                   child: _getPlaceholderImage(tile.materialType),
                 )
-              : ClipRRect(
+              : buildTilePreviewImage(
+                  image: tile.image,
+                  materialType: tile.materialType,
+                  placeholderBuilder: _getPlaceholderImage,
+                  width: 50,
+                  height: 50,
                   borderRadius: BorderRadius.circular(8.0),
-                  child: Image.network(
-                    tile.image!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        _getPlaceholderImage(tile.materialType),
-                  ),
                 ),
         ),
         title: Text(
@@ -422,7 +515,7 @@ class _TileSelectorWidgetState extends ConsumerState<TileSelectorWidget> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.user.isPro)
+            if (canEdit)
               IconButton(
                 icon: const Icon(Icons.edit),
                 onPressed: () {

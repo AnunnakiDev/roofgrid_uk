@@ -1,12 +1,10 @@
 // lib/screens/auth/register_screen.dart
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/models/user_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:roofgrid_uk/widgets/auth_shell.dart';
+import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -42,43 +40,27 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     try {
-      final auth = FirebaseAuth.instance;
-      final userCredential = await auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      await userCredential.user?.updateDisplayName(_nameController.text.trim());
+      final success = await ref.read(authProvider.notifier).registerWithEmailAndPassword(
+            _emailController.text.trim(),
+            _passwordController.text,
+            _nameController.text.trim(),
+          );
 
-      final userModel = UserModel(
-        id: userCredential.user!.uid,
-        email: _emailController.text.trim(),
-        displayName: _nameController.text.trim(),
-        role: UserRole.pro, // Start with 14-day trial
-        proTrialStartDate: DateTime.now(),
-        proTrialEndDate: DateTime.now().add(const Duration(days: 14)),
-        createdAt: DateTime.now(),
-      );
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userModel.id)
-          .set(userModel.toJson());
-
-      await FirebaseAnalytics.instance.logSignUp(signUpMethod: 'email');
+      if (!success) {
+        final error = ref.read(authProvider).error;
+        if (mounted && error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error)),
+          );
+        }
+        return;
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful!')),
         );
-        context.go('/home'); // Router redirect will handle authenticated state
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  ref.read(authProvider.notifier).mapFirebaseError(e.code))),
-        );
+        context.go('/home');
       }
     } catch (e) {
       if (mounted) {
@@ -99,27 +81,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/auth/login'),
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Create Account',
+    return AuthShell(
+      showBackButton: true,
+      onBack: () => context.go('/auth/login'),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const BrandWordmark(fontSize: 28),
+            const SizedBox(height: 16),
+            Text(
+              'Create Account',
                     style: Theme.of(context).textTheme.headlineMedium!.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -265,15 +238,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         _isLoading || authState.isLoading ? null : _register,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
                     ),
                     child: _isLoading || authState.isLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
                           )
                         : const Text('Sign Up'),
@@ -292,16 +264,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           'Log In',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: Theme.of(context).colorScheme.secondary,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          ),
+          ],
         ),
       ),
     );

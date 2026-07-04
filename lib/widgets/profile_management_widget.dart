@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/providers/theme_provider.dart';
+import 'package:roofgrid_uk/models/developer_mode_config.dart';
+import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+
+
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -12,7 +15,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+
 
 class ProfileManagementWidget extends ConsumerStatefulWidget {
   const ProfileManagementWidget({super.key});
@@ -34,7 +37,6 @@ class _ProfileManagementWidgetState
   bool _isLoading = false;
   bool _isPasswordLoading = false;
   final _analytics = FirebaseAnalytics.instance;
-  Color _selectedColor = Colors.blue; // Default color
 
   @override
   void initState() {
@@ -46,10 +48,6 @@ class _ProfileManagementWidgetState
     _phoneController = TextEditingController(text: user?.phone ?? '');
     _passwordController = TextEditingController();
     _photoURL = user?.photoURL;
-
-    // Load custom primary color from ThemeProvider
-    final themeState = ref.read(themeProvider);
-    _selectedColor = themeState.customPrimaryColor;
   }
 
   @override
@@ -165,39 +163,6 @@ class _ProfileManagementWidgetState
     }
   }
 
-  Future<void> _updateCustomPrimaryColor(Color color) async {
-    final user = ref.read(currentUserProvider).value;
-    if (user == null) return;
-
-    try {
-      // Update ThemeProvider
-      await ref.read(themeProvider.notifier).setCustomPrimaryColor(color);
-
-      // Update Firestore
-      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
-        'settings': {
-          'primaryColor': color.value,
-        },
-      });
-
-      await _analytics.logEvent(
-        name: 'update_theme_color',
-        parameters: {
-          'user_id': user.id,
-          'color': color.value.toString(),
-        },
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Theme color updated successfully')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating theme color: $e')),
-      );
-    }
-  }
-
   Future<void> _signOut() async {
     await ref.read(authProvider.notifier).signOut();
     if (mounted) {
@@ -205,49 +170,13 @@ class _ProfileManagementWidgetState
     }
   }
 
-  void _pickColor() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        Color pickerColor = _selectedColor;
-        return AlertDialog(
-          title: const Text('Pick a Theme Color'),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickerColor,
-              onColorChanged: (color) {
-                pickerColor = color;
-              },
-              showLabel: true,
-              pickerAreaHeightPercent: 0.8,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _selectedColor = pickerColor;
-                });
-                _updateCustomPrimaryColor(pickerColor);
-                Navigator.of(context).pop();
-              },
-              child: const Text('Select'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider).value;
+    final effectiveIsPro = ref.watch(effectiveIsProProvider);
+    final devMode = ref.watch(developerModeProvider);
+    final devOverrideActive =
+        user?.isAdmin == true && devMode.proOverride != ProOverrideMode.actual;
 
     if (user == null) {
       return const Center(child: CircularProgressIndicator());
@@ -257,19 +186,19 @@ class _ProfileManagementWidgetState
       margin: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.2)
-                : Colors.black.withOpacity(0.1),
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.1),
             blurRadius: 5,
             offset: const Offset(2, 2),
           ),
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.1)
-                : Colors.white.withOpacity(0.3),
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.white.withValues(alpha: 0.3),
             blurRadius: 5,
             offset: const Offset(-2, -2),
           ),
@@ -312,8 +241,7 @@ class _ProfileManagementWidgetState
                           icon:
                               const Icon(Icons.camera_alt, color: Colors.white),
                           onPressed: () async {
-                            final result = await FilePicker.platform
-                                .pickFiles(type: FileType.image);
+                            final result = await FilePicker.pickFiles(type: FileType.image);
                             if (result != null &&
                                 result.files.single.path != null) {
                               setState(() {
@@ -427,21 +355,21 @@ class _ProfileManagementWidgetState
               Container(
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
-                  color: user.isPro
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
+                  color: effectiveIsPro
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8.0),
                   border: Border.all(
-                    color: user.isPro ? Colors.green : Colors.grey,
+                    color: effectiveIsPro ? Colors.green : Colors.grey,
                   ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Subscription Status: ${user.isPro ? 'Pro' : 'Free'}',
+                      'Subscription Status: ${effectiveIsPro ? 'Pro' : 'Free'}${devOverrideActive ? ' (dev)' : ''}',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: user.isPro ? Colors.green : Colors.grey,
+                            color: effectiveIsPro ? Colors.green : Colors.grey,
                           ),
                     ),
                     const SizedBox(height: 8),
@@ -466,17 +394,17 @@ class _ProfileManagementWidgetState
                     const SizedBox(height: 12),
                     Semantics(
                       label:
-                          user.isPro ? 'Manage subscription' : 'Upgrade to Pro',
+                          effectiveIsPro ? 'Manage subscription' : 'Upgrade to Pro',
                       child: ElevatedButton(
                         onPressed: () => context.go('/subscription'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: user.isPro
+                          backgroundColor: effectiveIsPro
                               ? Colors.grey
                               : Theme.of(context).colorScheme.primary,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 24, vertical: 12),
                         ),
-                        child: Text(user.isPro
+                        child: Text(effectiveIsPro
                             ? 'Manage Subscription'
                             : 'Upgrade to Pro'),
                       ),
@@ -484,62 +412,6 @@ class _ProfileManagementWidgetState
                   ],
                 ),
               ).animate().fadeIn(duration: 400.ms, delay: 600.ms),
-              if (user.isPro) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Customize Theme',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: _selectedColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.grey),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Semantics(
-                            label: 'Pick a theme color',
-                            child: ElevatedButton(
-                              onPressed: _pickColor,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.primary,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 24, vertical: 12),
-                              ),
-                              child: Text(
-                                'Pick Color',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(duration: 400.ms, delay: 700.ms),
-              ],
               const SizedBox(height: 16),
               Center(
                 child: Row(

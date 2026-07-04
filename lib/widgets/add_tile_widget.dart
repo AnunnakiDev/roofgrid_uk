@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/tile_provider.dart';
+import 'package:roofgrid_uk/utils/tile_access.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,6 +15,7 @@ class AddTileWidget extends ConsumerStatefulWidget {
   final String userId;
   final TileModel? tile; // Optional tile for editing
   final Function(TileModel)? onTileCreated; // Callback for free users
+  final String? forceSaveDestination;
 
   const AddTileWidget({
     super.key,
@@ -21,6 +23,7 @@ class AddTileWidget extends ConsumerStatefulWidget {
     required this.userId,
     this.tile,
     this.onTileCreated,
+    this.forceSaveDestination,
   });
 
   @override
@@ -81,6 +84,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
     if (widget.tile != null) {
       _materialType = widget.tile!.materialType;
       _crossBonded = widget.tile!.defaultCrossBonded;
+      if (isDefaultCatalogueTile(widget.tile!)) {
+        _saveDestination = 'Default';
+      }
+    }
+    if (widget.forceSaveDestination != null) {
+      _saveDestination = widget.forceSaveDestination!;
     }
   }
 
@@ -117,7 +126,7 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
     required Function(File?) onFilePicked,
     required String fieldName,
   }) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.any,
     );
     if (result != null && result.files.single.path != null) {
@@ -145,12 +154,15 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
           // Ignore errors if files don't exist
         }
 
-        // Delete the tile from Firestore
-        await FirebaseFirestore.instance
-            .collection('tiles')
-            .doc(widget.tile!.id)
-            .delete();
-        Navigator.pop(context);
+        final tileService = ref.read(tileServiceProvider);
+        if (isDefaultCatalogueTile(widget.tile!)) {
+          await tileService.deleteDefaultTile(widget.tile!.id);
+        } else {
+          await tileService.deleteTile(widget.tile!.id, widget.userId);
+        }
+        ref.invalidate(allAvailableTilesProvider(widget.userId));
+        ref.invalidate(userTilesProvider(widget.userId));
+        if (context.mounted) Navigator.pop(context);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error deleting tile: $e')),
@@ -203,8 +215,12 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
         description: widget.userRole == UserRole.free
             ? 'Manually entered tile specifications'
             : _descriptionController.text,
-        isPublic: widget.tile != null ? widget.tile!.isPublic : false,
-        isApproved: widget.tile != null ? widget.tile!.isApproved : false,
+        isPublic: widget.tile != null && isDefaultCatalogueTile(widget.tile!)
+            ? true
+            : false,
+        isApproved: widget.tile != null && isDefaultCatalogueTile(widget.tile!)
+            ? true
+            : false,
         createdById: widget.userId,
         createdAt: widget.tile != null ? widget.tile!.createdAt : now,
         updatedAt: now,
@@ -223,24 +239,26 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
       );
 
       if (widget.userRole == UserRole.free) {
-        // Free user: Return temporary tile via callback
         widget.onTileCreated?.call(tile);
       } else {
-        // Pro user or Admin: Save to Firestore
         final tileService = ref.read(tileServiceProvider);
-        if (widget.userRole == UserRole.admin &&
-            _saveDestination == 'Default') {
-          final defaultTile = tile.copyWith(
-            isPublic: true,
-            isApproved: true,
+        final savingDefault = widget.userRole == UserRole.admin &&
+            _saveDestination == 'Default';
+        if (savingDefault) {
+          await tileService.saveToDefaultTiles(
+            tile.copyWith(isPublic: true, isApproved: true),
           );
-          await tileService.saveToDefaultTiles(defaultTile);
         } else {
-          await tileService.saveTile(tile);
+          await tileService.saveTile(
+            tile.copyWith(isPublic: false, isApproved: false),
+          );
         }
+        ref.invalidate(allAvailableTilesProvider(widget.userId));
+        ref.invalidate(userTilesProvider(widget.userId));
+        ref.invalidate(proPersonalTilesProvider);
+        widget.onTileCreated?.call(tile);
       }
 
-      // Navigate back
       if (context.mounted) {
         Navigator.pop(context);
       }
@@ -515,6 +533,9 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
               const SizedBox(height: 16),
               CheckboxListTile(
                 title: const Text('Cross Bonded'),
+                subtitle: const Text(
+                  'Tile catalogue default — applies to any material type',
+                ),
                 value: _crossBonded,
                 onChanged: (value) {
                   setState(() {
@@ -591,7 +612,8 @@ class _AddTileWidgetState extends ConsumerState<AddTileWidget> {
                   ],
                 ),
               ],
-              if (widget.userRole == UserRole.admin) ...[
+              if (widget.userRole == UserRole.admin &&
+                  widget.forceSaveDestination == null) ...[
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _saveDestination,

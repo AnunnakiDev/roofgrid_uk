@@ -1,30 +1,33 @@
-// lib/screens/support/faq_screen.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/section_header.dart';
 
 class FaqScreen extends StatelessWidget {
   const FaqScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Frequently Asked Questions'),
+        title: const Text('FAQ'),
+        actions: const [HomeBackButton()],
       ),
       drawer: const MainDrawer(),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Frequently Asked Questions',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+            const SectionHeader(
+              title: 'Frequently Asked Questions',
+              subtitle: 'Quick answers about RoofGrid UK',
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             _buildFaqItem(
               context,
               question: 'What is RoofGrid UK?',
@@ -39,8 +42,7 @@ class FaqScreen extends StatelessWidget {
             ),
             _buildFaqItem(
               context,
-              question:
-                  'What\'s the difference between the free and Pro version?',
+              question: 'What\'s the difference between the free and Pro version?',
               answer:
                   'The free version provides basic vertical and horizontal calculations. The Pro version includes advanced features like multiple rafters, custom tile management, saved calculations, and more customization options.',
             ),
@@ -68,25 +70,28 @@ class FaqScreen extends StatelessWidget {
               answer:
                   'You can contact our support team at support@roofgrid.uk for any technical assistance or questions about using the application.',
             ),
-            const SizedBox(height: 32),
-            Center(
-              child: Text(
-                'Have more questions?',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton.icon(
-                icon: const Icon(Icons.email_outlined),
-                label: const Text('Contact Support'),
-                onPressed: () {
-                  // TODO: Implement contact support functionality
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Contact support coming soon!')),
-                  );
-                },
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Have more questions?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => context.go('/support/contact'),
+                      icon: const Icon(Icons.email_outlined),
+                      label: const Text('Contact Support'),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -101,20 +106,40 @@ class FaqScreen extends StatelessWidget {
     required String question,
     required String answer,
   }) {
-    return ExpansionTile(
-      title: Text(
-        question,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Text(
-            answer,
-            style: Theme.of(context).textTheme.bodyLarge,
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          iconColor: colorScheme.secondary,
+          collapsedIconColor: colorScheme.onSurfaceVariant,
+          title: Text(
+            question,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: colorScheme.onSurface,
+            ),
           ),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                answer,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

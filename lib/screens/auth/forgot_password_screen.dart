@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/widgets/auth_shell.dart';
+import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 // Rest of the file remains the same
@@ -28,29 +30,41 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   }
 
   Future<void> _resetPassword() async {
-    if (_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || !mounted) return;
+
+    setState(() => _isLoading = true);
+
+    final authNotifier = ref.read(authProvider.notifier);
+    final success =
+        await authNotifier.resetPassword(_emailController.text.trim());
+
+    if (!mounted) return;
+
+    if (success) {
+      await FirebaseAnalytics.instance.logEvent(name: 'password_reset_sent');
+      if (!mounted) return;
       setState(() {
-        _isLoading = true;
+        _resetSent = true;
+        _isLoading = false;
       });
-
-      final authNotifier = ref.read(authProvider.notifier);
-      final success =
-          await authNotifier.resetPassword(_emailController.text.trim());
-
-      if (success && mounted) {
-        await FirebaseAnalytics.instance.logEvent(name: 'password_reset_sent');
-        setState(() {
-          _resetSent = true;
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password reset link sent!')),
-        );
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If an account exists for this email, a reset link was sent.',
+          ),
+        ),
+      );
+    } else {
+      setState(() => _isLoading = false);
+      final error = ref.read(authProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error ?? 'Could not send reset link. Please try again.',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 
@@ -58,30 +72,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/auth/login'),
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    _resetSent ? Icons.check_circle_outline : Icons.lock_reset,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+    return AuthShell(
+      showBackButton: true,
+      onBack: () => context.go('/auth/login'),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const BrandWordmark(fontSize: 28),
+            const SizedBox(height: 24),
+            Icon(
+              _resetSent
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.lock_reset_rounded,
+              size: 72,
+              color: _resetSent
+                  ? Theme.of(context).colorScheme.secondary
+                  : Theme.of(context).colorScheme.primary,
+            ),
                   const SizedBox(height: 24),
                   Text(
                     _resetSent ? 'Reset Link Sent' : 'Forgot Password',
@@ -93,7 +102,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   const SizedBox(height: 16),
                   Text(
                     _resetSent
-                        ? 'We\'ve sent a password reset link to ${_emailController.text}. Please check your inbox.'
+                        ? 'We\'ve sent a password reset link to ${_emailController.text}. Please check your inbox and spam folder.'
                         : 'Enter your email address below to receive a password reset link.',
                     style: Theme.of(context).textTheme.bodyLarge,
                     textAlign: TextAlign.center,
@@ -143,33 +152,38 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           : _resetPassword,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
                       ),
                       child: _isLoading || authState.isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 24,
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
                               ),
                             )
                           : const Text('Send Reset Link'),
                     ),
                   ] else ...[
+                    Text(
+                      'No email after a few minutes?\n'
+                      '• Check spam/promotions\n'
+                      '• If you signed up with Google, use Google Sign-In on the login screen instead\n'
+                      '• Password reset only works for email/password accounts',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () => context.go('/auth/login'),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
                       ),
                       child: const Text('Back to Login'),
                     ),
                   ],
                 ],
-              ),
-            ),
-          ),
         ),
       ),
     );
