@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "rules": "firebaserules.txt",
+    "indexes": "firestore.indexes.json"
+  },
   "functions": [
     {
       "source": "functions",

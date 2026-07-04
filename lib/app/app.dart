@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:roofgrid_uk/app/theme/app_theme.dart';
-import 'package:roofgrid_uk/routing/router.dart' as router;
+import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/routing/router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 
@@ -18,7 +19,7 @@ class RoofGridApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
-      routerConfig: router.getRouter(authState),
+      routerConfig: ref.watch(goRouterProvider),
     );
   }
 }

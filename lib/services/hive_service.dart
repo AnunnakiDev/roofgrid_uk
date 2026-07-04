@@ -1,9 +1,12 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:roofgrid_uk/app/results/models/saved_result.dart';
+import 'package:roofgrid_uk/models/developer_mode_config.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
-import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 
 // FutureProvider to handle HiveService initialization
 final hiveServiceInitializerProvider = FutureProvider<void>((ref) async {
@@ -13,7 +16,6 @@ final hiveServiceInitializerProvider = FutureProvider<void>((ref) async {
 // Provider for HiveService
 final hiveServiceProvider = Provider<HiveService>((ref) {
   final service = HiveService();
-  // Ensure initialization is complete before returning the service
   ref.watch(hiveServiceInitializerProvider);
   return service;
 });
@@ -21,6 +23,8 @@ final hiveServiceProvider = Provider<HiveService>((ref) {
 class HiveService {
   static const String _appStateBoxName = 'appState';
   static const String _lastTileKey = 'lastSelectedTile';
+  static const String _devProOverrideKey = 'devProOverride';
+  static const String _devForceOfflineKey = 'devForceOffline';
   static Box? _appStateBox;
   static Box<UserModel>? _userBox;
   static Box<TileModel>? _tilesBox;
@@ -31,25 +35,21 @@ class HiveService {
 
   HiveService();
 
+  static Box? get appStateBox => _appStateBox;
+
   static Future<void> init() async {
-    // Check if already initialized to prevent multiple completions
     if (_isInitialized) {
       return _initializationCompleter.future;
     }
 
     try {
       _appStateBox = await Hive.openBox(_appStateBoxName);
-      _userBox = await Hive.openBox<UserModel>('userBox');
-      _tilesBox = await Hive.openBox<TileModel>('tilesBox');
-      _resultsBox = await Hive.openBox<SavedResult>('resultsBox');
-      _calculationsBox = await Hive.openBox<Map>('calculationsBox');
       _isInitialized = true;
       if (!_initializationCompleter.isCompleted) {
         _initializationCompleter.complete();
       }
-      print("HiveService initialized successfully");
+      unawaited(warmSecondaryBoxes());
     } catch (e) {
-      print("Error initializing HiveService: $e");
       if (!_initializationCompleter.isCompleted) {
         _initializationCompleter.completeError(e);
       }
@@ -57,45 +57,106 @@ class HiveService {
     }
   }
 
+  /// Opens non-critical Hive boxes in parallel after [appState] is ready.
+  static Future<void> warmSecondaryBoxes() async {
+    await Future.wait([
+      ensureUserBox(),
+      ensureTilesBox(),
+      ensureResultsBox(),
+      ensureCalculationsBox(),
+    ]);
+  }
+
+  static Future<Box<UserModel>> ensureUserBox() async {
+    if (_userBox != null) return _userBox!;
+    if (Hive.isBoxOpen('userBox')) {
+      _userBox = Hive.box<UserModel>('userBox');
+      return _userBox!;
+    }
+    _userBox = await Hive.openBox<UserModel>('userBox');
+    return _userBox!;
+  }
+
+  static Future<Box<TileModel>> ensureTilesBox() async {
+    if (_tilesBox != null) return _tilesBox!;
+    if (Hive.isBoxOpen('tilesBox')) {
+      _tilesBox = Hive.box<TileModel>('tilesBox');
+      return _tilesBox!;
+    }
+    _tilesBox = await Hive.openBox<TileModel>('tilesBox');
+    return _tilesBox!;
+  }
+
+  static Future<Box<SavedResult>> ensureResultsBox() async {
+    if (_resultsBox != null) return _resultsBox!;
+    if (Hive.isBoxOpen('resultsBox')) {
+      _resultsBox = Hive.box<SavedResult>('resultsBox');
+      return _resultsBox!;
+    }
+    _resultsBox = await Hive.openBox<SavedResult>('resultsBox');
+    return _resultsBox!;
+  }
+
+  static Future<Box<Map>> ensureCalculationsBox() async {
+    if (_calculationsBox != null) return _calculationsBox!;
+    if (Hive.isBoxOpen('calculationsBox')) {
+      _calculationsBox = Hive.box<Map>('calculationsBox');
+      return _calculationsBox!;
+    }
+    _calculationsBox = await Hive.openBox<Map>('calculationsBox');
+    return _calculationsBox!;
+  }
+
   bool get isInitialized => _isInitialized;
 
   Future<void> get initializationComplete => _initializationCompleter.future;
 
   Box<UserModel> get userBox {
-    if (_userBox == null) {
-      throw Exception(
-          "HiveService userBox not initialized. Call init() first.");
+    if (_userBox != null) return _userBox!;
+    if (Hive.isBoxOpen('userBox')) {
+      _userBox = Hive.box<UserModel>('userBox');
+      return _userBox!;
     }
-    return _userBox!;
+    throw Exception(
+      'HiveService userBox not ready yet. Call ensureUserBox() first.',
+    );
   }
 
   Box<TileModel> get tilesBox {
-    if (_tilesBox == null) {
-      throw Exception(
-          "HiveService tilesBox not initialized. Call init() first.");
+    if (_tilesBox != null) return _tilesBox!;
+    if (Hive.isBoxOpen('tilesBox')) {
+      _tilesBox = Hive.box<TileModel>('tilesBox');
+      return _tilesBox!;
     }
-    return _tilesBox!;
+    throw Exception(
+      'HiveService tilesBox not ready yet. Call ensureTilesBox() first.',
+    );
   }
 
   Box<SavedResult> get resultsBox {
-    if (_resultsBox == null) {
-      throw Exception(
-          "HiveService resultsBox not initialized. Call init() first.");
+    if (_resultsBox != null) return _resultsBox!;
+    if (Hive.isBoxOpen('resultsBox')) {
+      _resultsBox = Hive.box<SavedResult>('resultsBox');
+      return _resultsBox!;
     }
-    return _resultsBox!;
+    throw Exception(
+      'HiveService resultsBox not ready yet. Call ensureResultsBox() first.',
+    );
   }
 
   Box<Map> get calculationsBox {
-    if (_calculationsBox == null) {
-      throw Exception(
-          "HiveService calculationsBox not initialized. Call init() first.");
+    if (_calculationsBox != null) return _calculationsBox!;
+    if (Hive.isBoxOpen('calculationsBox')) {
+      _calculationsBox = Hive.box<Map>('calculationsBox');
+      return _calculationsBox!;
     }
-    return _calculationsBox!;
+    throw Exception(
+      'HiveService calculationsBox not ready yet. Call ensureCalculationsBox() first.',
+    );
   }
 
   Future<void> saveLastSelectedTile(TileModel? tile) async {
     if (_appStateBox == null) {
-      print("HiveService appStateBox not initialized, skipping save");
       return;
     }
     if (tile == null) {
@@ -107,7 +168,6 @@ class HiveService {
 
   TileModel? getLastSelectedTile() {
     if (_appStateBox == null) {
-      print("HiveService appStateBox not initialized, returning null");
       return null;
     }
     final tileJson = _appStateBox!.get(_lastTileKey);
@@ -115,10 +175,54 @@ class HiveService {
       try {
         return TileModel.fromJson(Map<String, dynamic>.from(tileJson));
       } catch (e) {
-        print('Error loading last selected tile: $e');
         return null;
       }
     }
     return null;
+  }
+
+  ProOverrideMode getDevProOverride() {
+    if (_appStateBox == null || !_appStateBox!.isOpen) {
+      return ProOverrideMode.actual;
+    }
+    final value = _appStateBox!.get(_devProOverrideKey) as String?;
+    return ProOverrideMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => ProOverrideMode.actual,
+    );
+  }
+
+  Future<void> saveDevProOverride(ProOverrideMode mode) async {
+    if (_appStateBox == null) return;
+    await _appStateBox!.put(_devProOverrideKey, mode.name);
+  }
+
+  bool getDevForceOffline() {
+    if (_appStateBox == null || !_appStateBox!.isOpen) return false;
+    return _appStateBox!.get(_devForceOfflineKey, defaultValue: false) as bool;
+  }
+
+  Future<void> saveDevForceOffline(bool enabled) async {
+    if (_appStateBox == null) return;
+    await _appStateBox!.put(_devForceOfflineKey, enabled);
+  }
+
+  Future<void> clearLocalDevData() async {
+    await ensureTilesBox();
+    await ensureResultsBox();
+    await tilesBox.clear();
+    await resultsBox.clear();
+    await calculationsBox.clear();
+    if (_appStateBox != null) {
+      await _appStateBox!.delete(_lastTileKey);
+    }
+  }
+
+  Future<int> seedUkTilesLocal(List<TileModel> tiles) async {
+    await ensureTilesBox();
+    for (final tile in tiles) {
+      await tilesBox.put(tile.id, tile);
+    }
+    return tiles.length;
   }
 }

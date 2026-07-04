@@ -11,11 +11,15 @@ service cloud.firestore {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow write: if request.auth != null;
 
-      // Subcollection tiles: Allow users to read/write their own tiles, admins to read/write all
+      // Subcollection tiles: owners read/write when Pro; admins read/write all
       match /tiles/{tileId} {
-        allow read, write: if request.auth != null && (
-          isAdmin() || 
+        allow read: if request.auth != null && (
+          isAdmin() ||
           request.auth.uid == userId
+        );
+        allow write: if request.auth != null && (
+          isAdmin() ||
+          (request.auth.uid == userId && isPro())
         );
       }
 
@@ -58,15 +62,36 @@ service cloud.firestore {
     }
 
     // Helper functions
+    function isDesignatedAdmin() {
+      return request.auth != null && request.auth.token.email != null && (
+        request.auth.token.email == 'support@roofgrid.uk' ||
+        request.auth.token.email == 'hgwarner1307@gmail.com'
+      );
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDocExists() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function isAdmin() {
-      return request.auth != null && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (
+        isDesignatedAdmin() ||
+        (userDocExists() && userDoc().data.role == 'admin')
+      );
     }
 
     function isPro() {
       return request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pro' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        isDesignatedAdmin() ||
+        (userDocExists() && (
+          userDoc().data.role == 'pro' ||
+          userDoc().data.role == 'admin'
+        ))
       );
     }
   }
