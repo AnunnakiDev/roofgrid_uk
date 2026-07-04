@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/utils/app_theme.dart';
 import 'package:roofgrid_uk/theme/app_color_schemes.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 import 'package:roofgrid_uk/widgets/calculator_launch_cards.dart';
 import 'package:roofgrid_uk/widgets/home_welcome_banner.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
@@ -73,6 +74,23 @@ void main() {
       await tester.pump();
 
       expect(launched, CalculationTypeSelection.both);
+    });
+  });
+
+  group('CalculatorStepProgress', () {
+    testWidgets('shows four wizard steps including type', (tester) async {
+      await tester.pumpWidget(
+        themed(
+          const CalculatorStepProgress(
+            currentStep: CalculatorFlowStep.selectType,
+          ),
+        ),
+      );
+
+      expect(find.text('Tile'), findsOneWidget);
+      expect(find.text('Type'), findsOneWidget);
+      expect(find.text('Measurements'), findsOneWidget);
+      expect(find.text('Results'), findsOneWidget);
     });
   });
 

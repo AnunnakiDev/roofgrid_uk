@@ -9,7 +9,9 @@ import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/screens/calculator/choose_calculation_type_step.dart';
 import 'package:roofgrid_uk/screens/calculator/enter_measurements_step.dart';
+import 'package:roofgrid_uk/screens/calculator/select_tile_step.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/utils/saved_result_inputs.dart';
 import 'package:roofgrid_uk/screens/calculator/view_results_step.dart';
@@ -29,7 +31,8 @@ import 'package:roofgrid_uk/widgets/save_result_dialog.dart';
 
 // Define CalculatorStep enum for step-based flow
 enum CalculatorStep {
-  confirmTile,
+  selectTile,
+  selectType,
   enterMeasurements,
   viewResults,
 }
@@ -99,10 +102,8 @@ class CalculatorContent extends ConsumerStatefulWidget {
 
 class _CalculatorContentState extends ConsumerState<CalculatorContent> {
   bool _isOnline = true;
-  bool _hasRedirectedToTileSelect = false;
-  bool _tileSelectScheduled = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  CalculatorStep _currentStep = CalculatorStep.confirmTile;
+  CalculatorStep _currentStep = CalculatorStep.selectTile;
   CalculationTypeSelection? _calculationType;
   VerticalInputs _verticalInputs = VerticalInputs();
   HorizontalInputs _horizontalInputs = HorizontalInputs();
@@ -162,15 +163,11 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
 
       _resetModeScopedCalculationData(_calculationType!);
       _currentStep = CalculatorStep.enterMeasurements;
-      _hasRedirectedToTileSelect = true;
-    } else if (widget.initialMode != null) {
-      _setCalculationMode(widget.initialMode!);
-      _scheduleTileSelection();
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.go('/home');
-      });
+      if (widget.initialMode != null) {
+        _calculationType = widget.initialMode;
+      }
+      _currentStep = CalculatorStep.selectTile;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -205,7 +202,10 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
     final newMode = widget.initialMode;
     if (newMode == null || newMode == _calculationType) return;
 
-    _applyCalculationMode(newMode);
+    setState(() => _setCalculationMode(newMode));
+    ref.read(calculatorProvider.notifier).clearResults();
+    ref.read(calculatorProvider.notifier).resetOptionsForMode(newMode);
+    _hydrateProviderFromInputs();
   }
 
   void _setCalculationMode(CalculationTypeSelection mode) {
@@ -216,15 +216,32 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
     }
   }
 
-  void _applyCalculationMode(CalculationTypeSelection mode) {
-    setState(() => _setCalculationMode(mode));
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(calculatorProvider.notifier).clearResults();
-      ref.read(calculatorProvider.notifier).resetOptionsForMode(mode);
-      _hydrateProviderFromInputs();
+  void _onTileSelected(TileModel tile) {
+    ref.read(calculatorProvider.notifier).setTile(tile);
+    setState(() {
+      _horizontalInputs = _horizontalInputs.copyWith(
+        crossBonded: crossBondedFromTile(tile),
+      );
+      if (widget.initialMode != null) {
+        final mode = widget.initialMode!;
+        _setCalculationMode(mode);
+        ref.read(calculatorProvider.notifier).resetOptionsForMode(mode);
+        _hydrateProviderFromInputs();
+        _currentStep = CalculatorStep.enterMeasurements;
+      } else {
+        _currentStep = CalculatorStep.selectType;
+      }
     });
+  }
+
+  void _onTypeSelected(CalculationTypeSelection mode) {
+    setState(() {
+      _setCalculationMode(mode);
+      _currentStep = CalculatorStep.enterMeasurements;
+    });
+    ref.read(calculatorProvider.notifier).clearResults();
+    ref.read(calculatorProvider.notifier).resetOptionsForMode(mode);
+    _hydrateProviderFromInputs();
   }
 
   void _hydrateProviderFromInputs() {
@@ -266,40 +283,6 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
         backgroundColor: Theme.of(context).colorScheme.error,
       );
     }
-  }
-
-  void _scheduleTileSelection() {
-    if (_tileSelectScheduled || _hasRedirectedToTileSelect) return;
-    _tileSelectScheduled = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      try {
-        final selectedTile = await context.push('/calculator/tile-select');
-        if (!mounted) return;
-        if (selectedTile != null && selectedTile is TileModel) {
-          ref.read(calculatorProvider.notifier).setTile(selectedTile);
-          setState(() {
-            _horizontalInputs = _horizontalInputs.copyWith(
-              crossBonded: crossBondedFromTile(selectedTile),
-            );
-            _currentStep = CalculatorStep.enterMeasurements;
-            _hasRedirectedToTileSelect = true;
-          });
-        } else {
-          context.go('/home');
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error selecting tile: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-        context.go('/home');
-      }
-    });
   }
 
   Future<void> _checkConnectivity() async {
@@ -451,8 +434,23 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
   Widget _buildStepContent(
       BuildContext context, UserModel user, bool effectiveIsPro) {
     switch (_currentStep) {
-      case CalculatorStep.confirmTile:
-        return const Center(child: CircularProgressIndicator());
+      case CalculatorStep.selectTile:
+        return SelectTileStep(
+          user: user,
+          effectiveIsPro: effectiveIsPro,
+          onTileSelected: _onTileSelected,
+          onCancel: () => context.go('/home'),
+        ).animate().fadeIn(duration: 400.ms);
+      case CalculatorStep.selectType:
+        return ChooseCalculationTypeStep(
+          user: user,
+          effectiveIsPro: effectiveIsPro,
+          onTypeSelected: _onTypeSelected,
+          onBack: () {
+            setState(() => _currentStep = CalculatorStep.selectTile);
+          },
+          placeholderImageBuilder: _getPlaceholderImage,
+        ).animate().fadeIn(duration: 400.ms);
       case CalculatorStep.enterMeasurements:
         return EnterMeasurementsStep(
           key: ValueKey(_calculationType),
@@ -461,7 +459,12 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
           calculationType: _calculationType!,
           initialVerticalInputs: _verticalInputs,
           initialHorizontalInputs: _horizontalInputs,
-          onBackToTileSelect: _openTileSelection,
+          onBackToTileSelect: () {
+            setState(() {
+              _currentStep = CalculatorStep.selectType;
+              ref.read(calculatorProvider.notifier).clearResults();
+            });
+          },
           onCalculate: (verticalInputs, horizontalInputs) {
             setState(() {
               _verticalInputs = verticalInputs;
@@ -525,7 +528,7 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
         'Determine tile marking out from width measurements.',
       CalculationTypeSelection.both =>
         'Full roof layout — vertical batten gauge and horizontal tile set-out.',
-      null => 'Select a calculation type from the home screen to begin.',
+      null => 'Select a tile, then choose vertical, horizontal, or combined set-out.',
     };
     showDialog(
       context: context,
@@ -578,7 +581,15 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
                       Text('4. View combined vertical and horizontal results'),
                     ],
                   ),
-                null => const SizedBox.shrink(),
+                null => const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('1. Select your tile'),
+                      Text('2. Choose set-out type'),
+                      Text('3. Enter measurements'),
+                      Text('4. View results'),
+                    ],
+                  ),
               },
             ],
           ),

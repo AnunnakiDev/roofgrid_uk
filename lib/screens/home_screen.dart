@@ -9,7 +9,7 @@ import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
-import 'package:roofgrid_uk/widgets/calculator_launch_cards.dart';
+
 import 'package:roofgrid_uk/widgets/home_welcome_banner.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/widgets/quick_access_row.dart';
@@ -49,14 +49,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _openCalculator(CalculationTypeSelection type) {
-    final eventType = switch (type) {
-      CalculationTypeSelection.verticalOnly => 'vertical',
-      CalculationTypeSelection.horizontalOnly => 'horizontal',
-      CalculationTypeSelection.both => 'combined',
-    };
-    _logAnalyticsEvent('open_calculator', {'type': eventType});
-    navigateToCalculatorMode(context, type);
+  void _openNewCalculation() {
+    _logAnalyticsEvent('open_calculator');
+    navigateToNewCalculation(context);
   }
 
   @override
@@ -194,11 +189,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           SizedBox(height: sectionSpacing),
           const SectionHeader(
-            title: 'Roofing Calculators',
-            subtitle: 'Choose a set-out mode to begin',
+            title: 'Roofing Calculator',
+            subtitle: 'Select your tile, then choose vertical, horizontal, or combined set-out',
           ),
           const SizedBox(height: 18),
-          CalculatorLaunchCards(onLaunch: _openCalculator),
+          Semantics(
+            label: 'Start a new roofing calculation',
+            button: true,
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: _openNewCalculation,
+                child: Padding(
+                  padding: EdgeInsets.all(isLargeScreen ? 20 : 18),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.roofing_rounded,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'New calculation',
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tile → set-out type → measurements → results',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           SizedBox(height: sectionSpacing),
           const SectionHeader(title: 'Quick Access'),
           const SizedBox(height: 16),

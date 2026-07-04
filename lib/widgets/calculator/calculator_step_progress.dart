@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 enum CalculatorFlowStep {
-  confirmTile,
+  selectTile,
+  selectType,
   enterMeasurements,
   viewResults,
 }
 
-/// Top-of-flow progress: Tile → Measurements → Results.
+/// Top-of-flow progress: Tile → Type → Measurements → Results.
 class CalculatorStepProgress extends StatelessWidget {
   final CalculatorFlowStep currentStep;
 
@@ -16,7 +17,7 @@ class CalculatorStepProgress extends StatelessWidget {
     required this.currentStep,
   });
 
-  static const _labels = ['Tile', 'Measurements', 'Results'];
+  static const _labels = ['Tile', 'Type', 'Measurements', 'Results'];
 
   int get _currentIndex => currentStep.index;
 

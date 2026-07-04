@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
-import 'package:roofgrid_uk/utils/calculator_mode.dart';
+
 import 'package:roofgrid_uk/widgets/admin_access_guard.dart';
 
 /// Maps a location to the main shell tab index (0–3).
@@ -95,7 +95,7 @@ void navigateToShellTab(
     case 0:
       context.go('/home');
     case 1:
-      showCalculatorModePicker(context);
+      context.go('/calculator');
     case 2:
       context.go('/results');
     case 3:

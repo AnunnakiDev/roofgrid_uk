@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/navigation/app_bottom_nav.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
-import 'package:roofgrid_uk/utils/calculator_mode.dart';
+
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -17,10 +17,6 @@ class AppShell extends ConsumerWidget {
       bottomNavigationBar: AppBottomNav(
         currentIndex: navigationShell.currentIndex,
         onTabSelected: (index) {
-          if (index == 1) {
-            showCalculatorModePicker(context);
-            return;
-          }
           navigateToShellTab(
             context,
             ref,

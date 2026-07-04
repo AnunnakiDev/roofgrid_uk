@@ -6,7 +6,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/theme/app_color_schemes.dart';
-import 'package:roofgrid_uk/utils/calculator_mode.dart';
+
 import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 import 'package:roofgrid_uk/widgets/roof_grid_pattern.dart';
 
@@ -48,7 +48,7 @@ class MainDrawer extends ConsumerWidget {
             title: 'Calculator',
             onTap: () {
               Navigator.pop(context);
-              showCalculatorModePicker(context);
+              context.go('/calculator');
             },
           ),
           _DrawerNavTile(

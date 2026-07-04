@@ -86,6 +86,10 @@ void navigateToCalculatorMode(BuildContext context, CalculationTypeSelection mod
   context.go('/calculator?mode=${calculatorModeQueryValue(mode)}');
 }
 
+void navigateToNewCalculation(BuildContext context) {
+  context.go('/calculator');
+}
+
 Future<void> showCalculatorModePicker(BuildContext context) async {
   final selected = await showModalBottomSheet<CalculationTypeSelection>(
     context: context,
