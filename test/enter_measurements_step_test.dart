@@ -1,75 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
-import 'package:roofgrid_uk/models/tile_model.dart';
-import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/screens/calculator/enter_measurements_step.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_step_progress.dart';
 
-TileModel _sampleTile() {
-  final now = DateTime(2026, 1, 1);
-  return TileModel(
-    id: 'tile-1',
-    name: 'Test Pantile',
-    manufacturer: 'Test Co',
-    materialType: TileSlateType.pantile,
-    description: 'Test',
-    isPublic: true,
-    isApproved: true,
-    createdById: 'admin',
-    createdAt: now,
-    updatedAt: now,
-    slateTileHeight: 300,
-    tileCoverWidth: 250,
-    minGauge: 100,
-    maxGauge: 120,
-    minSpacing: 5,
-    maxSpacing: 10,
-    defaultCrossBonded: false,
-  );
-}
-
-class _TileCalculatorNotifier extends CalculatorNotifier {
-  @override
-  CalculatorState build() => CalculatorState(selectedTile: _sampleTile());
-}
-
-UserModel _proUser() {
-  return UserModel(
-    id: 'user-1',
-    email: 'pro@example.com',
-    role: UserRole.pro,
-    createdAt: DateTime(2026, 1, 1),
-  );
-}
-
-Widget _placeholder(TileSlateType type) => const Icon(Icons.image);
+import 'support/calculator_widget_test_harness.dart';
 
 void main() {
   testWidgets('EnterMeasurementsStep verticalOnly renders measurement inputs',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: EnterMeasurementsStep(
-              user: _proUser(),
-              effectiveIsPro: true,
-              calculationType: CalculationTypeSelection.verticalOnly,
-              initialVerticalInputs: VerticalInputs(),
-              initialHorizontalInputs: HorizontalInputs(),
-              onBackToTileSelect: () {},
-              onCalculate: (_, __) {},
-              placeholderImageBuilder: _placeholder,
-            ),
-          ),
+      wrapCalculatorWidget(
+        EnterMeasurementsStep(
+          user: proTestUser(),
+          effectiveIsPro: true,
+          calculationType: CalculationTypeSelection.verticalOnly,
+          initialVerticalInputs: VerticalInputs(),
+          initialHorizontalInputs: HorizontalInputs(),
+          onBackToTileSelect: () {},
+          onCalculate: (_, __) {},
+          placeholderImageBuilder: calculatorPlaceholderImage,
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -90,24 +43,18 @@ void main() {
   testWidgets('EnterMeasurementsStep horizontalOnly renders width inputs',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: EnterMeasurementsStep(
-              user: _proUser(),
-              effectiveIsPro: true,
-              calculationType: CalculationTypeSelection.horizontalOnly,
-              initialVerticalInputs: VerticalInputs(),
-              initialHorizontalInputs: HorizontalInputs(),
-              onBackToTileSelect: () {},
-              onCalculate: (_, __) {},
-              placeholderImageBuilder: _placeholder,
-            ),
-          ),
+      wrapCalculatorWidget(
+        EnterMeasurementsStep(
+          user: proTestUser(),
+          effectiveIsPro: true,
+          calculationType: CalculationTypeSelection.horizontalOnly,
+          initialVerticalInputs: VerticalInputs(),
+          initialHorizontalInputs: HorizontalInputs(),
+          onBackToTileSelect: () {},
+          onCalculate: (_, __) {},
+          placeholderImageBuilder: calculatorPlaceholderImage,
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -124,24 +71,18 @@ void main() {
   testWidgets('EnterMeasurementsStep combined shows vertical and horizontal options together',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: EnterMeasurementsStep(
-              user: _proUser(),
-              effectiveIsPro: true,
-              calculationType: CalculationTypeSelection.both,
-              initialVerticalInputs: VerticalInputs(),
-              initialHorizontalInputs: HorizontalInputs(),
-              onBackToTileSelect: () {},
-              onCalculate: (_, __) {},
-              placeholderImageBuilder: _placeholder,
-            ),
-          ),
+      wrapCalculatorWidget(
+        EnterMeasurementsStep(
+          user: proTestUser(),
+          effectiveIsPro: true,
+          calculationType: CalculationTypeSelection.both,
+          initialVerticalInputs: VerticalInputs(),
+          initialHorizontalInputs: HorizontalInputs(),
+          onBackToTileSelect: () {},
+          onCalculate: (_, __) {},
+          placeholderImageBuilder: calculatorPlaceholderImage,
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -162,24 +103,18 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: EnterMeasurementsStep(
-              user: _proUser(),
-              effectiveIsPro: true,
-              calculationType: CalculationTypeSelection.both,
-              initialVerticalInputs: VerticalInputs(),
-              initialHorizontalInputs: HorizontalInputs(),
-              onBackToTileSelect: () {},
-              onCalculate: (_, __) {},
-              placeholderImageBuilder: _placeholder,
-            ),
-          ),
+      wrapCalculatorWidget(
+        EnterMeasurementsStep(
+          user: proTestUser(),
+          effectiveIsPro: true,
+          calculationType: CalculationTypeSelection.both,
+          initialVerticalInputs: VerticalInputs(),
+          initialHorizontalInputs: HorizontalInputs(),
+          onBackToTileSelect: () {},
+          onCalculate: (_, __) {},
+          placeholderImageBuilder: calculatorPlaceholderImage,
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -195,29 +130,23 @@ void main() {
     CalculationTypeSelection type = CalculationTypeSelection.both;
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: StatefulBuilder(
-              builder: (context, setState) {
-                return EnterMeasurementsStep(
-                  key: ValueKey(type),
-                  user: _proUser(),
-                  effectiveIsPro: true,
-                  calculationType: type,
-                  initialVerticalInputs: VerticalInputs(),
-                  initialHorizontalInputs: HorizontalInputs(),
-                  onBackToTileSelect: () {},
-                  onCalculate: (_, __) {},
-                  placeholderImageBuilder: _placeholder,
-                );
-              },
-            ),
-          ),
+      wrapCalculatorWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            return EnterMeasurementsStep(
+              key: ValueKey(type),
+              user: proTestUser(),
+              effectiveIsPro: true,
+              calculationType: type,
+              initialVerticalInputs: VerticalInputs(),
+              initialHorizontalInputs: HorizontalInputs(),
+              onBackToTileSelect: () {},
+              onCalculate: (_, __) {},
+              placeholderImageBuilder: calculatorPlaceholderImage,
+            );
+          },
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -228,25 +157,19 @@ void main() {
 
     type = CalculationTypeSelection.verticalOnly;
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: EnterMeasurementsStep(
-              key: ValueKey(type),
-              user: _proUser(),
-              effectiveIsPro: true,
-              calculationType: type,
-              initialVerticalInputs: VerticalInputs(),
-              initialHorizontalInputs: HorizontalInputs(),
-              onBackToTileSelect: () {},
-              onCalculate: (_, __) {},
-              placeholderImageBuilder: _placeholder,
-            ),
-          ),
+      wrapCalculatorWidget(
+        EnterMeasurementsStep(
+          key: ValueKey(type),
+          user: proTestUser(),
+          effectiveIsPro: true,
+          calculationType: type,
+          initialVerticalInputs: VerticalInputs(),
+          initialHorizontalInputs: HorizontalInputs(),
+          onBackToTileSelect: () {},
+          onCalculate: (_, __) {},
+          placeholderImageBuilder: calculatorPlaceholderImage,
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 
@@ -264,27 +187,21 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TileCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              height: 640,
-              child: EnterMeasurementsStep(
-                user: _proUser(),
-                effectiveIsPro: true,
-                calculationType: CalculationTypeSelection.verticalOnly,
-                initialVerticalInputs: VerticalInputs(),
-                initialHorizontalInputs: HorizontalInputs(),
-                onBackToTileSelect: () {},
-                onCalculate: (_, __) {},
-                placeholderImageBuilder: _placeholder,
-              ),
-            ),
+      wrapCalculatorWidget(
+        SizedBox(
+          height: 640,
+          child: EnterMeasurementsStep(
+            user: proTestUser(),
+            effectiveIsPro: true,
+            calculationType: CalculationTypeSelection.verticalOnly,
+            initialVerticalInputs: VerticalInputs(),
+            initialHorizontalInputs: HorizontalInputs(),
+            onBackToTileSelect: () {},
+            onCalculate: (_, __) {},
+            placeholderImageBuilder: calculatorPlaceholderImage,
           ),
         ),
+        notifierFactory: TileCalculatorNotifier.new,
       ),
     );
 

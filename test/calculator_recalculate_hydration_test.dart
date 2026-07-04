@@ -1,22 +1,14 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 
-class _TestCalculatorNotifier extends CalculatorNotifier {
-  @override
-  CalculatorState build() => CalculatorState();
-}
+import 'support/calculator_widget_test_harness.dart';
 
 void main() {
   group('hydrateCalculatorOptionsFromInputs', () {
     test('syncs vertical and horizontal options into provider state', () {
-      final container = ProviderContainer(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-      );
+      final container = createCalculatorTestContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(calculatorProvider.notifier);
@@ -45,11 +37,7 @@ void main() {
 
   group('resetOptionsForMode', () {
     test('verticalOnly clears horizontal option fields', () {
-      final container = ProviderContainer(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-      );
+      final container = createCalculatorTestContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(calculatorProvider.notifier);
@@ -71,11 +59,7 @@ void main() {
     });
 
     test('both preserves vertical and horizontal option fields', () {
-      final container = ProviderContainer(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-      );
+      final container = createCalculatorTestContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(calculatorProvider.notifier);
@@ -103,11 +87,7 @@ void main() {
     });
 
     test('horizontalOnly clears vertical option fields', () {
-      final container = ProviderContainer(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-      );
+      final container = createCalculatorTestContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(calculatorProvider.notifier);

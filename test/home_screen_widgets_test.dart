@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/utils/app_theme.dart';
 import 'package:roofgrid_uk/theme/app_color_schemes.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
@@ -10,12 +9,6 @@ import 'package:roofgrid_uk/widgets/home_welcome_banner.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    GoogleFonts.config.allowRuntimeFetching = false;
-  });
-
   Widget themed(Widget child) {
     return MaterialApp(
       theme: AppTheme.themeFor(

@@ -1,53 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
-import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
 
-class _TestCalculatorNotifier extends CalculatorNotifier {
-  @override
-  CalculatorState build() => CalculatorState();
-}
-
-UserModel _proUser() {
-  return UserModel(
-    id: 'user-1',
-    email: 'pro@example.com',
-    role: UserRole.pro,
-    createdAt: DateTime(2026, 1, 1),
-  );
-}
-
-UserModel _freeUser() {
-  return UserModel(
-    id: 'user-2',
-    email: 'free@example.com',
-    role: UserRole.free,
-    createdAt: DateTime(2026, 1, 1),
-  );
-}
+import 'support/calculator_widget_test_harness.dart';
 
 void main() {
   testWidgets('VerticalCalculatorTab mounts without throwing', (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: VerticalCalculatorTab(
-              user: _proUser(),
-              canUseMultipleRafters: true,
-              canUseAdvancedOptions: true,
-              canExport: true,
-              canAccessDatabase: true,
-              initialInputs: VerticalInputs(),
-              onInputsChanged: (_, __) {},
-            ),
-          ),
+      wrapCalculatorWidget(
+        VerticalCalculatorTab(
+          user: proTestUser(),
+          canUseMultipleRafters: true,
+          canUseAdvancedOptions: true,
+          canExport: true,
+          canAccessDatabase: true,
+          initialInputs: VerticalInputs(),
+          onInputsChanged: (_, __) {},
         ),
       ),
     );
@@ -61,23 +30,16 @@ void main() {
   testWidgets('Add rafter button appears in section header trailing',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: VerticalCalculatorTab(
-                user: _proUser(),
-                canUseMultipleRafters: true,
-                canUseAdvancedOptions: true,
-                canExport: true,
-                canAccessDatabase: true,
-                initialInputs: VerticalInputs(),
-                onInputsChanged: (_, __) {},
-              ),
-            ),
+      wrapCalculatorWidget(
+        SingleChildScrollView(
+          child: VerticalCalculatorTab(
+            user: proTestUser(),
+            canUseMultipleRafters: true,
+            canUseAdvancedOptions: true,
+            canExport: true,
+            canAccessDatabase: true,
+            initialInputs: VerticalInputs(),
+            onInputsChanged: (_, __) {},
           ),
         ),
       ),
@@ -95,25 +57,18 @@ void main() {
   testWidgets('narrow layout stacks dry ridge and gutter overhang options',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(420, 900)),
-            child: Scaffold(
-              body: SingleChildScrollView(
-                child: VerticalCalculatorTab(
-                  user: _proUser(),
-                  canUseMultipleRafters: true,
-                  canUseAdvancedOptions: true,
-                  canExport: true,
-                  canAccessDatabase: true,
-                  initialInputs: VerticalInputs(),
-                  onInputsChanged: (_, __) {},
-                ),
-              ),
+      wrapCalculatorWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(420, 900)),
+          child: SingleChildScrollView(
+            child: VerticalCalculatorTab(
+              user: proTestUser(),
+              canUseMultipleRafters: true,
+              canUseAdvancedOptions: true,
+              canExport: true,
+              canAccessDatabase: true,
+              initialInputs: VerticalInputs(),
+              onInputsChanged: (_, __) {},
             ),
           ),
         ),
@@ -131,24 +86,17 @@ void main() {
 
   testWidgets('free users see compact pro prompt on narrow layout', (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(420, 900)),
-            child: Scaffold(
-              body: VerticalCalculatorTab(
-                user: _freeUser(),
-                canUseMultipleRafters: false,
-                canUseAdvancedOptions: false,
-                canExport: false,
-                canAccessDatabase: false,
-                initialInputs: VerticalInputs(),
-                onInputsChanged: (_, __) {},
-              ),
-            ),
+      wrapCalculatorWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(420, 900)),
+          child: VerticalCalculatorTab(
+            user: freeTestUser(),
+            canUseMultipleRafters: false,
+            canUseAdvancedOptions: false,
+            canExport: false,
+            canAccessDatabase: false,
+            initialInputs: VerticalInputs(),
+            onInputsChanged: (_, __) {},
           ),
         ),
       ),

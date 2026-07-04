@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    GoogleFonts.config.allowRuntimeFetching = false;
-  });
-
   testWidgets('BrandWordmark renders ROOFGRID text', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

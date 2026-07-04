@@ -11,15 +11,24 @@ import 'package:roofgrid_uk/models/calculator/vertical_calculation_input.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 
 class CalculationService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final Box<Map> _calculationsBox = Hive.box<Map>('calculationsBox');
+  final bool _persistenceEnabled;
+  late final FirebaseFirestore _firestore;
+  late final Box<Map> _calculationsBox;
 
-  CalculationService() {
-    // Initialize Hive box if not already opened
-    if (!_calculationsBox.isOpen) {
-      Hive.openBox<Map>('calculationsBox');
+  CalculationService({bool persistenceEnabled = true})
+      : _persistenceEnabled = persistenceEnabled {
+    if (persistenceEnabled) {
+      _firestore = FirebaseFirestore.instance;
+      _calculationsBox = Hive.box<Map>('calculationsBox');
+      if (!_calculationsBox.isOpen) {
+        Hive.openBox<Map>('calculationsBox');
+      }
     }
   }
+
+  /// Calculation-only instance for widget/unit tests (no Firestore or Hive).
+  factory CalculationService.forTesting() =>
+      CalculationService(persistenceEnabled: false);
 
   /// Calculates vertical batten gauge
   Future<VerticalCalculationResult> calculateVertical({
@@ -102,6 +111,14 @@ class CalculationService {
     };
   }
 
+  void _requirePersistence(String operation) {
+    if (!_persistenceEnabled) {
+      throw UnsupportedError(
+        '$operation requires persistence; use CalculationService() in production.',
+      );
+    }
+  }
+
   /// Saves a calculation to Firestore and Hive
   Future<void> saveCalculation({
     required String id,
@@ -113,6 +130,7 @@ class CalculationService {
     required Map<String, dynamic> tile,
     required bool success,
   }) async {
+    _requirePersistence('saveCalculation');
     final timestamp = DateTime.now();
     final calculationForFirestore = {
       'id': id,
@@ -173,6 +191,7 @@ class CalculationService {
 
   /// Syncs locally stored calculations to Firestore when online
   Future<void> syncCalculations() async {
+    _requirePersistence('syncCalculations');
     final isOnline = await isDeviceOnline();
 
     if (!isOnline) {
@@ -212,6 +231,7 @@ class CalculationService {
 
   /// Fetches all calculations for a user (for stats purposes)
   Stream<List<Map<String, dynamic>>> getCalculations(String userId) {
+    _requirePersistence('getCalculations');
     return _firestore
         .collection('calculations')
         .where('userId', isEqualTo: userId)
@@ -221,6 +241,7 @@ class CalculationService {
 
   /// Fetches all calculations (for admin stats)
   Stream<List<Map<String, dynamic>>> getAllCalculations() {
+    _requirePersistence('getAllCalculations');
     return _firestore
         .collection('calculations')
         .snapshots()
