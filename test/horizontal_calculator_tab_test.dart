@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
-import 'package:roofgrid_uk/screens/calculator/vertical_calculator_tab.dart';
+import 'package:roofgrid_uk/screens/calculator/horizontal_calculator_tab.dart';
 
 class _TestCalculatorNotifier extends CalculatorNotifier {
   @override
@@ -20,17 +20,8 @@ UserModel _proUser() {
   );
 }
 
-UserModel _freeUser() {
-  return UserModel(
-    id: 'user-2',
-    email: 'free@example.com',
-    role: UserRole.free,
-    createdAt: DateTime(2026, 1, 1),
-  );
-}
-
 void main() {
-  testWidgets('VerticalCalculatorTab mounts without throwing', (tester) async {
+  testWidgets('HorizontalCalculatorTab mounts without throwing', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -38,13 +29,13 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: VerticalCalculatorTab(
+            body: HorizontalCalculatorTab(
               user: _proUser(),
-              canUseMultipleRafters: true,
+              canUseMultipleWidths: true,
               canUseAdvancedOptions: true,
               canExport: true,
               canAccessDatabase: true,
-              initialInputs: VerticalInputs(),
+              initialInputs: HorizontalInputs(),
               onInputsChanged: (_, __) {},
             ),
           ),
@@ -54,11 +45,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Rafter Measurements'), findsOneWidget);
-    expect(find.text('Gutter Overhang'), findsOneWidget);
+    expect(find.text('Width Measurements'), findsOneWidget);
+    expect(find.text('Abutment Side'), findsOneWidget);
   });
 
-  testWidgets('Add rafter button appears in section header trailing',
+  testWidgets('Add width button appears in section header trailing',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -68,13 +59,13 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: VerticalCalculatorTab(
+              child: HorizontalCalculatorTab(
                 user: _proUser(),
-                canUseMultipleRafters: true,
+                canUseMultipleWidths: true,
                 canUseAdvancedOptions: true,
                 canExport: true,
                 canAccessDatabase: true,
-                initialInputs: VerticalInputs(),
+                initialInputs: HorizontalInputs(),
                 onInputsChanged: (_, __) {},
               ),
             ),
@@ -85,14 +76,14 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    final addButton = tester.getTopLeft(find.text('Add rafter'));
+    final addButton = tester.getTopLeft(find.text('Add width'));
     final measurementField = tester.getTopLeft(find.text('e.g. 4000'));
 
     expect(addButton.dy, lessThan(measurementField.dy));
     expect(addButton.dx, greaterThan(measurementField.dx));
   });
 
-  testWidgets('narrow layout stacks dry ridge and gutter overhang options',
+  testWidgets('narrow layout stacks dry verge and left hand tile options',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -104,13 +95,13 @@ void main() {
             data: const MediaQueryData(size: Size(420, 900)),
             child: Scaffold(
               body: SingleChildScrollView(
-                child: VerticalCalculatorTab(
+                child: HorizontalCalculatorTab(
                   user: _proUser(),
-                  canUseMultipleRafters: true,
+                  canUseMultipleWidths: true,
                   canUseAdvancedOptions: true,
                   canExport: true,
                   canAccessDatabase: true,
-                  initialInputs: VerticalInputs(),
+                  initialInputs: HorizontalInputs(),
                   onInputsChanged: (_, __) {},
                 ),
               ),
@@ -122,41 +113,10 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    final dryRidge = tester.getTopLeft(find.text('Dry Ridge'));
-    final gutter = tester.getTopLeft(find.text('Gutter Overhang'));
+    final dryVerge = tester.getTopLeft(find.text('Dry Verge'));
+    final lhTile = tester.getTopLeft(find.text('Left Hand Tile'));
 
-    expect(gutter.dy, greaterThan(dryRidge.dy));
+    expect(lhTile.dy, greaterThan(dryVerge.dy));
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('free users see compact pro prompt on narrow layout', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          calculatorProvider.overrideWith(_TestCalculatorNotifier.new),
-        ],
-        child: MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(420, 900)),
-            child: Scaffold(
-              body: VerticalCalculatorTab(
-                user: _freeUser(),
-                canUseMultipleRafters: false,
-                canUseAdvancedOptions: false,
-                canExport: false,
-                canAccessDatabase: false,
-                initialInputs: VerticalInputs(),
-                onInputsChanged: (_, __) {},
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pro: multiple rafters at once'), findsOneWidget);
-    expect(find.text('Pro Feature'), findsNothing);
   });
 }

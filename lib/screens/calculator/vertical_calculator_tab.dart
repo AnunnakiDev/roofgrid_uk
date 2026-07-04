@@ -11,6 +11,7 @@ import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/form_validator.dart';
 import 'package:roofgrid_uk/utils/calculator_input_colors.dart';
 import 'package:roofgrid_uk/utils/keyboard_scroll_utils.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_input_section.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_mm_stepper.dart';
 import 'package:roofgrid_uk/widgets/calculator/calculator_measurement_field.dart';
@@ -139,16 +140,15 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth >= 600;
-    final padding = isLargeScreen ? 16.0 : 12.0;
-    final fontSize = isLargeScreen ? 14.0 : 12.0;
+    final isNarrow = isNarrowLayout(context);
+    final padding = isNarrow ? 12.0 : 16.0;
+    final fontSize = isNarrow ? 12.0 : 14.0;
 
     final rafterValues = _rafterControllers
         .map((controller) => double.tryParse(controller.text) ?? 0)
         .toList();
 
-    final dense = !isLargeScreen;
+    final dense = isNarrow;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(0, 0, 0, dense ? 8 : padding),
@@ -185,18 +185,27 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
           CalculatorInputSection(
             title: 'Options',
             dense: dense,
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: _buildDryRidgeToggle(fontSize)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildGutterOverhangControl(fontSize)),
-                ],
-              ),
-            ),
+            child: isNarrow
+                ? Column(
+                    children: [
+                      _buildDryRidgeToggle(fontSize),
+                      const SizedBox(height: 10),
+                      _buildGutterOverhangControl(fontSize),
+                    ],
+                  )
+                : IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildDryRidgeToggle(fontSize)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildGutterOverhangControl(fontSize)),
+                      ],
+                    ),
+                  ),
           ),
-          if (!widget.canUseMultipleRafters) _buildProFeaturePrompt(fontSize),
+          if (!widget.canUseMultipleRafters)
+            _buildProFeaturePrompt(fontSize, compact: dense),
         ],
       ),
     );
@@ -334,22 +343,67 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
     return rafterInputs;
   }
 
-  Widget _buildProFeaturePrompt(double fontSize) {
+  Widget _buildProFeaturePrompt(double fontSize, {required bool compact}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.secondaryContainer.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorScheme.secondaryContainer),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.workspace_premium,
+                  size: 18,
+                  color: colorScheme.secondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Pro: multiple rafters at once',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: fontSize - 1,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.go('/subscription'),
+                  child: Text(
+                    'Upgrade',
+                    style: TextStyle(fontSize: fontSize - 2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:
-            Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+        color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
-        border:
-            Border.all(color: Theme.of(context).colorScheme.secondaryContainer),
+        border: Border.all(color: colorScheme.secondaryContainer),
       ),
       child: Row(
         children: [
           Icon(
             Icons.workspace_premium,
-            color: Theme.of(context).colorScheme.secondary,
+            color: colorScheme.secondary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -360,7 +414,7 @@ class VerticalCalculatorTabState extends ConsumerState<VerticalCalculatorTab> {
                   'Pro Feature',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.secondary,
+                    color: colorScheme.secondary,
                     fontSize: fontSize - 2,
                   ),
                 ),

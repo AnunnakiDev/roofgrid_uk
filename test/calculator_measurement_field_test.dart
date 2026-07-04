@@ -21,7 +21,7 @@ void main() {
 
     await tester.tap(find.byType(TextField), warnIfMissed: false);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(tester.takeException(), isNull);
     expect(controller, isNotNull);

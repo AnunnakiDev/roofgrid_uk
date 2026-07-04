@@ -269,7 +269,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                     controller: _scrollController,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.only(bottom: keyboardInset + 8),
+                    padding: EdgeInsets.only(bottom: keyboardInset + 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
