@@ -42,6 +42,10 @@ class UserModel {
   final DateTime createdAt;
   @HiveField(12)
   final DateTime? lastLoginAt;
+  @HiveField(13)
+  final bool labourCalculatorActive;
+  @HiveField(14)
+  final bool customerQuoteActive;
 
   const UserModel({
     required this.id,
@@ -57,6 +61,8 @@ class UserModel {
     this.subscriptionEndDate,
     required this.createdAt,
     this.lastLoginAt,
+    this.labourCalculatorActive = false,
+    this.customerQuoteActive = false,
   });
 
   UserModel.fromFirebaseUser(
@@ -70,6 +76,8 @@ class UserModel {
     String? phone,
     String? subscription,
     String? profileImage,
+    bool labourCalculatorActive = false,
+    bool customerQuoteActive = false,
   }) : this(
           id: user.uid,
           email: user.email,
@@ -84,6 +92,8 @@ class UserModel {
           subscriptionEndDate: subscriptionEndDate,
           createdAt: createdAt ?? DateTime.now(),
           lastLoginAt: lastLoginAt ?? DateTime.now(),
+          labourCalculatorActive: labourCalculatorActive,
+          customerQuoteActive: customerQuoteActive,
         );
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -123,6 +133,8 @@ class UserModel {
       lastLoginAt: data['lastLoginAt'] != null
           ? (data['lastLoginAt'] as Timestamp).toDate()
           : DateTime.now(),
+      labourCalculatorActive: data['labourCalculatorActive'] as bool? ?? false,
+      customerQuoteActive: data['customerQuoteActive'] as bool? ?? false,
     );
   }
 
@@ -140,6 +152,8 @@ class UserModel {
     DateTime? subscriptionEndDate,
     DateTime? createdAt,
     DateTime? lastLoginAt,
+    bool? labourCalculatorActive,
+    bool? customerQuoteActive,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -155,6 +169,9 @@ class UserModel {
       subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+      labourCalculatorActive:
+          labourCalculatorActive ?? this.labourCalculatorActive,
+      customerQuoteActive: customerQuoteActive ?? this.customerQuoteActive,
     );
   }
 
@@ -179,6 +196,8 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'lastLoginAt':
           lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
+      'labourCalculatorActive': labourCalculatorActive,
+      'customerQuoteActive': customerQuoteActive,
     };
   }
 
@@ -211,6 +230,9 @@ class UserModel {
       lastLoginAt: json['lastLoginAt'] != null
           ? DateTime.parse(json['lastLoginAt'] as String)
           : null,
+      labourCalculatorActive:
+          json['labourCalculatorActive'] as bool? ?? false,
+      customerQuoteActive: json['customerQuoteActive'] as bool? ?? false,
     );
   }
 

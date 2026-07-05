@@ -7,7 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
@@ -16,6 +16,7 @@ import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/auth_error_utils.dart';
 import 'package:roofgrid_uk/utils/email_link_auth_config.dart';
 import 'package:roofgrid_uk/utils/remember_me_storage.dart';
+import 'package:roofgrid_uk/utils/roofgrid_api_client.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -106,16 +107,17 @@ class AuthNotifier extends Notifier<AuthState> {
       // print("Starting login with email: $email, rememberMe: $rememberMe");
 
       if (_isRecaptchaEnabled) {
-        final callable =
-            FirebaseFunctions.instance.httpsCallable('verifyCaptcha');
-        final result = await callable.call({'token': captchaToken});
-        if (result.data['success'] != true) {
+        final response = await postAuthenticatedApi(
+          '/verifyCaptcha',
+          data: {'token': captchaToken},
+        );
+        final result = decodeApiJson(response);
+        if (result['success'] != true) {
           state = state.copyWith(
             isLoading: false,
             error:
-                'CAPTCHA verification failed: ${result.data['message'] ?? ''}',
+                'CAPTCHA verification failed: ${result['error'] ?? ''}',
           );
-          // print("CAPTCHA verification failed: ${result.data['message']}");
           return false;
         }
       } else {
@@ -153,12 +155,9 @@ class AuthNotifier extends Notifier<AuthState> {
             // print("Skipping tile initialization: User is free");
           }
         } else {
-          final role = isDesignatedAdminEmail(userCredential.user?.email)
-              ? UserRole.admin
-              : UserRole.free;
-          final newUser = UserModel.fromFirebaseUser(
+          final newUser = newUserModelForAuthUser(
             userCredential.user!,
-            role: role,
+            defaultRole: UserRole.free,
           );
           await _firestore
               .collection('users')
@@ -180,14 +179,6 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       // (removed multi-line print for login success)
       return true;
-    } on FirebaseFunctionsException catch (e) {
-      state = state.copyWith(
-        isAuthenticated: false,
-        error: 'CAPTCHA error: ${e.message} (Code: ${e.code})',
-        isLoading: false,
-      );
-      // print('FirebaseFunctionsException: ${e.code}, ${e.message}');
-      return false;
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
         isAuthenticated: false,
@@ -235,17 +226,12 @@ class AuthNotifier extends Notifier<AuthState> {
             await _firestore.collection('users').doc(uid).get();
 
         if (!existingDoc.exists) {
-          final role = isDesignatedAdminEmail(userCredential.user?.email)
-              ? UserRole.admin
-              : UserRole.pro;
           final now = DateTime.now();
-          final newUser = UserModel.fromFirebaseUser(
+          final newUser = newUserModelForAuthUser(
             userCredential.user!,
-            role: role,
-            proTrialStartDate: role == UserRole.pro ? now : null,
-            proTrialEndDate: role == UserRole.pro
-                ? now.add(const Duration(days: 14))
-                : null,
+            defaultRole: UserRole.pro,
+            proTrialStartDate: now,
+            proTrialEndDate: now.add(const Duration(days: 14)),
             createdAt: now,
             lastLoginAt: now,
           );
@@ -468,16 +454,12 @@ class AuthNotifier extends Notifier<AuthState> {
       final existingDoc = await _firestore.collection('users').doc(uid).get();
 
       if (!existingDoc.exists) {
-        final role = isDesignatedAdminEmail(user.email)
-            ? UserRole.admin
-            : UserRole.pro;
         final now = DateTime.now();
-        final newUser = UserModel.fromFirebaseUser(
+        final newUser = newUserModelForAuthUser(
           user,
-          role: role,
-          proTrialStartDate: role == UserRole.pro ? now : null,
-          proTrialEndDate:
-              role == UserRole.pro ? now.add(const Duration(days: 14)) : null,
+          defaultRole: UserRole.pro,
+          proTrialStartDate: now,
+          proTrialEndDate: now.add(const Duration(days: 14)),
           createdAt: now,
           lastLoginAt: now,
         );
@@ -635,21 +617,15 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       await userCredential.user?.updateDisplayName(displayName);
 
-      final role = isDesignatedAdminEmail(email)
-          ? UserRole.admin
-          : UserRole.pro;
       final now = DateTime.now();
-      final newUser = UserModel(
-        id: userCredential.user!.uid,
-        email: email,
-        displayName: displayName,
-        role: role,
-        proTrialStartDate: role == UserRole.pro ? now : null,
-        proTrialEndDate:
-            role == UserRole.pro ? now.add(const Duration(days: 14)) : null,
+      final newUser = newUserModelForAuthUser(
+        userCredential.user!,
+        defaultRole: UserRole.pro,
+        proTrialStartDate: now,
+        proTrialEndDate: now.add(const Duration(days: 14)),
         createdAt: now,
         lastLoginAt: now,
-      );
+      ).copyWith(displayName: displayName);
 
       await _firestore
           .collection('users')
@@ -658,7 +634,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _waitForUserDocument(userCredential.user!.uid);
       await _userBox.put(userCredential.user!.uid, newUser);
 
-      if (role == UserRole.admin || role == UserRole.pro) {
+      if (newUser.role == UserRole.admin || newUser.isPro) {
         await initializeDefaultTiles(userCredential.user!.uid);
       }
 
@@ -707,21 +683,12 @@ class AuthNotifier extends Notifier<AuthState> {
         password: password,
       );
 
-      final role = isDesignatedAdminEmail(email)
-          ? UserRole.admin
-          : UserRole.pro;
-
       final now = DateTime.now();
-      final trialStartDate = role == UserRole.pro ? now : null;
-      final trialEndDate = role == UserRole.pro
-          ? now.add(const Duration(days: 14))
-          : null;
-
-      final newUser = UserModel.fromFirebaseUser(
+      final newUser = newUserModelForAuthUser(
         userCredential.user!,
-        role: role,
-        proTrialStartDate: trialStartDate,
-        proTrialEndDate: trialEndDate,
+        defaultRole: UserRole.pro,
+        proTrialStartDate: now,
+        proTrialEndDate: now.add(const Duration(days: 14)),
         createdAt: now,
         lastLoginAt: now,
       );
@@ -735,7 +702,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _userBox.put(userCredential.user!.uid, newUser);
       // print("New user created and saved to Hive: ${newUser.id}");
 
-      if (role == UserRole.admin || role == UserRole.pro) {
+      if (newUser.role == UserRole.admin || newUser.isPro) {
         await initializeDefaultTiles(userCredential.user!.uid);
       }
 
@@ -885,8 +852,7 @@ class AuthNotifier extends Notifier<AuthState> {
         );
       } else {
         // print('Offline: Using cached tiles from Hive');
-        final tiles = _hiveService.tilesBox.values.toList();
-        // print('Loaded ${tiles.length} cached tiles from Hive');
+        // print('Loaded ${_hiveService.tilesBox.length} cached tiles from Hive');
       }
     } catch (e) {
       // print('Failed to initialize default tiles: $e');

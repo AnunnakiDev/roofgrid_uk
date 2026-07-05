@@ -7,14 +7,12 @@ import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:roofgrid_uk/utils/roofgrid_api_client.dart';
 import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
 import 'package:roofgrid_uk/widgets/settings/plan_status_card.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:convert';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
@@ -59,34 +57,15 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("User not authenticated");
-
-      // Get the user's ID token for authentication
-      final idToken = await user.getIdToken();
-
-      // Call the Cloud Function to create a Stripe Checkout session
-      final response = await http.post(
-        Uri.parse('https://api-gbtz2ngl6q-uc.a.run.app/createCheckoutSession'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: jsonEncode({
-          'data': {'plan': plan}, // 'monthly' or 'annual'
-          'context': {'uid': user.uid},
-        }),
+      final response = await postAuthenticatedApi(
+        '/createCheckoutSession',
+        data: {'plan': plan},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _launchStripeUrl(
-          data['sessionUrl'] as String?,
-          label: 'checkout',
-        );
-      } else {
-        throw Exception('Failed to create checkout session: ${response.body}');
-      }
+      final data = decodeApiJson(response);
+      await _launchStripeUrl(
+        data['sessionUrl'] as String?,
+        label: 'checkout',
+      );
     } catch (error) {
       _showError(error.toString());
     } finally {
@@ -104,36 +83,15 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("User not authenticated");
-
-      // Get the user's ID token for authentication
-      final idToken = await user.getIdToken();
-
-      // Call the Cloud Function to create a Customer Portal session
-      final response = await http.post(
-        Uri.parse(
-            'https://api-gbtz2ngl6q-uc.a.run.app/createCustomerPortalSession'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-        body: jsonEncode({
-          'data': {},
-          'context': {'uid': user.uid},
-        }),
+      final response = await postAuthenticatedApi(
+        '/createCustomerPortalSession',
+        data: {},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _launchStripeUrl(
-          data['portalUrl'] as String?,
-          label: 'customer portal',
-        );
-      } else {
-        throw Exception(
-            'Failed to create customer portal session: ${response.body}');
-      }
+      final data = decodeApiJson(response);
+      await _launchStripeUrl(
+        data['portalUrl'] as String?,
+        label: 'customer portal',
+      );
     } catch (error) {
       _showError(error.toString());
     } finally {

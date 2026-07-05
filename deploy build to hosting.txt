@@ -1,5 +1,31 @@
-cd D:\Projects\roofgrid_uk
+# RoofGrid UK — full deploy checklist
+# Run from: D:\Projects\roofgrid_uk
+
+# 1) Flutter web build
 flutter clean
 flutter pub get
+flutter test
 flutter build web --release
-firebase deploy --only hosting
+
+# 2) Firebase deploy (PowerShell — quote the --only list)
+firebase deploy --only "hosting,firestore:rules,functions"
+
+# 3) Required Cloud Functions env / secrets (Firebase console or CLI)
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET
+# STRIPE_SUCCESS_URL=https://roofgrid.uk/subscription/success
+# STRIPE_CANCEL_URL=https://roofgrid.uk/subscription/cancel
+# STRIPE_MONTHLY_PRICE_ID
+# STRIPE_ANNUAL_PRICE_ID
+# STRIPE_LABOUR_PRICE_ID
+# STRIPE_CUSTOMER_QUOTE_PRICE_ID
+# RECAPTCHA_SECRET_KEY (optional — login bypasses CAPTCHA in debug)
+
+# 4) Local emulator (functions + hosting)
+firebase emulators:start --only "functions,hosting"
+
+# 5) Point the app at the functions emulator (Android emulator host):
+# flutter run --dart-define=ROOFGRID_API_BASE=http://10.0.2.2:5002/roofgriduk-f2f56/us-central1/api
+
+# Hosting-only (quick web push):
+# firebase deploy --only hosting

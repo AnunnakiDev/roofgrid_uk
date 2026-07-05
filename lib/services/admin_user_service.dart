@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:roofgrid_uk/utils/roofgrid_api_config.dart';
 
 class AdminUserService {
-  static const apiBaseUrl = 'https://api-gbtz2ngl6q-uc.a.run.app';
+  static String get apiBaseUrl => roofgridApiBaseUrl;
 
   final FirebaseAuth _auth;
 

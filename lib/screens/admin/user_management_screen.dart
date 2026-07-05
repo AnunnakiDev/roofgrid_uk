@@ -2,8 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/services/admin_user_service.dart';
+import 'package:roofgrid_uk/services/hive_service.dart';
+import 'package:roofgrid_uk/utils/admin_analytics_utils.dart';
 import 'package:roofgrid_uk/utils/admin_user_guards.dart';
 import 'package:roofgrid_uk/widgets/custom_expansion_tile.dart';
 import 'package:roofgrid_uk/navigation/home_back_button.dart';
@@ -58,12 +61,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
       // Filter users with expiring subscriptions (within 30 days)
       final now = DateTime.now();
-      _expiringUsers = _users.where((user) {
-        if (user.subscriptionEndDate == null) return false;
-        final daysUntilExpiry =
-            user.subscriptionEndDate!.difference(now).inDays;
-        return user.isPro && daysUntilExpiry <= 30 && daysUntilExpiry >= 0;
-      }).toList();
+      _expiringUsers =
+          _users.where((user) => isMembershipExpiringSoon(user, now)).toList();
 
       // Initialize filtered users
       _filteredUsers = List.from(_users);
@@ -96,11 +95,12 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
   Future<int> _fetchCalculationCount(String userId) async {
     try {
-      final calculationsSnapshot = await FirebaseFirestore.instance
-          .collection('calculations')
-          .where('userId', isEqualTo: userId)
+      final savedResultsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('saved_results')
           .get();
-      return calculationsSnapshot.docs.length;
+      return savedResultsSnapshot.docs.length;
     } catch (e) {
       return 0;
     }
@@ -140,6 +140,80 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating user status: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleCustomerQuote(UserModel user) async {
+    final nextValue = !user.customerQuoteActive;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
+        'customerQuoteActive': nextValue,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == user.id) {
+        final userBox = await HiveService.ensureUserBox();
+        final cached = userBox.get(user.id);
+        if (cached != null) {
+          await userBox.put(
+            user.id,
+            cached.copyWith(customerQuoteActive: nextValue),
+          );
+        }
+      }
+      await _fetchUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            nextValue
+                ? 'Customer quote add-on enabled'
+                : 'Customer quote add-on disabled',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating customer quote add-on: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleLabourCalculator(UserModel user) async {
+    final nextValue = !user.labourCalculatorActive;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
+        'labourCalculatorActive': nextValue,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == user.id) {
+        final userBox = await HiveService.ensureUserBox();
+        final cached = userBox.get(user.id);
+        if (cached != null) {
+          await userBox.put(
+            user.id,
+            cached.copyWith(labourCalculatorActive: nextValue),
+          );
+        }
+      }
+      await _fetchUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            nextValue
+                ? 'Labour calculator add-on enabled'
+                : 'Labour calculator add-on disabled',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating labour add-on: $e')),
       );
     }
   }
@@ -627,6 +701,34 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                   tooltip: user.isPro ? 'Downgrade to Free' : 'Upgrade to Pro',
                 ),
                 IconButton(
+                  icon: Icon(
+                    user.labourCalculatorActive
+                        ? Icons.calculate
+                        : Icons.calculate_outlined,
+                    color: user.labourCalculatorActive
+                        ? Theme.of(context).colorScheme.secondary
+                        : Colors.grey,
+                  ),
+                  onPressed: () => _toggleLabourCalculator(user),
+                  tooltip: user.labourCalculatorActive
+                      ? 'Disable labour calculator'
+                      : 'Enable labour calculator',
+                ),
+                IconButton(
+                  icon: Icon(
+                    user.customerQuoteActive
+                        ? Icons.description
+                        : Icons.description_outlined,
+                    color: user.customerQuoteActive
+                        ? Theme.of(context).colorScheme.tertiary
+                        : Colors.grey,
+                  ),
+                  onPressed: () => _toggleCustomerQuote(user),
+                  tooltip: user.customerQuoteActive
+                      ? 'Disable customer quote'
+                      : 'Enable customer quote',
+                ),
+                IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () => _confirmDeleteUser(user),
                   tooltip: 'Delete User',
@@ -646,6 +748,14 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       : user.isTrialActive
                           ? 'Trial'
                           : 'Free'),
+              _infoRow(
+                'Labour Calculator',
+                user.labourCalculatorActive ? 'Active' : 'Not active',
+              ),
+              _infoRow(
+                'Customer Quote',
+                user.customerQuoteActive ? 'Active' : 'Not active',
+              ),
               if (user.isTrialActive)
                 _infoRow(
                     'Trial Start',

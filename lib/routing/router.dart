@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/models/labour_calculator_route_args.dart';
+import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_project.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/navigation/app_shell.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
@@ -35,6 +38,14 @@ import '../screens/support/contact_screen.dart' deferred as support_contact;
 import '../screens/support/faq_screen.dart' deferred as support_faq;
 import '../screens/support/legal_screen.dart' deferred as support_legal;
 import '../screens/tile_management_screen.dart' deferred as tile_management;
+import '../screens/labour/labour_pricing_calculator_screen.dart'
+    deferred as labour_calculator;
+import '../screens/labour/labour_pricing_upsell_screen.dart'
+    deferred as labour_upsell;
+import '../screens/labour/customer_quote_upsell_screen.dart'
+    deferred as customer_quote_upsell;
+import '../screens/labour/customer_quote_preview_screen.dart'
+    deferred as customer_quote_preview;
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   ref.keepAlive();
@@ -66,12 +77,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final devMode = ref.read(developerModeProvider);
       final effectiveIsPro = resolveEffectiveIsPro(currentUser, devMode);
       final isAuthenticated = ref.read(authProvider).isAuthenticated;
+      final permissions = ref.read(permissionsProvider);
+      final canAccessLabour =
+          permissions.canAccessLabourCalculator(currentUser);
+      final canAccessCustomerQuote =
+          permissions.canAccessCustomerQuote(currentUser);
 
       return resolveAppRedirect(
         location: location,
         isAuthenticated: isAuthenticated,
         effectiveIsPro: effectiveIsPro,
         currentUser: currentUser,
+        canAccessLabourCalculator: canAccessLabour,
+        canAccessCustomerQuote: canAccessCustomerQuote,
       );
     },
     routes: [
@@ -148,8 +166,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) {
-          final tab =
-              int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+          final tab = resolveProfileTabIndex(
+            state.uri.queryParameters['tab'],
+          );
           return DeferredScreen(
             loadLibrary: profile.loadLibrary,
             builder: () => profile.ProfileScreen(initialTabIndex: tab),
@@ -274,6 +293,67 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
         ),
       ),
+      GoRoute(
+        path: labourCalculatorPath,
+        builder: (context, state) => DeferredScreen(
+          loadLibrary: labour_calculator.loadLibrary,
+          builder: () {
+            final extra = state.extra;
+            if (extra is LabourCalculatorRouteArgs) {
+              return labour_calculator.LabourPricingCalculatorScreen(
+                importJobId:
+                    extra.importJobId ?? state.uri.queryParameters['jobId'],
+                initialProject: extra.initialProject,
+                initialQuoteConfig: extra.initialQuoteConfig,
+                onQuoteSaved: extra.onQuoteSaved,
+              );
+            }
+            return labour_calculator.LabourPricingCalculatorScreen(
+              importJobId: state.uri.queryParameters['jobId'],
+              initialProject:
+                  extra is LabourQuoteProject ? extra : null,
+            );
+          },
+        ),
+        routes: [
+          GoRoute(
+            path: 'upsell',
+            builder: (context, state) => DeferredScreen(
+              loadLibrary: labour_upsell.loadLibrary,
+              builder: () => labour_upsell.LabourPricingUpsellScreen(),
+            ),
+          ),
+          GoRoute(
+            path: 'customer-quote',
+            redirect: (context, state) {
+              final path = state.uri.path;
+              if (path.endsWith('/customer-quote') ||
+                  path.endsWith('/customer-quote/')) {
+                return customerQuotePreviewPath;
+              }
+              return null;
+            },
+            routes: [
+              GoRoute(
+                path: 'upsell',
+                builder: (context, state) => DeferredScreen(
+                  loadLibrary: customer_quote_upsell.loadLibrary,
+                  builder: () =>
+                      customer_quote_upsell.CustomerQuoteUpsellScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'preview',
+                builder: (context, state) => DeferredScreen(
+                  loadLibrary: customer_quote_preview.loadLibrary,
+                  builder: () =>
+                      customer_quote_preview.CustomerQuotePreviewScreen(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
@@ -285,6 +365,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   ref.listen(authProvider, (_, __) => scheduleRefresh());
   ref.listen(currentUserProvider, (_, __) => scheduleRefresh());
   ref.listen(developerModeProvider, (_, __) => scheduleRefresh());
+  ref.listen(canAccessLabourCalculatorProvider, (_, __) => scheduleRefresh());
+  ref.listen(canAccessCustomerQuoteProvider, (_, __) => scheduleRefresh());
   ref.onDispose(router.dispose);
 
   return router;

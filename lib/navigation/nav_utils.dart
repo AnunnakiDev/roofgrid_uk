@@ -6,11 +6,6 @@ import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 
 import 'package:roofgrid_uk/widgets/admin_access_guard.dart';
 
-/// Hide the shell bottom nav during the calculator wizard flow.
-bool hideShellNavForLocation(String location) {
-  return location.startsWith('/calculator');
-}
-
 /// Maps a location to the main shell tab index (0–3).
 int shellTabIndexFromLocation(String location) {
   if (location.startsWith('/calculator')) return 1;
@@ -21,8 +16,29 @@ int shellTabIndexFromLocation(String location) {
 
 const _proGatedPaths = ['/results', '/tiles'];
 
+const labourCalculatorPath = '/labour-calculator';
+const labourCalculatorUpsellPath = '/labour-calculator/upsell';
+const customerQuoteUpsellPath = '/labour-calculator/customer-quote/upsell';
+const customerQuotePreviewPath = '/labour-calculator/customer-quote/preview';
+
+/// Resolves profile tab index from route query (`tab=3` or `tab=labour-rates`).
+int resolveProfileTabIndex(String? tabParam) {
+  if (tabParam == 'labour-rates') return 3;
+  return int.tryParse(tabParam ?? '0') ?? 0;
+}
+
 bool isProGatedShellPath(String location) {
   return _proGatedPaths.any((path) => location.startsWith(path));
+}
+
+bool isLabourCalculatorPath(String location) {
+  return location == labourCalculatorPath ||
+      location.startsWith('$labourCalculatorPath/');
+}
+
+bool isCustomerQuotePath(String location) {
+  return location == customerQuotePreviewPath ||
+      location == customerQuoteUpsellPath;
 }
 
 /// Pure redirect resolver used by [goRouterProvider] and tests.
@@ -31,6 +47,8 @@ String? resolveAppRedirect({
   required bool isAuthenticated,
   required bool effectiveIsPro,
   UserModel? currentUser,
+  bool canAccessLabourCalculator = false,
+  bool canAccessCustomerQuote = false,
 }) {
   final isSplash = location == '/splash';
   final isAuthRoute = location.startsWith('/auth');
@@ -64,7 +82,61 @@ String? resolveAppRedirect({
     return '/subscription';
   }
 
+  if (isAuthenticated && location == labourCalculatorPath) {
+    if (!canAccessLabourCalculator) {
+      return labourCalculatorUpsellPath;
+    }
+  }
+
+  if (isAuthenticated && location == labourCalculatorUpsellPath) {
+    if (canAccessLabourCalculator) {
+      return labourCalculatorPath;
+    }
+  }
+
+  if (isAuthenticated && location == customerQuotePreviewPath) {
+    if (!canAccessLabourCalculator) {
+      return labourCalculatorUpsellPath;
+    }
+    if (!canAccessCustomerQuote) {
+      return customerQuoteUpsellPath;
+    }
+  }
+
+  if (isAuthenticated && location == customerQuoteUpsellPath) {
+    if (!canAccessLabourCalculator) {
+      return labourCalculatorUpsellPath;
+    }
+    if (canAccessCustomerQuote) {
+      return customerQuotePreviewPath;
+    }
+  }
+
   return null;
+}
+
+void showCustomerQuoteGateSnackBar(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Customer Quote add-on required'),
+    ),
+  );
+}
+
+void navigateToCustomerQuotePreview(BuildContext context) {
+  context.go(customerQuotePreviewPath);
+}
+
+void showLabourGateSnackBar(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Labour Pricing Calculator add-on required'),
+    ),
+  );
+}
+
+void navigateToLabourCalculator(BuildContext context) {
+  context.go(labourCalculatorPath);
 }
 
 void showProGateSnackBar(BuildContext context) {

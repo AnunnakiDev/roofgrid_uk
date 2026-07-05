@@ -12,6 +12,7 @@ import 'package:roofgrid_uk/firebase_options.dart';
 import 'package:roofgrid_uk/models/tile_model.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/theme_provider.dart';
+import 'package:roofgrid_uk/widgets/session_sync_listener.dart';
 import 'package:roofgrid_uk/widgets/user_theme_sync_listener.dart';
 import 'package:roofgrid_uk/routing/router.dart';
 import 'package:roofgrid_uk/services/email_link_handler.dart';
@@ -76,16 +77,18 @@ class MyApp extends ConsumerWidget {
     }
 
     return emailLinkInitializer.when(
-      data: (_) => UserThemeSyncListener(
-        child: MaterialApp.router(
-          title: 'RoofGrid UK',
-          theme: themeState.themeFor(Brightness.light),
-          darkTheme: themeState.themeFor(Brightness.dark),
-          themeMode: themeState.themeMode,
-          themeAnimationDuration: Duration.zero,
-          themeAnimationCurve: Curves.linear,
-          routerConfig: ref.read(goRouterProvider),
-          debugShowCheckedModeBanner: false,
+      data: (_) => SessionSyncListener(
+        child: UserThemeSyncListener(
+          child: MaterialApp.router(
+            title: 'RoofGrid UK',
+            theme: themeState.themeFor(Brightness.light),
+            darkTheme: themeState.themeFor(Brightness.dark),
+            themeMode: themeState.themeMode,
+            themeAnimationDuration: Duration.zero,
+            themeAnimationCurve: Curves.linear,
+            routerConfig: ref.read(goRouterProvider),
+            debugShowCheckedModeBanner: false,
+          ),
         ),
       ),
       loading: () => const MaterialApp(
@@ -95,14 +98,16 @@ class MyApp extends ConsumerWidget {
       ),
       error: (error, stack) {
         debugPrint('Email link handler initialization error: $error');
-        return UserThemeSyncListener(
-          child: MaterialApp.router(
-            title: 'RoofGrid UK',
-            theme: themeState.themeFor(Brightness.light),
-            darkTheme: themeState.themeFor(Brightness.dark),
-            themeMode: themeState.themeMode,
-            routerConfig: ref.read(goRouterProvider),
-            debugShowCheckedModeBanner: false,
+        return SessionSyncListener(
+          child: UserThemeSyncListener(
+            child: MaterialApp.router(
+              title: 'RoofGrid UK',
+              theme: themeState.themeFor(Brightness.light),
+              darkTheme: themeState.themeFor(Brightness.dark),
+              themeMode: themeState.themeMode,
+              routerConfig: ref.read(goRouterProvider),
+              debugShowCheckedModeBanner: false,
+            ),
           ),
         );
       },

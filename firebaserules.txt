@@ -6,10 +6,17 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == null;
     }
 
-    // Users collection: Authenticated users can read their own data, admins can read all, write if authenticated
+    // Users collection: owners read self; admins read all.
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && isSafeUserCreate();
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (request.auth.uid == userId && (userSelfUpdateAllowed() || isProTrialSelfUpgrade()))
+      );
+      allow delete: if isAdmin();
 
       // Subcollection tiles: owners read/write when Pro; admins read/write all
       match /tiles/{tileId} {
@@ -46,10 +53,15 @@ service cloud.firestore {
       allow read: if request.auth != null && isAdmin();
     }
 
+    // Collection group query for saved_results (admin analytics)
+    match /{path=**}/saved_results/{resultId} {
+      allow read: if request.auth != null && isAdmin();
+    }
+
     // Rules for sessions and calculations collections
     match /sessions/{sessionId} {
       allow read: if request.auth != null && isAdmin();
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == sessionId;
     }
 
     match /calculations/{calculationId} {
@@ -93,6 +105,48 @@ service cloud.firestore {
           userDoc().data.role == 'admin'
         ))
       );
+    }
+
+    function privilegedUserFields() {
+      return [
+        'role',
+        'labourCalculatorActive',
+        'customerQuoteActive',
+        'stripeCustomerId',
+        'subscriptionId',
+        'subscriptionPlan',
+        'subscriptionStatus',
+        'subscriptionEndDate',
+        'labourSubscriptionId',
+        'labourSubscriptionPlan',
+        'labourSubscriptionStatus',
+        'labourSubscriptionEndDate',
+        'customerQuoteSubscriptionId',
+        'customerQuoteSubscriptionPlan',
+        'customerQuoteSubscriptionStatus',
+        'customerQuoteSubscriptionEndDate',
+      ];
+    }
+
+    function isSafeUserCreate() {
+      return request.resource.data.role == 'free'
+        && request.resource.data.labourCalculatorActive != true
+        && request.resource.data.customerQuoteActive != true;
+    }
+
+    function userSelfUpdateAllowed() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(privilegedUserFields());
+    }
+
+    // One-time self-serve Pro trial start from the client upgrade flow.
+    function isProTrialSelfUpgrade() {
+      return resource.data.role == 'free'
+        && request.resource.data.role == 'pro'
+        && request.resource.data.proTrialStartDate is timestamp
+        && request.resource.data.proTrialEndDate is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['role', 'proTrialStartDate', 'proTrialEndDate', 'lastUpdated']);
     }
   }
 }

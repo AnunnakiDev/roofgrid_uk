@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/theme/app_color_schemes.dart';
@@ -17,6 +19,7 @@ class MainDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(currentUserProvider);
     final effectiveIsPro = ref.watch(effectiveIsProProvider);
+    final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Drawer(
@@ -97,6 +100,32 @@ class MainDrawer extends ConsumerWidget {
                 Navigator.pop(context);
               },
             ),
+          ExpansionTile(
+            leading: Icon(
+              Icons.handyman_outlined,
+              color: colorScheme.secondary,
+            ),
+            iconColor: colorScheme.secondary,
+            collapsedIconColor: colorScheme.onSurfaceVariant,
+            title: Text(
+              'Tools',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            ),
+            children: [
+              _DrawerSubTile(
+                title: canAccessLabour
+                    ? 'Labour Pricing'
+                    : 'Labour Pricing (Add-on)',
+                onTap: () {
+                  if (!canAccessLabour) {
+                    showLabourGateSnackBar(context);
+                  }
+                  navigateToLabourCalculator(context);
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
           ExpansionTile(
             leading: Icon(
               Icons.support_agent_outlined,

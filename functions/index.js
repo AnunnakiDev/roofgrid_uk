@@ -4,24 +4,36 @@ const axios = require("axios");
 const admin = require("firebase-admin");
 require("dotenv").config(); // Load .env file for local testing
 
-// Log environment variables for debugging
-functions.logger.info("Environment variables:", {
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-  STRIPE_SUCCESS_URL: process.env.STRIPE_SUCCESS_URL,
-  STRIPE_CANCEL_URL: process.env.STRIPE_CANCEL_URL,
-});
-
-// Use environment variables directly (required for 2nd Gen functions)
+// Use environment variables (Firebase Secrets / Cloud Run env in production).
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "missing-stripe-secret-key";
 const successUrl = process.env.STRIPE_SUCCESS_URL || "https://example.com/success";
 const cancelUrl = process.env.STRIPE_CANCEL_URL || "https://example.com/cancel";
+const monthlyPriceId =
+  process.env.STRIPE_MONTHLY_PRICE_ID || "price_1RFcoEKk8BWeRfXO6ixJCKBG";
+const annualPriceId =
+  process.env.STRIPE_ANNUAL_PRICE_ID || "price_1RFcogKk8BWeRfXOzcS7rDva";
+const labourPriceId =
+  process.env.STRIPE_LABOUR_PRICE_ID || "price_labour_addon_placeholder";
+const customerQuotePriceId =
+  process.env.STRIPE_CUSTOMER_QUOTE_PRICE_ID ||
+  "price_customer_quote_addon_placeholder";
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+const recaptchaSecretKey = process.env.RECAPTCHA_SECRET_KEY || "";
+
+functions.logger.info("Stripe config loaded", {
+  hasStripeSecret: stripeSecretKey !== "missing-stripe-secret-key",
+  hasWebhookSecret: webhookSecret.length > 0,
+  hasLabourPriceId: !labourPriceId.includes("placeholder"),
+  hasCustomerQuotePriceId: !customerQuotePriceId.includes("placeholder"),
+});
 
 if (stripeSecretKey === "missing-stripe-secret-key") {
   functions.logger.error("Stripe secret key is not set. Please set STRIPE_SECRET_KEY environment variable");
 }
 
+let stripe;
 try {
-  const stripe = require("stripe")(stripeSecretKey);
+  stripe = require("stripe")(stripeSecretKey);
   functions.logger.info("Stripe initialized successfully");
 } catch (error) {
   functions.logger.error("Failed to initialize Stripe:", error);
@@ -39,8 +51,6 @@ try {
 
 // Set up Express app
 const app = express();
-app.use(express.json());
-app.use(express.raw({ type: "application/json" })); // For webhook raw body parsing
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -48,13 +58,155 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+// Stripe webhook must receive the raw body for signature verification.
+app.post(
+  "/stripeWebhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      functions.logger.info("stripeWebhook invoked");
+      if (!webhookSecret) {
+        functions.logger.error("STRIPE_WEBHOOK_SECRET is not configured");
+        return res.status(503).send("Webhook secret not configured");
+      }
+
+      const sig = req.headers["stripe-signature"];
+      let event;
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      } catch (error) {
+        functions.logger.error(
+          "Webhook signature verification failed:",
+          error.message,
+        );
+        return res.status(400).send(`Webhook Error: ${error.message}`);
+      }
+
+      const userRef = admin.firestore().collection("users");
+
+      switch (event.type) {
+        case "customer.subscription.created":
+        case "customer.subscription.updated": {
+          const subscription = event.data.object;
+          const userId = subscription.metadata.firebaseUserId;
+          const plan = subscription.metadata.plan;
+          const product = subscription.metadata.product || plan;
+          const subscriptionId = subscription.id;
+          const subscriptionStatus = subscription.status;
+          const subscriptionEndDate = new Date(
+            subscription.current_period_end * 1000,
+          );
+
+          if (product === "labour" || plan === "labour") {
+            await userRef.doc(userId).update({
+              labourCalculatorActive: subscriptionStatus === "active",
+              labourSubscriptionId: subscriptionId,
+              labourSubscriptionPlan: plan,
+              labourSubscriptionStatus: subscriptionStatus,
+              labourSubscriptionEndDate: subscriptionEndDate,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Updated labour add-on for user ${userId}: ${subscriptionStatus}`,
+            );
+          } else if (product === "customerQuote" || plan === "customerQuote") {
+            await userRef.doc(userId).update({
+              customerQuoteActive: subscriptionStatus === "active",
+              customerQuoteSubscriptionId: subscriptionId,
+              customerQuoteSubscriptionPlan: plan,
+              customerQuoteSubscriptionStatus: subscriptionStatus,
+              customerQuoteSubscriptionEndDate: subscriptionEndDate,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Updated customer quote add-on for user ${userId}: ${subscriptionStatus}`,
+            );
+          } else {
+            await userRef.doc(userId).update({
+              subscriptionId: subscriptionId,
+              subscriptionPlan: plan,
+              subscriptionStatus: subscriptionStatus,
+              subscriptionEndDate: subscriptionEndDate,
+              role: "pro",
+              proTrialStartDate: null,
+              proTrialEndDate: null,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Updated subscription for user ${userId}: ${subscriptionStatus}`,
+            );
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const deletedSubscription = event.data.object;
+          const deletedUserId = deletedSubscription.metadata.firebaseUserId;
+          const deletedProduct =
+            deletedSubscription.metadata.product ||
+            deletedSubscription.metadata.plan;
+
+          if (deletedProduct === "labour") {
+            await userRef.doc(deletedUserId).update({
+              labourCalculatorActive: false,
+              labourSubscriptionId: null,
+              labourSubscriptionPlan: null,
+              labourSubscriptionStatus: "cancelled",
+              labourSubscriptionEndDate: null,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Cancelled labour add-on for user ${deletedUserId}`,
+            );
+          } else if (deletedProduct === "customerQuote") {
+            await userRef.doc(deletedUserId).update({
+              customerQuoteActive: false,
+              customerQuoteSubscriptionId: null,
+              customerQuoteSubscriptionPlan: null,
+              customerQuoteSubscriptionStatus: "cancelled",
+              customerQuoteSubscriptionEndDate: null,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Cancelled customer quote add-on for user ${deletedUserId}`,
+            );
+          } else {
+            await userRef.doc(deletedUserId).update({
+              subscriptionId: null,
+              subscriptionPlan: null,
+              subscriptionStatus: "cancelled",
+              subscriptionEndDate: null,
+              role: "free",
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            functions.logger.info(
+              `Cancelled subscription for user ${deletedUserId}`,
+            );
+          }
+          break;
+        }
+
+        default:
+          functions.logger.info(`Unhandled event type: ${event.type}`);
+      }
+
+      return res.status(200).send("Webhook received");
+    } catch (error) {
+      functions.logger.error("Error in stripeWebhook:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.use(express.json());
+
 const DESIGNATED_ADMIN_EMAILS = new Set([
   "support@roofgrid.uk",
   "hgwarner1307@gmail.com",
 ]);
 
-// Verify Bearer ID token and ensure caller is an admin.
-const verifyAdminFromRequest = async (req) => {
+// Verify Bearer ID token for any authenticated user.
+const verifyAuthFromRequest = async (req) => {
   const authHeader = req.headers.authorization || "";
   const match = authHeader.match(/^Bearer (.+)$/i);
   if (!match) {
@@ -63,7 +215,12 @@ const verifyAdminFromRequest = async (req) => {
     throw error;
   }
 
-  const decoded = await admin.auth().verifyIdToken(match[1]);
+  return admin.auth().verifyIdToken(match[1]);
+};
+
+// Verify Bearer ID token and ensure caller is an admin.
+const verifyAdminFromRequest = async (req) => {
+  const decoded = await verifyAuthFromRequest(req);
   const callerDoc = await admin
     .firestore()
     .collection("users")
@@ -113,23 +270,20 @@ const getUserDoc = async (userId) => {
   }
 };
 
-// Verify reCAPTCHA (callable function)
+// Verify reCAPTCHA (HTTP endpoint — matches Flutter API client pattern)
 app.post("/verifyCaptcha", async (req, res) => {
   try {
-    const data = req.body.data;
-    const context = { auth: req.body.context }; // Simplified context for testing
-
-    functions.logger.info("verifyCaptcha invoked", { data, context });
-    if (!context.auth) {
-      functions.logger.warn("Unauthenticated request", { context });
-      return res.status(403).json({ error: "User must be authenticated" });
-    }
-    const { token } = data;
+    await verifyAuthFromRequest(req);
+    const data = req.body.data || req.body;
+    const token = data?.token;
     if (!token) {
       functions.logger.error("No token provided");
       return res.status(400).json({ error: "No CAPTCHA token provided" });
     }
-    const secretKey = "6Lc5GhsrAAAAACu-qlnWXbvQ26_ZyZqAY4s-xBvr"; // Replace with your secret key
+    if (!recaptchaSecretKey) {
+      return res.status(503).json({ error: "reCAPTCHA is not configured" });
+    }
+    const secretKey = recaptchaSecretKey;
 
     functions.logger.info("Sending request to reCAPTCHA API", { token });
     const response = await axios.post(
@@ -161,33 +315,50 @@ app.post("/verifyCaptcha", async (req, res) => {
   }
 });
 
-// Create a Stripe Checkout session (callable function)
+// Create a Stripe Checkout session
 app.post("/createCheckoutSession", async (req, res) => {
   try {
-    const data = req.body.data;
-    const context = { auth: req.body.context }; // Simplified context for testing
+    const decoded = await verifyAuthFromRequest(req);
+    const data = req.body.data || req.body;
+    const userId = decoded.uid;
+    const plan = data?.plan; // "monthly", "annual", "labour", or "customerQuote"
 
-    functions.logger.info("createCheckoutSession invoked", { data, context });
-    if (!context.auth) {
-      return res.status(403).json({ error: "User must be authenticated" });
-    }
-
-    const userId = context.auth.uid;
-    const plan = data.plan; // "monthly" or "annual"
+    functions.logger.info("createCheckoutSession invoked", { userId, plan });
 
     // Validate plan
-    if (!["monthly", "annual"].includes(plan)) {
+    if (!["monthly", "annual", "labour", "customerQuote"].includes(plan)) {
       return res.status(400).json({ error: "Invalid plan type" });
     }
 
-    // Get user document to check if they already have a Stripe customer ID
     const userDoc = await getUserDoc(userId);
-    let stripeCustomerId = userDoc.data().stripeCustomerId;
+    const userData = userDoc.data();
+
+    if (plan === "customerQuote") {
+      const hasLabour =
+        userData.labourCalculatorActive === true || userData.role === "admin";
+      if (!hasLabour) {
+        return res.status(403).json({
+          error: "Labour calculator add-on required before customer quote",
+        });
+      }
+      if (customerQuotePriceId.includes("placeholder")) {
+        return res.status(503).json({
+          error: "Customer quote checkout is not configured (missing price ID)",
+        });
+      }
+    }
+
+    if (plan === "labour" && labourPriceId.includes("placeholder")) {
+      return res.status(503).json({
+        error: "Labour checkout is not configured (missing price ID)",
+      });
+    }
+    let stripeCustomerId = userData.stripeCustomerId;
 
     // Create a new Stripe customer if one doesn't exist
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
-        email: userDoc.data().email,
+        email: userData.email,
         metadata: { firebaseUserId: userId },
       });
       stripeCustomerId = customer.id;
@@ -199,11 +370,20 @@ app.post("/createCheckoutSession", async (req, res) => {
       });
     }
 
-    // Define price IDs
-    const priceId =
-      plan === "monthly"
-        ? "price_1RFcoEKk8BWeRfXO6ixJCKBG" // Monthly price ID
-        : "price_1RFcogKk8BWeRfXOzcS7rDva"; // Annual price ID
+    const isLabourPlan = plan === "labour";
+    const isCustomerQuotePlan = plan === "customerQuote";
+    const priceId = isLabourPlan
+      ? labourPriceId
+      : isCustomerQuotePlan
+        ? customerQuotePriceId
+        : plan === "monthly"
+          ? monthlyPriceId
+          : annualPriceId;
+    const product = isLabourPlan
+      ? "labour"
+      : isCustomerQuotePlan
+        ? "customerQuote"
+        : "setout";
 
     // Create a Checkout session
     const session = await stripe.checkout.sessions.create({
@@ -221,6 +401,14 @@ app.post("/createCheckoutSession", async (req, res) => {
       metadata: {
         firebaseUserId: userId,
         plan: plan,
+        product: product,
+      },
+      subscription_data: {
+        metadata: {
+          firebaseUserId: userId,
+          plan: plan,
+          product: product,
+        },
       },
     });
 
@@ -231,18 +419,13 @@ app.post("/createCheckoutSession", async (req, res) => {
   }
 });
 
-// Create a Stripe Customer Portal session (callable function)
+// Create a Stripe Customer Portal session
 app.post("/createCustomerPortalSession", async (req, res) => {
   try {
-    const data = req.body.data;
-    const context = { auth: req.body.context }; // Simplified context for testing
+    const decoded = await verifyAuthFromRequest(req);
+    const userId = decoded.uid;
 
-    functions.logger.info("createCustomerPortalSession invoked", { data, context });
-    if (!context.auth) {
-      return res.status(403).json({ error: "User must be authenticated" });
-    }
-
-    const userId = context.auth.uid;
+    functions.logger.info("createCustomerPortalSession invoked", { userId });
 
     const userDoc = await getUserDoc(userId);
     const stripeCustomerId = userDoc.data().stripeCustomerId;
@@ -347,72 +530,6 @@ app.post("/adminCreateUser", async (req, res) => {
     functions.logger.error("Error in adminCreateUser:", error);
     const status = error.statusCode || 500;
     return res.status(status).json({ error: error.message || "Create failed" });
-  }
-});
-
-// Route for stripeWebhook
-app.post("/stripeWebhook", async (req, res) => {
-  try {
-    functions.logger.info("stripeWebhook invoked");
-    const sig = req.headers["stripe-signature"];
-    const webhookSecret = "whsec_P5HlOZcsttV1n7XDMPway8gq9UDaRP1V"; // Stripe webhook secret
-
-    let event;
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (error) {
-      functions.logger.error("Webhook signature verification failed:", error.message);
-      return res.status(400).send(`Webhook Error: ${error.message}`);
-    }
-
-    const userRef = admin.firestore().collection("users");
-
-    switch (event.type) {
-      case "customer.subscription.created":
-      case "customer.subscription.updated":
-        const subscription = event.data.object;
-        const userId = subscription.metadata.firebaseUserId;
-        const plan = subscription.metadata.plan;
-        const subscriptionId = subscription.id;
-        const subscriptionStatus = subscription.status;
-        const subscriptionEndDate = new Date(subscription.current_period_end * 1000);
-
-        await userRef.doc(userId).update({
-          subscriptionId: subscriptionId,
-          subscriptionPlan: plan,
-          subscriptionStatus: subscriptionStatus,
-          subscriptionEndDate: subscriptionEndDate,
-          role: "pro",
-          proTrialStartDate: null,
-          proTrialEndDate: null,
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        functions.logger.info(`Updated subscription for user ${userId}: ${subscriptionStatus}`);
-        break;
-
-      case "customer.subscription.deleted":
-        const deletedSubscription = event.data.object;
-        const deletedUserId = deletedSubscription.metadata.firebaseUserId;
-
-        await userRef.doc(deletedUserId).update({
-          subscriptionId: null,
-          subscriptionPlan: null,
-          subscriptionStatus: "cancelled",
-          subscriptionEndDate: null,
-          role: "free",
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        functions.logger.info(`Cancelled subscription for user ${deletedUserId}`);
-        break;
-
-      default:
-        functions.logger.info(`Unhandled event type: ${event.type}`);
-    }
-
-    return res.status(200).send("Webhook received");
-  } catch (error) {
-    functions.logger.error("Error in stripeWebhook:", error);
-    return res.status(500).json({ error: error.message });
   }
 });
 

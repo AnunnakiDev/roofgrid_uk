@@ -4,19 +4,6 @@ import 'package:roofgrid_uk/navigation/nav_items.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 
 void main() {
-  group('hideShellNavForLocation', () {
-    test('hides nav on calculator routes', () {
-      expect(hideShellNavForLocation('/calculator'), isTrue);
-      expect(hideShellNavForLocation('/calculator/tile-select'), isTrue);
-    });
-
-    test('shows nav on non-calculator routes', () {
-      expect(hideShellNavForLocation('/home'), isFalse);
-      expect(hideShellNavForLocation('/results'), isFalse);
-      expect(hideShellNavForLocation('/tiles'), isFalse);
-    });
-  });
-
   group('shellTabIndexFromLocation', () {
     test('maps home', () {
       expect(shellTabIndexFromLocation('/home'), 0);
@@ -118,6 +105,85 @@ void main() {
         ),
         '/home',
       );
+    });
+
+    test('users without labour add-on are redirected to upsell', () {
+      expect(
+        resolveAppRedirect(
+          location: labourCalculatorPath,
+          isAuthenticated: true,
+          effectiveIsPro: true,
+          currentUser: proUser,
+          canAccessLabourCalculator: false,
+        ),
+        labourCalculatorUpsellPath,
+      );
+    });
+
+    test('users with labour add-on can open calculator', () {
+      final labourUser = proUser.copyWith(labourCalculatorActive: true);
+      expect(
+        resolveAppRedirect(
+          location: labourCalculatorPath,
+          isAuthenticated: true,
+          effectiveIsPro: true,
+          currentUser: labourUser,
+          canAccessLabourCalculator: true,
+        ),
+        isNull,
+      );
+    });
+
+    test('entitled users skip upsell screen', () {
+      expect(
+        resolveAppRedirect(
+          location: labourCalculatorUpsellPath,
+          isAuthenticated: true,
+          effectiveIsPro: false,
+          currentUser: proUser.copyWith(labourCalculatorActive: true),
+          canAccessLabourCalculator: true,
+        ),
+        labourCalculatorPath,
+      );
+    });
+
+    test('customer quote preview redirects to upsell without add-on', () {
+      expect(
+        resolveAppRedirect(
+          location: customerQuotePreviewPath,
+          isAuthenticated: true,
+          effectiveIsPro: true,
+          currentUser: proUser.copyWith(labourCalculatorActive: true),
+          canAccessLabourCalculator: true,
+          canAccessCustomerQuote: false,
+        ),
+        customerQuoteUpsellPath,
+      );
+    });
+
+    test('customer quote preview allowed when entitled', () {
+      expect(
+        resolveAppRedirect(
+          location: customerQuotePreviewPath,
+          isAuthenticated: true,
+          effectiveIsPro: true,
+          currentUser: proUser.copyWith(
+            labourCalculatorActive: true,
+            customerQuoteActive: true,
+          ),
+          canAccessLabourCalculator: true,
+          canAccessCustomerQuote: true,
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('resolveProfileTabIndex', () {
+    test('maps labour-rates deep link to tab 3', () {
+      expect(resolveProfileTabIndex('labour-rates'), 3);
+      expect(resolveProfileTabIndex('2'), 2);
+      expect(resolveProfileTabIndex(null), 0);
     });
   });
 

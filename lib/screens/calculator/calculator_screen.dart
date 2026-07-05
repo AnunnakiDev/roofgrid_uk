@@ -26,7 +26,6 @@ import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
-import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/widgets/app_header.dart';
 import 'package:roofgrid_uk/widgets/save_result_dialog.dart';
 
@@ -384,17 +383,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
 
     final user = widget.user!;
     final effectiveIsPro = ref.watch(effectiveIsProProvider);
-    final hideWizardChrome =
-        hideShellNavForLocation(GoRouterState.of(context).matchedLocation);
 
     return Scaffold(
-      drawer: hideWizardChrome ? null : const MainDrawer(),
+      drawer: const MainDrawer(),
       body: Stack(
         children: [
           Column(
             children: [
               AppHeader(
-                showMenuButton: !hideWizardChrome,
                 title: widget.savedResult != null
                     ? 'Edit Calculation: ${widget.savedResult!.projectName}'
                     : 'Roofing Calculator',

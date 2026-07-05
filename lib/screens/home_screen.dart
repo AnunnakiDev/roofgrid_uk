@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
@@ -167,6 +169,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     final isPro = ref.watch(effectiveIsProProvider);
+    final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final horizontalPadding = isLargeScreen ? 24.0 : 18.0;
     final sectionSpacing = isLargeScreen ? 36.0 : 28.0;
 
@@ -247,6 +250,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Icon(
                         Icons.arrow_forward_rounded,
                         color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: sectionSpacing),
+          const SectionHeader(
+            title: 'Labour Pricing',
+            subtitle: 'Quote profitable day rates from UK labour timings',
+          ),
+          const SizedBox(height: 18),
+          Semantics(
+            label: canAccessLabour
+                ? 'Open labour pricing calculator'
+                : 'Labour pricing calculator add-on required',
+            button: true,
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () {
+                  if (!canAccessLabour) {
+                    showLabourGateSnackBar(context);
+                  }
+                  navigateToLabourCalculator(context);
+                },
+                child: Padding(
+                  padding: EdgeInsets.all(isLargeScreen ? 20 : 18),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          canAccessLabour
+                              ? Icons.calculate_rounded
+                              : Icons.lock_outline_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              canAccessLabour
+                                  ? 'Labour pricing calculator'
+                                  : 'Labour pricing (add-on)',
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              canAccessLabour
+                                  ? 'Rates, gang size, margin → day rate quote'
+                                  : 'Separate add-on — request access to unlock',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ],
                   ),

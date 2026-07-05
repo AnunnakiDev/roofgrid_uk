@@ -78,5 +78,25 @@ void main() {
       expect(user.isSubscribed, isTrue);
       expect(user.isPro, isTrue);
     });
+
+    test('labourCalculatorActive defaults to false', () {
+      expect(_user(role: UserRole.free).labourCalculatorActive, isFalse);
+    });
+
+    test('labourCalculatorActive preserved by copyWith', () {
+      final user =
+          _user(role: UserRole.pro).copyWith(labourCalculatorActive: true);
+      expect(user.labourCalculatorActive, isTrue);
+    });
+
+    test('customerQuoteActive defaults to false', () {
+      expect(_user(role: UserRole.free).customerQuoteActive, isFalse);
+    });
+
+    test('customerQuoteActive preserved by copyWith', () {
+      final user =
+          _user(role: UserRole.pro).copyWith(customerQuoteActive: true);
+      expect(user.customerQuoteActive, isTrue);
+    });
   });
 }

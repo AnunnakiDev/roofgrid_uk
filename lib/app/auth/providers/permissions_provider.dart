@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/models/developer_mode_config.dart';
+import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/utils/tile_access.dart';
 
@@ -93,4 +94,27 @@ class PermissionsService {
     if (user == null) return false;
     return resolveEffectiveIsPro(user, devMode);
   }
+
+  /// Labour pricing add-on — separate from set-out Pro.
+  bool canAccessLabourCalculator(UserModel? user) {
+    if (user == null) return false;
+    return user.isAdmin || user.labourCalculatorActive;
+  }
+
+  /// Branded customer quote PDF add-on — requires labour calculator first.
+  bool canAccessCustomerQuote(UserModel? user) {
+    if (user == null) return false;
+    if (!canAccessLabourCalculator(user)) return false;
+    return user.isAdmin || user.customerQuoteActive;
+  }
 }
+
+final canAccessLabourCalculatorProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentUserProvider).value;
+  return ref.watch(permissionsProvider).canAccessLabourCalculator(user);
+});
+
+final canAccessCustomerQuoteProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentUserProvider).value;
+  return ref.watch(permissionsProvider).canAccessCustomerQuote(user);
+});

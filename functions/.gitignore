@@ -5,3 +5,6 @@ Firebase Functions related
 /functions/node_modules/
 /functions/package-lock.json
 /functions/build/
+.env
+.env.*
+!.env.example

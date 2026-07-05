@@ -14,6 +14,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/providers/theme_provider.dart';
+import 'package:roofgrid_uk/widgets/labour/labour_rates_editor.dart';
 import 'package:roofgrid_uk/widgets/results/results_section_header.dart';
 import 'package:roofgrid_uk/widgets/settings/plan_status_card.dart';
 import 'package:roofgrid_uk/widgets/theme_scheme_selector.dart';
@@ -45,12 +46,21 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
   bool _isLoading = false;
   bool _isPasswordLoading = false;
 
+  bool get _hasLabourTab =>
+      widget.user.isAdmin || widget.user.labourCalculatorActive;
+
+  int get _tabCount {
+    var count = 3;
+    if (_hasLabourTab) count++;
+    if (widget.user.isAdmin) count++;
+    return count;
+  }
+
   @override
   void initState() {
     super.initState();
-    final tabCount = widget.user.isAdmin ? 4 : 3;
-    final safeIndex = widget.initialTabIndex.clamp(0, tabCount - 1);
-    _tabController = TabController(length: tabCount, vsync: this, initialIndex: safeIndex);
+    final safeIndex = widget.initialTabIndex.clamp(0, _tabCount - 1);
+    _tabController = TabController(length: _tabCount, vsync: this, initialIndex: safeIndex);
     _displayNameController =
         TextEditingController(text: widget.user.displayName ?? '');
     _emailController = TextEditingController(text: widget.user.email ?? '');
@@ -147,6 +157,7 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
       const Tab(text: 'Account'),
       const Tab(text: 'Plan'),
       const Tab(text: 'Appearance'),
+      if (_hasLabourTab) const Tab(text: 'Labour Rates'),
       if (widget.user.isAdmin) const Tab(text: 'Admin'),
     ];
 
@@ -171,6 +182,7 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
               _buildAccountTab(),
               _buildPlanTab(),
               _buildAppearanceTab(),
+              if (_hasLabourTab) const LabourRatesEditor(),
               if (widget.user.isAdmin) _buildAdminTab(),
             ],
           ),

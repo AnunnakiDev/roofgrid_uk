@@ -30,6 +30,9 @@ class HiveService {
   static Box<TileModel>? _tilesBox;
   static Box<SavedResult>? _resultsBox;
   static Box<Map>? _calculationsBox;
+  static Box<Map>? _labourConfigBox;
+  static Box<Map>? _labourQuotesBox;
+  static Box<Map>? _labourMaterialsBox;
   static bool _isInitialized = false;
   static final Completer<void> _initializationCompleter = Completer<void>();
 
@@ -64,6 +67,9 @@ class HiveService {
       ensureTilesBox(),
       ensureResultsBox(),
       ensureCalculationsBox(),
+      ensureLabourConfigBox(),
+      ensureLabourQuotesBox(),
+      ensureLabourMaterialsBox(),
     ]);
   }
 
@@ -105,6 +111,36 @@ class HiveService {
     }
     _calculationsBox = await Hive.openBox<Map>('calculationsBox');
     return _calculationsBox!;
+  }
+
+  static Future<Box<Map>> ensureLabourConfigBox() async {
+    if (_labourConfigBox != null) return _labourConfigBox!;
+    if (Hive.isBoxOpen('labourConfigBox')) {
+      _labourConfigBox = Hive.box<Map>('labourConfigBox');
+      return _labourConfigBox!;
+    }
+    _labourConfigBox = await Hive.openBox<Map>('labourConfigBox');
+    return _labourConfigBox!;
+  }
+
+  static Future<Box<Map>> ensureLabourQuotesBox() async {
+    if (_labourQuotesBox != null) return _labourQuotesBox!;
+    if (Hive.isBoxOpen('labourQuotesBox')) {
+      _labourQuotesBox = Hive.box<Map>('labourQuotesBox');
+      return _labourQuotesBox!;
+    }
+    _labourQuotesBox = await Hive.openBox<Map>('labourQuotesBox');
+    return _labourQuotesBox!;
+  }
+
+  static Future<Box<Map>> ensureLabourMaterialsBox() async {
+    if (_labourMaterialsBox != null) return _labourMaterialsBox!;
+    if (Hive.isBoxOpen('labourMaterialsBox')) {
+      _labourMaterialsBox = Hive.box<Map>('labourMaterialsBox');
+      return _labourMaterialsBox!;
+    }
+    _labourMaterialsBox = await Hive.openBox<Map>('labourMaterialsBox');
+    return _labourMaterialsBox!;
   }
 
   bool get isInitialized => _isInitialized;
@@ -154,6 +190,21 @@ class HiveService {
       'HiveService calculationsBox not ready yet. Call ensureCalculationsBox() first.',
     );
   }
+
+  Box<Map> get labourConfigBox {
+    if (_labourConfigBox != null) return _labourConfigBox!;
+    if (Hive.isBoxOpen('labourConfigBox')) {
+      _labourConfigBox = Hive.box<Map>('labourConfigBox');
+      return _labourConfigBox!;
+    }
+    throw Exception(
+      'HiveService labourConfigBox not ready yet. Call ensureLabourConfigBox() first.',
+    );
+  }
+
+  Future<Box<Map>> labourQuotesBox() => ensureLabourQuotesBox();
+
+  Future<Box<Map>> labourMaterialsBox() => ensureLabourMaterialsBox();
 
   Future<void> saveLastSelectedTile(TileModel? tile) async {
     if (_appStateBox == null) {

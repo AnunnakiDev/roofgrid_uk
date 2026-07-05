@@ -2,7 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/utils/admin_analytics_utils.dart';
+import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/widgets/developer_mode_panel.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -20,8 +23,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _totalTiles = 0;
   int _pendingApprovals = 0;
   int _expiringSubs = 0;
+  int _savedJobs = 0;
+  int _onlineUsers = 0;
   bool _isLoadingStats = true;
-  String? _statsError;
+  final List<String> _statsWarnings = [];
 
   @override
   void initState() {
@@ -32,51 +37,94 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Future<void> _fetchStats() async {
     setState(() {
       _isLoadingStats = true;
-      _statsError = null;
+      _statsWarnings.clear();
     });
 
+    await Future.wait([
+      _fetchUserStats(),
+      _fetchTileStats(),
+      _fetchPendingTileStats(),
+      _fetchSavedJobStats(),
+      _fetchOnlineUserStats(),
+    ]);
+
+    if (mounted) {
+      setState(() => _isLoadingStats = false);
+    }
+  }
+
+  void _recordWarning(String label, Object error) {
+    _statsWarnings.add('$label: $error');
+  }
+
+  Future<void> _fetchUserStats() async {
     try {
-      final usersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isNotEqualTo: 'admin')
-          .get();
-      _totalUsers = usersSnapshot.docs.length;
-
+      final usersSnapshot =
+          await FirebaseFirestore.instance.collection('users').get();
+      final users = usersSnapshot.docs
+          .map((doc) => UserModel.fromFirestore(doc))
+          .toList();
+      _totalUsers = countNonAdminUsers(users);
       final now = DateTime.now();
-      _expiringSubs = usersSnapshot.docs.where((doc) {
-        final data = doc.data();
-        final endDate = data['subscriptionEndDate'];
-        if (endDate == null) return false;
-        final expiry = (endDate as Timestamp).toDate();
-        if (!expiry.isAfter(now)) return false;
-        final days = expiry.difference(now).inDays;
-        final role = data['role'] as String? ?? 'free';
-        return (role == 'pro' || role == 'admin') && days <= 30 && days >= 0;
-      }).length;
+      _expiringSubs =
+          users.where((user) => isMembershipExpiringSoon(user, now)).length;
+    } catch (e) {
+      _recordWarning('Users', e);
+    }
+  }
 
+  Future<void> _fetchTileStats() async {
+    try {
       final tilesSnapshot = await FirebaseFirestore.instance
           .collection('tiles')
           .where('isPublic', isEqualTo: true)
           .where('isApproved', isEqualTo: true)
           .get();
       _totalTiles = tilesSnapshot.docs.length;
+    } catch (e) {
+      _recordWarning('Public tiles', e);
+    }
+  }
 
+  Future<void> _fetchPendingTileStats() async {
+    try {
       final proPersonalTilesSnapshot = await FirebaseFirestore.instance
           .collectionGroup('tiles')
           .where('isPublic', isEqualTo: false)
           .get();
-      _pendingApprovals = proPersonalTilesSnapshot.docs.length;
-
-      if (mounted) {
-        setState(() => _isLoadingStats = false);
-      }
+      _pendingApprovals = proPersonalTilesSnapshot.docs
+          .where((doc) => isPendingPersonalTile(doc.data()))
+          .length;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingStats = false;
-          _statsError = e.toString();
-        });
-      }
+      _recordWarning('Pending tile reviews', e);
+    }
+  }
+
+  Future<void> _fetchSavedJobStats() async {
+    try {
+      final savedResultsSnapshot = await FirebaseFirestore.instance
+          .collectionGroup('saved_results')
+          .get();
+      _savedJobs = savedResultsSnapshot.docs.length;
+    } catch (e) {
+      _recordWarning('Saved jobs', e);
+    }
+  }
+
+  Future<void> _fetchOnlineUserStats() async {
+    try {
+      final onlineSnapshot = await FirebaseFirestore.instance
+          .collection('sessions')
+          .where(
+            'lastActive',
+            isGreaterThan: Timestamp.fromDate(
+              DateTime.now().subtract(const Duration(minutes: 5)),
+            ),
+          )
+          .get();
+      _onlineUsers = onlineSnapshot.docs.length;
+    } catch (e) {
+      _recordWarning('Online users', e);
     }
   }
 
@@ -112,22 +160,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => context.go('/profile'),
-            tooltip: 'My Profile',
-          ),
-          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _isLoadingStats ? null : _fetchStats,
             tooltip: 'Refresh stats',
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await ref.read(authProvider.notifier).signOut();
-            },
-            tooltip: 'Sign out',
-          ),
+          const HomeBackButton(),
         ],
       ),
       drawer: const MainDrawer(),
@@ -139,9 +176,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_statsError != null) ...[
+              if (_statsWarnings.isNotEmpty) ...[
                 MaterialBanner(
-                  content: Text('Could not load all stats: $_statsError'),
+                  content: Text(
+                    'Some stats could not be loaded:\n${_statsWarnings.join('\n')}',
+                  ),
                   actions: [
                     TextButton(
                       onPressed: _fetchStats,
@@ -177,7 +216,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     onTap: () => context.go('/admin/tiles'),
                   ),
                   _buildStatCard(
-                    title: 'Pro Personal Tiles',
+                    title: 'Pending Tile Reviews',
                     value:
                         _isLoadingStats ? null : _pendingApprovals.toString(),
                     icon: Icons.person_pin,
@@ -190,6 +229,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: Icons.schedule,
                     highlight: _expiringSubs > 0,
                     onTap: () => context.go('/admin/users?filter=expiring'),
+                  ),
+                  _buildStatCard(
+                    title: 'Saved Jobs',
+                    value: _isLoadingStats ? null : _savedJobs.toString(),
+                    icon: Icons.folder_outlined,
+                    onTap: () => context.go('/admin/stats'),
+                  ),
+                  _buildStatCard(
+                    title: 'Online Now',
+                    value: _isLoadingStats ? null : _onlineUsers.toString(),
+                    icon: Icons.wifi_tethering,
+                    onTap: () => context.go('/admin/stats'),
                   ),
                 ],
               ),
@@ -213,17 +264,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ),
               _buildActionTile(
                 icon: Icons.person_pin,
-                label: 'Browse Pro Tiles',
+                label: 'Pending Tile Reviews',
                 subtitle: _pendingApprovals > 0
-                    ? '$_pendingApprovals pro personal tile(s) to review'
-                    : 'No pro personal tiles yet',
+                    ? '$_pendingApprovals tile(s) awaiting approval'
+                    : 'No tiles pending review',
                 badge: _pendingApprovals > 0 ? _pendingApprovals : null,
                 onTap: () => context.go('/admin/tiles?tab=pro'),
               ),
               _buildActionTile(
                 icon: Icons.bar_chart,
                 label: 'Analytics',
-                subtitle: 'View platform statistics',
+                subtitle: 'Platform stats and Firebase Analytics console',
                 onTap: () => context.go('/admin/stats'),
               ),
               if (user != null) ...[

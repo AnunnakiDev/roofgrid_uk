@@ -30,13 +30,15 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       subscriptionEndDate: fields[10] as DateTime?,
       createdAt: fields[11] as DateTime,
       lastLoginAt: fields[12] as DateTime?,
+      labourCalculatorActive: fields[13] as bool? ?? false,
+      customerQuoteActive: fields[14] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +64,11 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(11)
       ..write(obj.createdAt)
       ..writeByte(12)
-      ..write(obj.lastLoginAt);
+      ..write(obj.lastLoginAt)
+      ..writeByte(13)
+      ..write(obj.labourCalculatorActive)
+      ..writeByte(14)
+      ..write(obj.customerQuoteActive);
   }
 
   @override
