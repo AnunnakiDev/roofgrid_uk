@@ -2,53 +2,46 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_firestore_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_storage.dart';
+import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_sync_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
 
 class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
   @override
   Future<List<LabourSavedQuote>> build() async {
+    return _fetchAndMerge();
+  }
+
+  Future<List<LabourSavedQuote>> _fetchAndMerge() async {
     final box = await HiveService.ensureLabourQuotesBox();
     final local = LabourQuotesStorage.loadFromBox(box);
     final userId = ref.read(currentUserProvider).value?.id;
     if (userId == null || userId.isEmpty) return local;
 
     try {
-      final remote = await ref
-          .read(labourQuotesFirestoreServiceProvider)
-          .fetchQuotes(userId);
-      final merged = _mergeQuotes(local, remote);
+      final firestore = ref.read(labourQuotesFirestoreServiceProvider);
+      final remote = await firestore.fetchQuotes(userId);
+      final merged = LabourQuotesSyncUtils.mergeQuotes(local, remote);
       await LabourQuotesStorage.saveToBox(box, merged);
+
+      final uploads = LabourQuotesSyncUtils.quotesNeedingUpload(local, remote);
+      for (final quote in uploads) {
+        try {
+          await firestore.saveQuote(userId, quote);
+        } catch (_) {
+          // Local-first: upload failures are retried on next refresh/save.
+        }
+      }
+
       return merged;
     } catch (_) {
       return local;
     }
   }
 
-  List<LabourSavedQuote> _mergeQuotes(
-    List<LabourSavedQuote> local,
-    List<LabourSavedQuote> remote,
-  ) {
-    final byId = <String, LabourSavedQuote>{
-      for (final quote in local) quote.id: quote,
-    };
-    for (final quote in remote) {
-      final existing = byId[quote.id];
-      if (existing == null || !existing.savedAt.isAfter(quote.savedAt)) {
-        byId[quote.id] = quote;
-      }
-    }
-    final merged = byId.values.toList()
-      ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
-    return merged;
-  }
-
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final box = await HiveService.ensureLabourQuotesBox();
-      return LabourQuotesStorage.loadFromBox(box);
-    });
+    state = await AsyncValue.guard(_fetchAndMerge);
   }
 
   Future<LabourSavedQuote?> saveQuote(LabourSavedQuote quote) async {
@@ -68,7 +61,7 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
             .read(labourQuotesFirestoreServiceProvider)
             .saveQuote(userId, quote);
       } catch (_) {
-        // Local-first: cloud backup is best-effort.
+        // Local-first: cloud backup is best-effort until Phase 2 queue.
       }
     }
     return quote;
@@ -88,7 +81,9 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
         await ref
             .read(labourQuotesFirestoreServiceProvider)
             .deleteQuote(userId, id);
-      } catch (_) {}
+      } catch (_) {
+        // Local-first: cloud delete retried on next refresh.
+      }
     }
     return true;
   }

@@ -35,7 +35,11 @@ void main() {
       );
       expect(
         labourRoofTypeFromName('fibreCement'),
-        LabourRoofType.modernInterlocking,
+        LabourRoofType.fibreCementSlate,
+      );
+      expect(
+        labourRoofTypeFromName('fibreCementSlate'),
+        LabourRoofType.fibreCementSlate,
       );
     });
   });
