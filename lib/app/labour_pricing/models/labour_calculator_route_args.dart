@@ -7,12 +7,14 @@ class LabourCalculatorRouteArgs {
   final LabourQuoteProject? initialProject;
   final LabourQuoteConfig? initialQuoteConfig;
   final String? importJobId;
+  final String? loadQuoteId;
   final void Function(LabourSavedQuote quote)? onQuoteSaved;
 
   const LabourCalculatorRouteArgs({
     this.initialProject,
     this.initialQuoteConfig,
     this.importJobId,
+    this.loadQuoteId,
     this.onQuoteSaved,
   });
 }

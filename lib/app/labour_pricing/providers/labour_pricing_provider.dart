@@ -13,6 +13,7 @@ import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_backend_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_materials_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
@@ -403,8 +404,37 @@ class LabourPricingNotifier extends Notifier<LabourPricingState> {
     ref.read(labourBackendProvider.notifier).updateQuoteConfig(quote.quoteConfig);
   }
 
-  Future<bool> deleteSavedQuote(String id) {
-    return ref.read(labourQuotesProvider.notifier).deleteQuote(id);
+  Future<bool> deleteSavedQuote(String id) async {
+    final deleted =
+        await ref.read(labourQuotesProvider.notifier).deleteQuote(id);
+    if (!deleted) return false;
+
+    await _clearQuoteJobLinks(id);
+    return true;
+  }
+
+  Future<void> _clearQuoteJobLinks(String quoteId) async {
+    final userId = ref.read(currentUserProvider).value?.id;
+    if (userId == null || userId.isEmpty) return;
+
+    try {
+      final results = await ref.read(savedResultsProvider(userId).future);
+      final resultsService = ref.read(resultsServiceProvider);
+      for (final result in savedResultsLinkedToQuote(results, quoteId)) {
+        await resultsService.unlinkQuoteFromJob(result: result);
+      }
+
+      final orgId = ref.read(currentUserProvider).value?.primaryOrgId;
+      if (orgId != null && orgId.isNotEmpty) {
+        final orgJobs = ref.read(orgJobsProvider).value ?? const [];
+        final orgJobService = ref.read(orgJobServiceProvider);
+        for (final job in orgJobsLinkedToQuote(orgJobs, quoteId)) {
+          await orgJobService.unlinkQuote(orgId: orgId, jobId: job.id);
+        }
+      }
+    } catch (_) {
+      // Local quote is deleted; link cleanup is best-effort.
+    }
   }
 
   Future<LabourSavedQuote?> duplicateSavedQuote(String id) {

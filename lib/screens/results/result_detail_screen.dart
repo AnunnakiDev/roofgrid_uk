@@ -10,6 +10,8 @@ import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provi
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
 import 'package:roofgrid_uk/widgets/organisation/org_job_status_controls.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
@@ -60,6 +62,9 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
     final tileName = result.tile['name']?.toString();
     final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
+    final savedQuotes = ref.watch(labourQuotesProvider).value ?? const [];
+    final linkedQuote =
+        findLabourQuoteById(savedQuotes, result.linkedQuoteId);
     final canAssignJobs = ref.watch(canAssignJobsForCompanyProvider);
     final isInstaller = ref.watch(isInstallerRoleProvider);
     final orgJobs = ref.watch(orgJobsProvider).value ?? const <OrgJob>[];
@@ -220,10 +225,22 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                                       .onSurfaceVariant,
                                 ),
                           ),
-                          if (result.linkedQuoteId != null) ...[
+                          if (linkedQuote != null) ...[
                             const SizedBox(height: 8),
                             Text(
-                              'Linked quote saved',
+                              'Linked quote: ${linkedQuote.name}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
+                                  ),
+                            ),
+                          ] else if (result.linkedQuoteId != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Linked quote saved (not in local cache)',
                               style: Theme.of(context)
                                   .textTheme
                                   .labelMedium
@@ -234,6 +251,19 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                             ),
                           ],
                           const SizedBox(height: 12),
+                          if (linkedQuote != null)
+                            FilledButton.icon(
+                              onPressed: _isExporting
+                                  ? null
+                                  : () => navigateToLabourCalculatorWithQuote(
+                                        context,
+                                        linkedQuote.id,
+                                        canAccessLabour: canAccessLabour,
+                                      ),
+                              icon: const Icon(Icons.open_in_new_outlined),
+                              label: const Text('Open quote'),
+                            ),
+                          if (linkedQuote != null) const SizedBox(height: 8),
                           FilledButton.icon(
                             onPressed: _isExporting
                                 ? null
@@ -248,9 +278,11 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                                   : Icons.lock_outline_rounded,
                             ),
                             label: Text(
-                              canAccessLabour
-                                  ? 'Quote this job'
-                                  : 'Quote this job (add-on)',
+                              linkedQuote != null
+                                  ? 'Re-quote this job'
+                                  : canAccessLabour
+                                      ? 'Quote this job'
+                                      : 'Quote this job (add-on)',
                             ),
                           ),
                           if (canAssignJobs) ...[

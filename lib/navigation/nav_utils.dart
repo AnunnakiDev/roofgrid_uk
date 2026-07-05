@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/app/labour_pricing/models/labour_calculator_route_args.dart';
 import 'package:roofgrid_uk/app/organisation/models/calculator_launch_options.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
@@ -203,6 +204,27 @@ void navigateToLabourCalculatorWithJob(
     return;
   }
   context.go('$labourCalculatorPath?jobId=$trimmed');
+}
+
+void navigateToLabourCalculatorWithQuote(
+  BuildContext context,
+  String quoteId, {
+  bool canAccessLabour = true,
+}) {
+  final trimmed = quoteId.trim();
+  if (trimmed.isEmpty) {
+    navigateToLabourCalculator(context);
+    return;
+  }
+  if (!canAccessLabour) {
+    showLabourGateSnackBar(context);
+    context.go(labourCalculatorUpsellPath);
+    return;
+  }
+  context.go(
+    labourCalculatorPath,
+    extra: LabourCalculatorRouteArgs(loadQuoteId: trimmed),
+  );
 }
 
 void showProGateSnackBar(BuildContext context) {

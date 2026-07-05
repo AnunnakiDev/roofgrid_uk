@@ -305,6 +305,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               return labour_calculator.LabourPricingCalculatorScreen(
                 importJobId:
                     extra.importJobId ?? state.uri.queryParameters['jobId'],
+                loadQuoteId: extra.loadQuoteId,
                 initialProject: extra.initialProject,
                 initialQuoteConfig: extra.initialQuoteConfig,
                 onQuoteSaved: extra.onQuoteSaved,

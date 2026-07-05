@@ -71,6 +71,16 @@ class OrgJobService {
     }, SetOptions(merge: true));
   }
 
+  Future<void> unlinkQuote({
+    required String orgId,
+    required String jobId,
+  }) async {
+    await _jobs(orgId).doc(jobId).update({
+      'linkedQuoteId': FieldValue.delete(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
+
   Future<void> assignToInstaller({
     required String orgId,
     required String jobId,

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
 import 'package:roofgrid_uk/app/organisation/models/org_job.dart';
 import 'package:roofgrid_uk/app/organisation/models/org_job_status.dart';
 import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
 import 'package:roofgrid_uk/app/organisation/utils/org_job_saved_result.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
 
 class OrgJobPipelineCard extends ConsumerWidget {
@@ -45,19 +49,46 @@ class OrgJobPipelineCard extends ConsumerWidget {
   }
 }
 
-class _JobPipelineTile extends StatelessWidget {
+class _JobPipelineTile extends ConsumerWidget {
   final OrgJob job;
 
   const _JobPipelineTile({required this.job});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tileName = job.lockedTile['name']?.toString() ?? 'Tile';
+    final quotes = ref.watch(labourQuotesProvider).value ?? const [];
+    final linkedQuote = findLabourQuoteById(quotes, job.linkedQuoteId);
+    final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
+
+    final subtitleParts = <String>[
+      tileName,
+      job.status.label,
+      if (linkedQuote != null) 'Quote: ${linkedQuote.name}',
+    ];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Text(job.projectName),
-        subtitle: Text('$tileName · ${job.status.label}'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(subtitleParts.join(' · ')),
+            if (linkedQuote != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => navigateToLabourCalculatorWithQuote(
+                    context,
+                    linkedQuote.id,
+                    canAccessLabour: canAccessLabour,
+                  ),
+                  child: const Text('Open quote'),
+                ),
+              ),
+          ],
+        ),
         trailing: _StatusChip(status: job.status),
         onTap: () {
           final result = savedResultFromOrgJob(job);

@@ -113,6 +113,19 @@ class ResultsService {
     });
   }
 
+  Future<void> unlinkQuoteFromJob({required SavedResult result}) async {
+    final now = DateTime.now();
+    await _firestore
+        .collection('users')
+        .doc(result.userId)
+        .collection('saved_results')
+        .doc(result.id)
+        .update({
+      'linkedQuoteId': FieldValue.delete(),
+      'updatedAt': Timestamp.fromDate(now),
+    });
+  }
+
   Future<bool> updateProjectName(SavedResult result, String newName) async {
     await _firestore
         .collection('users')

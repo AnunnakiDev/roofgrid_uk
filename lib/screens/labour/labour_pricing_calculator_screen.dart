@@ -27,6 +27,8 @@ import 'package:roofgrid_uk/widgets/header_widget.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_decimal_text_field.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_int_text_field.dart';
+import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
+import 'package:roofgrid_uk/screens/labour/widgets/labour_linked_job_banner.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_project_materials_panel.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_quotes_sync_chip.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_section_panel.dart';
@@ -37,6 +39,7 @@ class LabourPricingCalculatorScreen extends ConsumerStatefulWidget {
   final LabourQuoteProject? initialProject;
   final LabourQuoteConfig? initialQuoteConfig;
   final String? importJobId;
+  final String? loadQuoteId;
   final void Function(LabourSavedQuote quote)? onQuoteSaved;
 
   const LabourPricingCalculatorScreen({
@@ -44,6 +47,7 @@ class LabourPricingCalculatorScreen extends ConsumerStatefulWidget {
     this.initialProject,
     this.initialQuoteConfig,
     this.importJobId,
+    this.loadQuoteId,
     this.onQuoteSaved,
   });
 
@@ -73,6 +77,24 @@ class _LabourPricingCalculatorScreenState
       notifier.loadInitialProject(
         widget.initialProject!,
         quoteConfig: widget.initialQuoteConfig,
+      );
+      return;
+    }
+
+    final quoteId = widget.loadQuoteId?.trim();
+    if (quoteId != null && quoteId.isNotEmpty) {
+      final quotes = await ref.read(labourQuotesProvider.future);
+      final quote = findLabourQuoteById(quotes, quoteId);
+      if (!mounted) return;
+      if (quote == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not find saved quote to load')),
+        );
+        return;
+      }
+      notifier.loadQuote(quote);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Loaded "${quote.name}"')),
       );
       return;
     }
@@ -430,6 +452,10 @@ class _LabourPricingCalculatorScreenState
             subtitle:
                 'Add roof sections, then calculate your profitable day rate',
           ),
+          if (state.sourceJobId != null && state.sourceJobId!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            LabourLinkedJobBanner(jobId: state.sourceJobId!),
+          ],
           const SizedBox(height: 16),
           const HeaderWidget(title: 'Project details'),
           const SizedBox(height: 12),
