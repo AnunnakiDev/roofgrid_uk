@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/app/organisation/models/org_job.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/app/organisation/models/org_job_status.dart';
 import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
@@ -31,7 +32,7 @@ class CompanyJobsSection extends ConsumerWidget {
                   : 'Shared across your team',
             ),
             const SizedBox(height: 8),
-            ...jobs.map((job) => _CompanyJobTile(job: job)),
+            ...jobs.map((job) => _CompanyJobTile(job: job, isInstaller: isInstaller)),
             const SizedBox(height: 16),
           ],
         );
@@ -44,8 +45,9 @@ class CompanyJobsSection extends ConsumerWidget {
 
 class _CompanyJobTile extends StatelessWidget {
   final OrgJob job;
+  final bool isInstaller;
 
-  const _CompanyJobTile({required this.job});
+  const _CompanyJobTile({required this.job, required this.isInstaller});
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +69,15 @@ class _CompanyJobTile extends StatelessWidget {
         onTap: () {
           final result = savedResultFromOrgJob(job);
           if (result == null) return;
-          context.push('/result-detail', extra: result);
+          if (isInstaller) {
+            navigateToLockedSetOutCalculator(
+              context,
+              savedResult: result,
+              orgJobId: job.id,
+            );
+          } else {
+            context.push('/result-detail', extra: result);
+          }
         },
       ),
     );
