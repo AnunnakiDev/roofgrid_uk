@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_sync_entry.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
+import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_analytics_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_firestore_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_analytics.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_storage.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_sync_queue_storage.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quotes_sync_utils.dart';
@@ -85,6 +87,25 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
     );
   }
 
+  LabourQuotesAnalytics get _analytics =>
+      ref.read(labourQuotesAnalyticsProvider);
+
+  Future<void> _logSyncSuccess(String operation, String quoteId) {
+    return _analytics.logSyncSuccess(operation: operation, quoteId: quoteId);
+  }
+
+  Future<void> _logSyncFailed(
+    String operation,
+    String quoteId, {
+    String? reason,
+  }) {
+    return _analytics.logSyncFailed(
+      operation: operation,
+      quoteId: quoteId,
+      reason: reason,
+    );
+  }
+
   Future<void> _dequeueSuccess() async {
     final box = await HiveService.ensureLabourQuotesBox();
     final queue = await LabourQuotesSyncQueueStorage.dequeueHead(box);
@@ -110,8 +131,10 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
         try {
           await firestore.saveQuote(userId, quote);
           await LabourQuotesSyncQueueStorage.removeForQuote(box, quote.id);
+          await _logSyncSuccess('save', quote.id);
         } catch (_) {
           await _enqueue(quote.id, LabourQuoteSyncOperation.save);
+          await _logSyncFailed('save', quote.id, reason: 'merge_upload');
         }
       }
       await _syncPendingCountFromBox();
@@ -147,6 +170,8 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
         if (queue.isEmpty) break;
 
         final entry = queue.first;
+        final operation =
+            entry.operation == LabourQuoteSyncOperation.save ? 'save' : 'delete';
         try {
           switch (entry.operation) {
             case LabourQuoteSyncOperation.save:
@@ -165,7 +190,9 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
               await firestore.deleteQuote(userId, entry.quoteId);
           }
           await _dequeueSuccess();
+          await _logSyncSuccess(operation, entry.quoteId);
         } catch (_) {
+          await _logSyncFailed(operation, entry.quoteId, reason: 'flush');
           break;
         }
       }
@@ -193,8 +220,10 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
             .saveQuote(userId, quote);
         await LabourQuotesSyncQueueStorage.removeForQuote(box, quote.id);
         await _syncPendingCountFromBox();
+        await _logSyncSuccess('save', quote.id);
       } catch (_) {
         await _enqueue(quote.id, LabourQuoteSyncOperation.save);
+        await _logSyncFailed('save', quote.id, reason: 'queued');
       }
     }
     return quote;
@@ -216,8 +245,10 @@ class LabourQuotesNotifier extends AsyncNotifier<List<LabourSavedQuote>> {
             .deleteQuote(userId, id);
         await LabourQuotesSyncQueueStorage.removeForQuote(box, id);
         await _syncPendingCountFromBox();
+        await _logSyncSuccess('delete', id);
       } catch (_) {
         await _enqueue(id, LabourQuoteSyncOperation.delete);
+        await _logSyncFailed('delete', id, reason: 'queued');
       }
     }
     return true;

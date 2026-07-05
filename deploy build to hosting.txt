@@ -7,7 +7,10 @@ flutter pub get
 flutter test
 flutter build web --release
 
-# 2) Firebase deploy (PowerShell — quote the --only list)
+# 2) Firestore rules + indexes (safe pre-launch, no Stripe/functions)
+firebase deploy --only "firestore:rules,firestore:indexes"
+
+# 2b) Full Firebase deploy (launch — includes functions + hosting)
 firebase deploy --only "hosting,firestore:rules,functions"
 
 # 3) Required Cloud Functions env / secrets (Firebase console or CLI)
@@ -21,10 +24,14 @@ firebase deploy --only "hosting,firestore:rules,functions"
 # STRIPE_CUSTOMER_QUOTE_PRICE_ID
 # RECAPTCHA_SECRET_KEY (optional — login bypasses CAPTCHA in debug)
 
-# 4) Local emulator (functions + hosting)
+# 4) Firestore rules test (requires npm install in repo root once)
+npm install
+npm run test:firestore-rules
+
+# 5) Local emulator (functions + hosting)
 firebase emulators:start --only "functions,hosting"
 
-# 5) Point the app at the functions emulator (Android emulator host):
+# 6) Point the app at the functions emulator (Android emulator host):
 # flutter run --dart-define=ROOFGRID_API_BASE=http://10.0.2.2:5002/roofgriduk-f2f56/us-central1/api
 
 # Hosting-only (quick web push):

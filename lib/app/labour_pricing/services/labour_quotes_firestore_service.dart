@@ -70,7 +70,7 @@ class LabourQuotesFirestoreService {
     return {
       ...quote.toJson(),
       'savedAt': Timestamp.fromDate(quote.savedAt),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
   }
 

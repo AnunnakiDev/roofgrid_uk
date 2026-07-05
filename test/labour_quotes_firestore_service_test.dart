@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_pricing_mode.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_config.dart';
@@ -45,5 +47,65 @@ void main() {
 
     expect(restored.id, original.id);
     expect(restored.savedAt, original.savedAt);
+  });
+
+  group('LabourQuotesFirestoreService CRUD', () {
+    late FakeFirebaseFirestore firestore;
+    late LabourQuotesFirestoreService service;
+    const userId = 'user-labour-test';
+
+    setUp(() {
+      firestore = FakeFirebaseFirestore();
+      service = LabourQuotesFirestoreService(firestore: firestore);
+    });
+
+    test('saveQuote writes doc under users/{uid}/labour_quotes', () async {
+      final quote = sampleQuote();
+
+      await service.saveQuote(userId, quote);
+
+      final doc = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('labour_quotes')
+          .doc(quote.id)
+          .get();
+      expect(doc.exists, isTrue);
+      expect(doc.data()?['name'], quote.name);
+      expect(doc.data()?['id'], quote.id);
+    });
+
+    test('fetchQuotes returns saved quotes ordered newest first', () async {
+      final older = sampleQuote().copyWith(
+        id: 'quote_old',
+        savedAt: DateTime(2026, 1, 1),
+      );
+      final newer = sampleQuote().copyWith(
+        id: 'quote_new',
+        savedAt: DateTime(2026, 6, 1),
+      );
+
+      await service.saveQuote(userId, older);
+      await service.saveQuote(userId, newer);
+
+      final fetched = await service.fetchQuotes(userId);
+
+      expect(fetched.map((q) => q.id), ['quote_new', 'quote_old']);
+    });
+
+    test('deleteQuote removes document', () async {
+      final quote = sampleQuote();
+      await service.saveQuote(userId, quote);
+
+      await service.deleteQuote(userId, quote.id);
+
+      final doc = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('labour_quotes')
+          .doc(quote.id)
+          .get();
+      expect(doc.exists, isFalse);
+    });
   });
 }

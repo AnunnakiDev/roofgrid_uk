@@ -257,6 +257,8 @@ flutter build web --release
 | Set-out handoff | `saved_result_labour_adapter_test` |
 | Decimal inputs | `decimal_input_utils_test` |
 | Admin | `admin_utils_test`, `admin_analytics_utils_test` |
+| Labour quote cloud sync | `labour_quotes_sync_test`, `labour_quotes_sync_queue_test`, `labour_quotes_firestore_service_test`, `labour_quotes_analytics_test`, `npm run test:firestore-rules` |
+| Org job ↔ quote linking | `labour_quote_job_link_test`, `org_job_test` |
 
 12.3 Manual Smoke Checklist (pre-launch)
 1. Admin toggles labour + customer quote on test user.
@@ -266,6 +268,27 @@ flutter build web --release
 5. Save quote, reload, confirm Hive persistence offline.
 6. Import from saved set-out result into labour calculator.
 7. Confirm upsell screens appear for unentitled users.
+
+12.5 Cloud sync architecture (labour quotes)
+
+**Path:** `users/{uid}/labour_quotes/{quoteId}`
+
+**Local-first:** Hive (`labourQuotesBox`) is the UI source of truth. Firestore is backup and multi-device restore.
+
+**Merge policy (on login / refresh):**
+1. Key quotes by `id`
+2. Newest `savedAt` wins per id; equal timestamps prefer remote
+3. After merge, upload local-only or newer-local quotes
+
+**Offline queue (Phase 2):** Failed save/delete ops are stored in Hive under `pendingSync` as `LabourQuoteSyncEntry` (`save` | `delete`). `flushPendingSync()` runs on reconnect, login refresh, and app resume.
+
+**Entitlement:** Firestore rules require `labourCalculatorActive == true` on the owner’s user doc (admin bypass). Verified by `npm run test:firestore-rules`.
+
+**Job linking:** Saving a quote with `sourceJobId` sets `linkedQuoteId` on the saved result and org job (best-effort). Deleting a quote clears stale links.
+
+**Analytics events:**
+- `sync_labour_quote` — `{ operation, quote_id }`
+- `sync_labour_quote_failed` — `{ operation, quote_id, reason? }`
 
 12.4 Launch Checklist (deferred)
 1. Rotate Stripe secret key.
