@@ -16,7 +16,10 @@ import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/utils/auth_error_utils.dart';
 import 'package:roofgrid_uk/utils/email_link_auth_config.dart';
 import 'package:roofgrid_uk/utils/remember_me_storage.dart';
+import 'package:roofgrid_uk/app/organisation/services/organisation_service.dart';
 import 'package:roofgrid_uk/utils/roofgrid_api_client.dart';
+
+final Set<String> _orgInviteSyncedUserIds = {};
 
 class AuthState {
   final bool isAuthenticated;
@@ -1034,6 +1037,20 @@ final currentUserProvider = StreamProvider<UserModel?>((ref) {
             FirebaseFirestore.instance,
             userBox,
           );
+          if (!_orgInviteSyncedUserIds.contains(userId)) {
+            final accepted = await OrganisationService()
+                .acceptPendingInvitesForUser(userModel);
+            if (accepted > 0) {
+              final refreshed = await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .get();
+              if (refreshed.exists) {
+                userModel = UserModel.fromFirestore(refreshed);
+              }
+            }
+            _orgInviteSyncedUserIds.add(userId);
+          }
           await userBox.put(userId, userModel);
           // (removed multi-line print for current user firestore)
           return userModel;

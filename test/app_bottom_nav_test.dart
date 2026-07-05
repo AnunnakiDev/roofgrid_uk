@@ -179,11 +179,12 @@ void main() {
     });
   });
 
-  group('resolveProfileTabIndex', () {
-    test('maps labour-rates deep link to tab 3', () {
-      expect(resolveProfileTabIndex('labour-rates'), 3);
-      expect(resolveProfileTabIndex('2'), 2);
-      expect(resolveProfileTabIndex(null), 0);
+  group('resolveProfileTabKey', () {
+    test('maps profile tab query keys', () {
+      expect(resolveProfileTabKey('labour-rates'), 'labour-rates');
+      expect(resolveProfileTabKey('company'), 'company');
+      expect(resolveProfileTabKey('2'), 'appearance');
+      expect(resolveProfileTabKey(null), isNull);
     });
   });
 

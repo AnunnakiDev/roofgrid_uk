@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
+import 'package:roofgrid_uk/widgets/organisation/installer_assignments_card.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
@@ -170,6 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final isPro = ref.watch(effectiveIsProProvider);
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
+    final isInstaller = ref.watch(isInstallerRoleProvider);
     final horizontalPadding = isLargeScreen ? 24.0 : 18.0;
     final sectionSpacing = isLargeScreen ? 36.0 : 28.0;
 
@@ -190,7 +193,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             isPro: isPro,
             onTap: () => context.go('/profile'),
           ),
-          SizedBox(height: sectionSpacing),
+          if (isInstaller) ...[
+            const InstallerAssignmentsCard(),
+            SizedBox(height: sectionSpacing),
+          ],
           const SectionHeader(
             title: 'Roofing Calculator',
             subtitle: 'Select your tile, then choose vertical, horizontal, or combined set-out',
@@ -257,18 +263,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
-          SizedBox(height: sectionSpacing),
-          const SectionHeader(
-            title: 'Labour Pricing',
-            subtitle: 'Quote profitable day rates from UK labour timings',
-          ),
-          const SizedBox(height: 18),
-          Semantics(
-            label: canAccessLabour
-                ? 'Open labour pricing calculator'
-                : 'Labour pricing calculator add-on required',
-            button: true,
-            child: Card(
+          if (!isInstaller) ...[
+            SizedBox(height: sectionSpacing),
+            const SectionHeader(
+              title: 'Labour Pricing',
+              subtitle: 'Quote profitable day rates from UK labour timings',
+            ),
+            const SizedBox(height: 18),
+            Semantics(
+              label: canAccessLabour
+                  ? 'Open labour pricing calculator'
+                  : 'Labour pricing calculator add-on required',
+              button: true,
+              child: Card(
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () {
@@ -337,7 +344,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
-          SizedBox(height: sectionSpacing),
+            SizedBox(height: sectionSpacing),
+          ],
           const SectionHeader(title: 'Quick Access'),
           const SizedBox(height: 16),
           QuickAccessRow(

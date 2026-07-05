@@ -66,6 +66,44 @@ service cloud.firestore {
       allow read: if request.auth != null && isAdmin();
     }
 
+    // Company accounts
+    match /organisations/{orgId} {
+      allow read: if isOrgMember(orgId) || isAdmin();
+      allow create: if request.auth != null
+        && isPro()
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isOrgOwner(orgId) || isAdmin();
+
+      match /members/{memberId} {
+        allow read: if isOrgMember(orgId) || isAdmin();
+        allow create: if request.auth != null && (
+          isAdmin() ||
+          (request.auth.uid == memberId && isPro()) ||
+          isOrgOwner(orgId)
+        );
+        allow update, delete: if isOrgOwner(orgId) || isAdmin();
+      }
+
+      match /invites/{inviteId} {
+        allow read: if isOrgOwner(orgId) || isAdmin();
+        allow create: if isOrgOwner(orgId) || isAdmin();
+        allow update: if isOrgOwner(orgId) || isAdmin();
+      }
+
+      match /assignments/{assignmentId} {
+        allow read: if isOrgMember(orgId) || isAdmin();
+        allow create: if isOrgEstimator(orgId) || isAdmin();
+        allow update: if isOrgEstimator(orgId) || isAdmin()
+          || (isOrgMember(orgId) && resource.data.assignedToUserId == request.auth.uid);
+      }
+    }
+
+    // Pending invite lookup for joining users
+    match /{path=**}/invites/{inviteId} {
+      allow read, update: if request.auth != null
+        && resource.data.email == request.auth.token.email.lower();
+    }
+
     // Rules for sessions and calculations collections
     match /sessions/{sessionId} {
       allow read: if request.auth != null && isAdmin();
@@ -112,6 +150,26 @@ service cloud.firestore {
           userDoc().data.role == 'pro' ||
           userDoc().data.role == 'admin'
         ))
+      );
+    }
+
+    function isOrgMember(orgId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid));
+    }
+
+    function orgMemberRole(orgId) {
+      return get(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isOrgOwner(orgId) {
+      return isOrgMember(orgId) && orgMemberRole(orgId) == 'owner';
+    }
+
+    function isOrgEstimator(orgId) {
+      return isOrgMember(orgId) && (
+        orgMemberRole(orgId) == 'owner' ||
+        orgMemberRole(orgId) == 'estimator'
       );
     }
 

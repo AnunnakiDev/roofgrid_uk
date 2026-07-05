@@ -15,18 +15,19 @@ import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/providers/theme_provider.dart';
 import 'package:roofgrid_uk/widgets/labour/labour_rates_editor.dart';
+import 'package:roofgrid_uk/widgets/organisation/company_hub_widget.dart';
 import 'package:roofgrid_uk/widgets/results/results_section_header.dart';
 import 'package:roofgrid_uk/widgets/settings/plan_status_card.dart';
 import 'package:roofgrid_uk/widgets/theme_scheme_selector.dart';
 
 class ProfileHubWidget extends ConsumerStatefulWidget {
   final UserModel user;
-  final int initialTabIndex;
+  final String? initialTabKey;
 
   const ProfileHubWidget({
     super.key,
     required this.user,
-    this.initialTabIndex = 0,
+    this.initialTabKey,
   });
 
   @override
@@ -49,18 +50,31 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
   bool get _hasLabourTab =>
       widget.user.isAdmin || widget.user.labourCalculatorActive;
 
-  int get _tabCount {
-    var count = 3;
-    if (_hasLabourTab) count++;
-    if (widget.user.isAdmin) count++;
-    return count;
+  bool get _hasCompanyTab => widget.user.isPro || widget.user.isAdmin;
+
+  List<String> get _tabKeys {
+    final keys = <String>['account', 'plan', 'appearance'];
+    if (_hasCompanyTab) keys.add('company');
+    if (_hasLabourTab) keys.add('labour-rates');
+    if (widget.user.isAdmin) keys.add('admin');
+    return keys;
+  }
+
+  int _indexForTabKey(String? key) {
+    if (key == null || key.isEmpty) return 0;
+    final index = _tabKeys.indexOf(key);
+    return index >= 0 ? index : 0;
   }
 
   @override
   void initState() {
     super.initState();
-    final safeIndex = widget.initialTabIndex.clamp(0, _tabCount - 1);
-    _tabController = TabController(length: _tabCount, vsync: this, initialIndex: safeIndex);
+    final tabKeys = _tabKeys;
+    _tabController = TabController(
+      length: tabKeys.length,
+      vsync: this,
+      initialIndex: _indexForTabKey(widget.initialTabKey),
+    );
     _displayNameController =
         TextEditingController(text: widget.user.displayName ?? '');
     _emailController = TextEditingController(text: widget.user.email ?? '');
@@ -157,6 +171,7 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
       const Tab(text: 'Account'),
       const Tab(text: 'Plan'),
       const Tab(text: 'Appearance'),
+      if (_hasCompanyTab) const Tab(text: 'Company'),
       if (_hasLabourTab) const Tab(text: 'Labour Rates'),
       if (widget.user.isAdmin) const Tab(text: 'Admin'),
     ];
@@ -182,6 +197,7 @@ class _ProfileHubWidgetState extends ConsumerState<ProfileHubWidget>
               _buildAccountTab(),
               _buildPlanTab(),
               _buildAppearanceTab(),
+              if (_hasCompanyTab) CompanyHubWidget(user: widget.user),
               if (_hasLabourTab) const LabourRatesEditor(),
               if (widget.user.isAdmin) _buildAdminTab(),
             ],

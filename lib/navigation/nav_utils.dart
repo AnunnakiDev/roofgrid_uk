@@ -21,10 +21,27 @@ const labourCalculatorUpsellPath = '/labour-calculator/upsell';
 const customerQuoteUpsellPath = '/labour-calculator/customer-quote/upsell';
 const customerQuotePreviewPath = '/labour-calculator/customer-quote/preview';
 
-/// Resolves profile tab index from route query (`tab=3` or `tab=labour-rates`).
-int resolveProfileTabIndex(String? tabParam) {
-  if (tabParam == 'labour-rates') return 3;
-  return int.tryParse(tabParam ?? '0') ?? 0;
+/// Resolves profile tab key from route query (`tab=labour-rates`, `tab=company`).
+String? resolveProfileTabKey(String? tabParam) {
+  if (tabParam == null || tabParam.isEmpty) return null;
+  const known = {
+    'account',
+    'plan',
+    'appearance',
+    'company',
+    'labour-rates',
+    'admin',
+  };
+  if (known.contains(tabParam)) return tabParam;
+  return switch (tabParam) {
+    '0' => 'account',
+    '1' => 'plan',
+    '2' => 'appearance',
+    '3' => 'company',
+    '4' => 'labour-rates',
+    '5' => 'admin',
+    _ => null,
+  };
 }
 
 bool isProGatedShellPath(String location) {

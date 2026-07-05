@@ -46,6 +46,8 @@ class UserModel {
   final bool labourCalculatorActive;
   @HiveField(14)
   final bool customerQuoteActive;
+  @HiveField(15)
+  final String? primaryOrgId;
 
   const UserModel({
     required this.id,
@@ -63,6 +65,7 @@ class UserModel {
     this.lastLoginAt,
     this.labourCalculatorActive = false,
     this.customerQuoteActive = false,
+    this.primaryOrgId,
   });
 
   UserModel.fromFirebaseUser(
@@ -78,6 +81,7 @@ class UserModel {
     String? profileImage,
     bool labourCalculatorActive = false,
     bool customerQuoteActive = false,
+    String? primaryOrgId,
   }) : this(
           id: user.uid,
           email: user.email,
@@ -94,6 +98,7 @@ class UserModel {
           lastLoginAt: lastLoginAt ?? DateTime.now(),
           labourCalculatorActive: labourCalculatorActive,
           customerQuoteActive: customerQuoteActive,
+          primaryOrgId: primaryOrgId,
         );
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -135,6 +140,7 @@ class UserModel {
           : DateTime.now(),
       labourCalculatorActive: data['labourCalculatorActive'] as bool? ?? false,
       customerQuoteActive: data['customerQuoteActive'] as bool? ?? false,
+      primaryOrgId: data['primaryOrgId'] as String?,
     );
   }
 
@@ -154,6 +160,8 @@ class UserModel {
     DateTime? lastLoginAt,
     bool? labourCalculatorActive,
     bool? customerQuoteActive,
+    String? primaryOrgId,
+    bool clearPrimaryOrgId = false,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -172,6 +180,8 @@ class UserModel {
       labourCalculatorActive:
           labourCalculatorActive ?? this.labourCalculatorActive,
       customerQuoteActive: customerQuoteActive ?? this.customerQuoteActive,
+      primaryOrgId:
+          clearPrimaryOrgId ? null : (primaryOrgId ?? this.primaryOrgId),
     );
   }
 
@@ -198,6 +208,7 @@ class UserModel {
           lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'labourCalculatorActive': labourCalculatorActive,
       'customerQuoteActive': customerQuoteActive,
+      if (primaryOrgId != null) 'primaryOrgId': primaryOrgId,
     };
   }
 
@@ -233,6 +244,7 @@ class UserModel {
       labourCalculatorActive:
           json['labourCalculatorActive'] as bool? ?? false,
       customerQuoteActive: json['customerQuoteActive'] as bool? ?? false,
+      primaryOrgId: json['primaryOrgId'] as String?,
     );
   }
 

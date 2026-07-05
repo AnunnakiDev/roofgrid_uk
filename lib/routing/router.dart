@@ -166,12 +166,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) {
-          final tab = resolveProfileTabIndex(
+          final tabKey = resolveProfileTabKey(
             state.uri.queryParameters['tab'],
           );
           return DeferredScreen(
             loadLibrary: profile.loadLibrary,
-            builder: () => profile.ProfileScreen(initialTabIndex: tab),
+            builder: () => profile.ProfileScreen(initialTabKey: tabKey),
           );
         },
       ),

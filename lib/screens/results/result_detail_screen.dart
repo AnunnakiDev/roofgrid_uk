@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/organisation/models/company_role.dart';
+import 'package:roofgrid_uk/app/organisation/models/org_member.dart';
+import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
+import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
+import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
@@ -53,6 +58,8 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
     final tileName = result.tile['name']?.toString();
     final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
+    final canAssignJobs = ref.watch(canAssignJobsForCompanyProvider);
+    final isInstaller = ref.watch(isInstallerRoleProvider);
 
     // Extract vertical and horizontal results from savedResult
     VerticalCalculationResult? verticalResult;
@@ -163,68 +170,81 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Labour quote',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          canAccessLabour
-                              ? 'Create a labour quote from this job\'s measurements.'
-                              : 'Labour Pricing add-on required to quote from this job.',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                        ),
-                        if (result.linkedQuoteId != null) ...[
+              if (!isInstaller)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Labour quote',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
                           const SizedBox(height: 8),
                           Text(
-                            'Linked quote saved',
+                            canAccessLabour
+                                ? 'Create a labour quote from this job\'s measurements.'
+                                : 'Labour Pricing add-on required to quote from this job.',
                             style: Theme.of(context)
                                 .textTheme
-                                .labelMedium
+                                .bodySmall
                                 ?.copyWith(
-                                  color:
-                                      Theme.of(context).colorScheme.secondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                           ),
-                        ],
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: _isExporting
-                              ? null
-                              : () => navigateToLabourCalculatorWithJob(
-                                    context,
-                                    result.id,
-                                    canAccessLabour: canAccessLabour,
+                          if (result.linkedQuoteId != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Linked quote saved',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
                                   ),
-                          icon: Icon(
-                            canAccessLabour
-                                ? Icons.request_quote_outlined
-                                : Icons.lock_outline_rounded,
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _isExporting
+                                ? null
+                                : () => navigateToLabourCalculatorWithJob(
+                                      context,
+                                      result.id,
+                                      canAccessLabour: canAccessLabour,
+                                    ),
+                            icon: Icon(
+                              canAccessLabour
+                                  ? Icons.request_quote_outlined
+                                  : Icons.lock_outline_rounded,
+                            ),
+                            label: Text(
+                              canAccessLabour
+                                  ? 'Quote this job'
+                                  : 'Quote this job (add-on)',
+                            ),
                           ),
-                          label: Text(
-                            canAccessLabour
-                                ? 'Quote this job'
-                                : 'Quote this job (add-on)',
-                          ),
-                        ),
-                      ],
+                          if (canAssignJobs) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _isExporting
+                                  ? null
+                                  : () => _assignToInstaller(context),
+                              icon: const Icon(Icons.engineering_outlined),
+                              label: const Text('Assign to installer'),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -557,6 +577,75 @@ Tile: ${result.tile['name'] ?? 'N/A'}
           _isExporting = false;
         });
       }
+    }
+  }
+
+  Future<void> _assignToInstaller(BuildContext context) async {
+    final org = ref.read(currentOrganisationProvider).value;
+    final user = ref.read(currentUserProvider).value;
+    final members = ref.read(orgMembersProvider).value ?? const [];
+    final installers = members
+        .where((member) => member.role == CompanyRole.installer)
+        .toList();
+
+    if (org == null || user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Company account required')),
+      );
+      return;
+    }
+    if (installers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No installers on your team yet')),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<OrgMember>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text('Assign to installer'),
+                subtitle: Text('They will see this job on their home screen'),
+              ),
+              ...installers.map(
+                (installer) => ListTile(
+                  title: Text(
+                    installer.displayName?.trim().isNotEmpty == true
+                        ? installer.displayName!
+                        : installer.email ?? installer.userId,
+                  ),
+                  onTap: () => Navigator.pop(sheetContext, installer),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selected == null) return;
+    try {
+      await ref.read(organisationServiceProvider).assignJobToInstaller(
+            orgId: org.id,
+            savedResultId: _result.id,
+            projectName: _result.projectName,
+            installerUserId: selected.userId,
+            assignedByUserId: user.id,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Assigned to ${selected.displayName ?? selected.email}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not assign job: $e')),
+      );
     }
   }
 }

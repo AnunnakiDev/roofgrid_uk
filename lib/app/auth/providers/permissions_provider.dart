@@ -3,6 +3,8 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/models/developer_mode_config.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
+import 'package:roofgrid_uk/app/organisation/company_permissions.dart';
+import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
 import 'package:roofgrid_uk/utils/tile_access.dart';
 
 /// Provider that exposes permission checks based on user type
@@ -111,7 +113,10 @@ class PermissionsService {
 
 final canAccessLabourCalculatorProvider = Provider<bool>((ref) {
   final user = ref.watch(currentUserProvider).value;
-  return ref.watch(permissionsProvider).canAccessLabourCalculator(user);
+  final base = ref.watch(permissionsProvider).canAccessLabourCalculator(user);
+  if (!base) return false;
+  final companyRole = ref.watch(currentCompanyRoleProvider);
+  return CompanyPermissions.canViewLabourPricing(companyRole);
 });
 
 final canAccessCustomerQuoteProvider = Provider<bool>((ref) {

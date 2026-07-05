@@ -8,9 +8,9 @@ import 'package:roofgrid_uk/widgets/profile_hub_widget.dart';
 import 'package:roofgrid_uk/widgets/profile_summary_widget.dart';
 
 class ProfileScreen extends ConsumerWidget {
-  final int initialTabIndex;
+  final String? initialTabKey;
 
-  const ProfileScreen({super.key, this.initialTabIndex = 0});
+  const ProfileScreen({super.key, this.initialTabKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,7 +46,7 @@ class ProfileScreen extends ConsumerWidget {
               Expanded(
                 child: ProfileHubWidget(
                   user: user,
-                  initialTabIndex: initialTabIndex,
+                  initialTabKey: initialTabKey,
                 ),
               ),
             ],
