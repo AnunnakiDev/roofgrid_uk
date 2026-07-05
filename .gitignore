@@ -50,6 +50,16 @@ Firebase Functions related
 /functions/build/
 /functions/.env
 
+# Root npm tooling (Firestore rules tests)
+/node_modules/
+
+# Local agent / harness artifacts (not part of the app)
+/agent-tools/
+/terminals/
+/mcps/
+/*_storage_test/
+/labour_*_test/
+
 Firebase Hosting related (if applicable)
 .firebase/
 firestore*.json
