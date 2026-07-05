@@ -28,6 +28,7 @@ import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_decimal_text_field.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_int_text_field.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_project_materials_panel.dart';
+import 'package:roofgrid_uk/screens/labour/widgets/labour_quotes_sync_chip.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_section_panel.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
 import 'package:share_plus/share_plus.dart';
@@ -385,6 +386,7 @@ class _LabourPricingCalculatorScreenState
     final savedQuotesAsync = ref.watch(labourQuotesProvider);
     final backendHydrated = ref.watch(labourBackendProvider).isHydrated;
     final effectiveIsPro = ref.watch(effectiveIsProProvider);
+    final userId = ref.watch(currentUserProvider).value?.id;
     final notifier = ref.read(labourPricingProvider.notifier);
     final gbp = NumberFormat.currency(locale: 'en_GB', symbol: '£');
 
@@ -517,6 +519,13 @@ class _LabourPricingCalculatorScreenState
           ],
           const SizedBox(height: 20),
           const HeaderWidget(title: 'My quotes'),
+          if (userId != null && userId.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: LabourQuotesSyncChip(),
+            ),
+          ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _showSaveQuoteDialog,
