@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/app/organisation/models/calculator_launch_options.dart';
+import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 
@@ -154,6 +156,35 @@ void showLabourGateSnackBar(BuildContext context) {
 
 void navigateToLabourCalculator(BuildContext context) {
   context.go(labourCalculatorPath);
+}
+
+void navigateToCalculator(
+  BuildContext context, {
+  SavedResult? savedResult,
+  bool lockTileSpec = false,
+  String? orgJobId,
+}) {
+  context.push(
+    '/calculator',
+    extra: CalculatorLaunchOptions(
+      savedResult: savedResult,
+      lockTileSpec: lockTileSpec,
+      orgJobId: orgJobId,
+    ),
+  );
+}
+
+void navigateToLockedSetOutCalculator(
+  BuildContext context, {
+  required SavedResult savedResult,
+  String? orgJobId,
+}) {
+  navigateToCalculator(
+    context,
+    savedResult: savedResult,
+    lockTileSpec: true,
+    orgJobId: orgJobId ?? savedResult.id,
+  );
 }
 
 void navigateToLabourCalculatorWithJob(

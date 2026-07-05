@@ -8,6 +8,7 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
 import 'package:roofgrid_uk/widgets/organisation/installer_assignments_card.dart';
+import 'package:roofgrid_uk/widgets/organisation/org_job_pipeline_card.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
@@ -195,6 +196,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           if (isInstaller) ...[
             const InstallerAssignmentsCard(),
+            SizedBox(height: sectionSpacing),
+          ] else ...[
+            const OrgJobPipelineCard(),
             SizedBox(height: sectionSpacing),
           ],
           const SectionHeader(

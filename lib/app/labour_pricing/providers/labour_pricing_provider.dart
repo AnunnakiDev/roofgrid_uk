@@ -13,6 +13,7 @@ import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_backend_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_materials_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
+import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/boq_suggestion_service.dart';
@@ -371,6 +372,14 @@ class LabourPricingNotifier extends Notifier<LabourPricingState> {
           if (job != null) {
             await ref.read(resultsServiceProvider).linkQuoteToJob(
                   result: job,
+                  quoteId: saved.id,
+                );
+          }
+          final orgId = ref.read(currentUserProvider).value?.primaryOrgId;
+          if (orgId != null && orgId.isNotEmpty) {
+            await ref.read(orgJobServiceProvider).linkQuote(
+                  orgId: orgId,
+                  jobId: jobId,
                   quoteId: saved.id,
                 );
           }

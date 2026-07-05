@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_calculator_route_args.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_project.dart';
+import 'package:roofgrid_uk/app/organisation/models/calculator_launch_options.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/navigation/app_shell.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
@@ -115,11 +116,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/calculator',
                 builder: (context, state) {
-                  final savedResult = state.extra is SavedResult
-                      ? state.extra as SavedResult
-                      : null;
+                  final launchOptions = _calculatorLaunchOptionsFromExtra(
+                    state.extra,
+                  );
+                  final savedResult = launchOptions?.savedResult;
                   return CalculatorScreen(
-                    savedResult: savedResult,
+                    launchOptions: launchOptions,
                     initialMode: savedResult == null
                         ? parseCalculatorModeQuery(
                             state.uri.queryParameters['mode'],
@@ -371,3 +373,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
   return router;
 });
+
+CalculatorLaunchOptions? _calculatorLaunchOptionsFromExtra(Object? extra) {
+  if (extra is CalculatorLaunchOptions) return extra;
+  if (extra is SavedResult) {
+    return CalculatorLaunchOptions(savedResult: extra);
+  }
+  return null;
+}

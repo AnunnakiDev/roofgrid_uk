@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/organisation/models/company_role.dart';
+import 'package:roofgrid_uk/app/organisation/models/org_job.dart';
 import 'package:roofgrid_uk/app/organisation/models/org_member.dart';
 import 'package:roofgrid_uk/app/organisation/providers/company_permissions_provider.dart';
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
+import 'package:roofgrid_uk/widgets/organisation/org_job_status_controls.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
@@ -60,6 +62,12 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final canAssignJobs = ref.watch(canAssignJobsForCompanyProvider);
     final isInstaller = ref.watch(isInstallerRoleProvider);
+    final orgJobs = ref.watch(orgJobsProvider).value ?? const <OrgJob>[];
+    final orgJobMatches = orgJobs.where(
+      (job) => job.id == result.id || job.savedResultId == result.id,
+    );
+    final matchingOrgJob =
+        orgJobMatches.isEmpty ? null : orgJobMatches.first;
 
     // Extract vertical and horizontal results from savedResult
     VerticalCalculationResult? verticalResult;
@@ -102,7 +110,17 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
             icon: const Icon(Icons.calculate_outlined),
             onPressed: _isExporting
                 ? null
-                : () => context.push('/calculator', extra: _result),
+                : () {
+                    if (isInstaller) {
+                      navigateToLockedSetOutCalculator(
+                        context,
+                        savedResult: _result,
+                        orgJobId: matchingOrgJob?.id,
+                      );
+                    } else {
+                      navigateToCalculator(context, savedResult: _result);
+                    }
+                  },
             tooltip: 'Recalculate',
           ),
           IconButton(
@@ -170,6 +188,11 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                   ],
                 ),
               ),
+              if (canAssignJobs && matchingOrgJob != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: OrgJobStatusControls(orgJob: matchingOrgJob),
+                ),
               if (!isInstaller)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -630,12 +653,21 @@ Tile: ${result.tile['name'] ?? 'N/A'}
 
     if (selected == null) return;
     try {
+      await ref.read(orgJobServiceProvider).upsertFromSavedResult(
+            orgId: org.id,
+            result: _result,
+          );
       await ref.read(organisationServiceProvider).assignJobToInstaller(
             orgId: org.id,
             savedResultId: _result.id,
             projectName: _result.projectName,
             installerUserId: selected.userId,
             assignedByUserId: user.id,
+          );
+      await ref.read(orgJobServiceProvider).assignToInstaller(
+            orgId: org.id,
+            jobId: _result.id,
+            installerUserId: selected.userId,
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

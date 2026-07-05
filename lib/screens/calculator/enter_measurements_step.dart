@@ -17,7 +17,7 @@ class EnterMeasurementsStep extends StatefulWidget {
   final CalculationTypeSelection calculationType;
   final VerticalInputs initialVerticalInputs;
   final HorizontalInputs initialHorizontalInputs;
-  final VoidCallback onBackToTileSelect;
+  final VoidCallback? onBackToTileSelect;
   final Function(VerticalInputs, HorizontalInputs) onCalculate;
   final Widget Function(TileSlateType) placeholderImageBuilder;
 
@@ -28,7 +28,7 @@ class EnterMeasurementsStep extends StatefulWidget {
     required this.calculationType,
     required this.initialVerticalInputs,
     required this.initialHorizontalInputs,
-    required this.onBackToTileSelect,
+    this.onBackToTileSelect,
     required this.onCalculate,
     required this.placeholderImageBuilder,
   });
@@ -291,23 +291,27 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                OutlinedButton(
-                                  onPressed: () {
-                                    if (_currentStep > 0) {
-                                      setState(() {
-                                        _currentStep -= 1;
-                                      });
-                                    } else {
-                                      widget.onBackToTileSelect();
-                                    }
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(110, 48),
-                                  ),
-                                  child: Text(
-                                    _currentStep == 0 ? 'Back' : 'Previous',
-                                  ),
-                                ),
+                                if (_currentStep > 0 ||
+                                    widget.onBackToTileSelect != null)
+                                  OutlinedButton(
+                                    onPressed: () {
+                                      if (_currentStep > 0) {
+                                        setState(() {
+                                          _currentStep -= 1;
+                                        });
+                                      } else {
+                                        widget.onBackToTileSelect?.call();
+                                      }
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(110, 48),
+                                    ),
+                                    child: Text(
+                                      _currentStep == 0 ? 'Back' : 'Previous',
+                                    ),
+                                  )
+                                else
+                                  const SizedBox(width: 110),
                                 if (_currentStep < steps.length - 1)
                                   ElevatedButton(
                                     onPressed: _canProceed()
@@ -325,7 +329,7 @@ class _EnterMeasurementsStepState extends State<EnterMeasurementsStep> {
                               ],
                             ),
                           )
-                        else
+                        else if (widget.onBackToTileSelect != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: Align(

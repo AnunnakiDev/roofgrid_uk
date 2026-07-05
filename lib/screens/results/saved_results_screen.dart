@@ -17,6 +17,8 @@ import 'package:roofgrid_uk/utils/saved_result_dates.dart';
 
 import 'package:roofgrid_uk/theme/app_color_schemes.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
+import 'package:roofgrid_uk/widgets/organisation/company_jobs_section.dart';
+import 'package:roofgrid_uk/widgets/section_header.dart';
 
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -204,6 +206,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
 
   Widget _buildResultsList(UserModel user) {
     final resultsAsync = ref.watch(savedResultsProvider(user.id));
+    final hasCompany = (user.primaryOrgId ?? '').isNotEmpty;
 
     return resultsAsync.when(
       data: (results) {
@@ -233,17 +236,29 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              if (hasCompany) {
+                return ListView(
+                  children: [CompanyJobsSection()],
+                );
+              }
               return const Center(child: Text('No jobs found.'));
             }
 
             final resultsList = snapshot.data!;
 
-            return ListView.builder(
-              itemCount: resultsList.length,
-              itemBuilder: (context, index) {
-                final result = resultsList[index];
-                return _buildResultCard(result);
-              },
+            return ListView(
+              children: [
+                if (hasCompany) const CompanyJobsSection(),
+                if (hasCompany && resultsList.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: SectionHeader(
+                      title: 'My jobs',
+                      subtitle: 'Jobs saved to your account',
+                    ),
+                  ),
+                ...resultsList.map(_buildResultCard),
+              ],
             );
           },
         );

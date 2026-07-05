@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:roofgrid_uk/app/organisation/models/org_job.dart';
+import 'package:roofgrid_uk/app/organisation/models/org_job_status.dart';
 import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
-import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
-import 'package:roofgrid_uk/providers/auth_provider.dart';
+import 'package:roofgrid_uk/app/organisation/utils/org_job_saved_result.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/widgets/section_header.dart';
 
 class InstallerAssignmentsCard extends ConsumerWidget {
@@ -11,11 +12,11 @@ class InstallerAssignmentsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final assignmentsAsync = ref.watch(myJobAssignmentsProvider);
+    final jobsAsync = ref.watch(myAssignedOrgJobsProvider);
 
-    return assignmentsAsync.when(
-      data: (assignments) {
-        if (assignments.isEmpty) {
+    return jobsAsync.when(
+      data: (jobs) {
+        if (jobs.isEmpty) {
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -47,17 +48,7 @@ class InstallerAssignmentsCard extends ConsumerWidget {
               subtitle: 'Open a job to run set-out on site',
             ),
             const SizedBox(height: 12),
-            ...assignments.map(
-              (assignment) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  title: Text(assignment.projectName),
-                  subtitle: Text('Status: ${assignment.status.name}'),
-                  trailing: const Icon(Icons.arrow_forward_rounded),
-                  onTap: () => _openAssignment(context, ref, assignment.savedResultId),
-                ),
-              ),
-            ),
+            ...jobs.map((job) => _AssignedJobTile(job: job)),
           ],
         );
       },
@@ -65,24 +56,32 @@ class InstallerAssignmentsCard extends ConsumerWidget {
       error: (_, __) => const SizedBox.shrink(),
     );
   }
+}
 
-  Future<void> _openAssignment(
-    BuildContext context,
-    WidgetRef ref,
-    String savedResultId,
-  ) async {
-    final userId = ref.read(currentUserProvider).value?.id;
-    if (userId == null) return;
-    final results = await ref.read(savedResultsProvider(userId).future);
-    for (final result in results) {
-      if (result.id != savedResultId) continue;
-      if (!context.mounted) return;
-      context.push('/result-detail', extra: result);
-      return;
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Assigned job not found on this device')),
+class _AssignedJobTile extends StatelessWidget {
+  final OrgJob job;
+
+  const _AssignedJobTile({required this.job});
+
+  @override
+  Widget build(BuildContext context) {
+    final tileName = job.lockedTile['name']?.toString() ?? 'Tile';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(job.projectName),
+        subtitle: Text('$tileName · ${job.status.label}'),
+        trailing: const Icon(Icons.arrow_forward_rounded),
+        onTap: () {
+          final result = savedResultFromOrgJob(job);
+          if (result == null) return;
+          navigateToLockedSetOutCalculator(
+            context,
+            savedResult: result,
+            orgJobId: job.id,
+          );
+        },
+      ),
     );
   }
 }

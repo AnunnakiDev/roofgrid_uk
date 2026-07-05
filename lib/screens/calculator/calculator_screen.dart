@@ -23,8 +23,11 @@ import 'package:roofgrid_uk/utils/calculator_flow_inputs.dart';
 import 'package:roofgrid_uk/utils/calculator_input_visibility.dart';
 import 'package:roofgrid_uk/utils/connectivity_utils.dart';
 import 'package:roofgrid_uk/app/calculator/providers/calculator_provider.dart';
+import 'package:roofgrid_uk/app/organisation/models/calculator_launch_options.dart';
+import 'package:roofgrid_uk/app/organisation/providers/organisation_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
+import 'package:roofgrid_uk/widgets/organisation/locked_tile_banner.dart';
 import 'package:roofgrid_uk/services/hive_service.dart';
 import 'package:roofgrid_uk/widgets/app_header.dart';
 import 'package:roofgrid_uk/widgets/save_result_dialog.dart';
@@ -38,12 +41,12 @@ enum CalculatorStep {
 }
 
 class CalculatorScreen extends ConsumerWidget {
-  final SavedResult? savedResult;
+  final CalculatorLaunchOptions? launchOptions;
   final CalculationTypeSelection? initialMode;
 
   const CalculatorScreen({
     super.key,
-    this.savedResult,
+    this.launchOptions,
     this.initialMode,
   });
 
@@ -65,7 +68,7 @@ class CalculatorScreen extends ConsumerWidget {
     return userAsync.when(
       data: (user) => CalculatorContent(
         user: user,
-        savedResult: savedResult,
+        launchOptions: launchOptions,
         initialMode: initialMode,
       ),
       loading: () =>
@@ -86,15 +89,18 @@ class CalculatorScreen extends ConsumerWidget {
 
 class CalculatorContent extends ConsumerStatefulWidget {
   final UserModel? user;
-  final SavedResult? savedResult;
+  final CalculatorLaunchOptions? launchOptions;
   final CalculationTypeSelection? initialMode;
 
   const CalculatorContent({
     super.key,
     required this.user,
-    this.savedResult,
+    this.launchOptions,
     this.initialMode,
   });
+
+  SavedResult? get savedResult => launchOptions?.savedResult;
+  bool get lockTileSpec => launchOptions?.lockTileSpec ?? false;
 
   @override
   ConsumerState<CalculatorContent> createState() => _CalculatorContentState();
@@ -392,7 +398,9 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
             children: [
               AppHeader(
                 title: widget.savedResult != null
-                    ? 'Edit Calculation: ${widget.savedResult!.projectName}'
+                    ? (widget.lockTileSpec
+                        ? 'Set-out: ${widget.savedResult!.projectName}'
+                        : 'Edit Calculation: ${widget.savedResult!.projectName}')
                     : 'Roofing Calculator',
                 actions: [
                   Semantics(
@@ -405,6 +413,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
                   ),
                 ],
               ),
+              if (widget.lockTileSpec && widget.savedResult != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: LockedTileBanner(
+                    tileName: widget.savedResult!.tile['name']?.toString() ??
+                        'Tile',
+                  ),
+                ),
               Expanded(
                 child: _buildStepContent(context, user, effectiveIsPro),
               ),
@@ -459,12 +475,14 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
           calculationType: _calculationType!,
           initialVerticalInputs: _verticalInputs,
           initialHorizontalInputs: _horizontalInputs,
-          onBackToTileSelect: () {
-            setState(() {
-              _currentStep = CalculatorStep.selectType;
-              ref.read(calculatorProvider.notifier).clearResults();
-            });
-          },
+          onBackToTileSelect: widget.lockTileSpec
+              ? null
+              : () {
+                  setState(() {
+                    _currentStep = CalculatorStep.selectType;
+                    ref.read(calculatorProvider.notifier).clearResults();
+                  });
+                },
           onCalculate: (verticalInputs, horizontalInputs) {
             setState(() {
               _verticalInputs = verticalInputs;
@@ -907,6 +925,24 @@ class _CalculatorContentState extends ConsumerState<CalculatorContent> {
         );
       }
       return null;
+    }
+
+    final orgId = user.primaryOrgId;
+    if (orgId != null && orgId.isNotEmpty) {
+      try {
+        final orgResult = widget.lockTileSpec && widget.savedResult != null
+            ? savedResult.copyWith(
+                userId: widget.savedResult!.userId,
+                tile: widget.savedResult!.tile,
+              )
+            : savedResult;
+        await ref.read(orgJobServiceProvider).upsertFromSavedResult(
+              orgId: orgId,
+              result: orgResult,
+            );
+      } catch (e) {
+        debugPrint('Error syncing org job: $e');
+      }
     }
 
     if (mounted) {
