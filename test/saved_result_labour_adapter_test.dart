@@ -88,6 +88,28 @@ void main() {
       expect(measurements.vergeMetres, closeTo(10, 0.01));
     });
 
+    test('maps dry verge flag to dry verge linear item', () {
+      final input = SavedResultLabourAdapter.inputFromSavedResult(
+        _combinedResult(
+          materialType: 'pantile',
+          useDryVerge: 'YES',
+        ),
+      );
+
+      expect(input, isNotNull);
+      expect(input!.linearMetres[LabourLinearItem.dryVerge], closeTo(10, 0.01));
+      expect(input.linearMetres[LabourLinearItem.verge], isNull);
+    });
+
+    test('maps fibre cement to fibre cement slate roof type', () {
+      expect(
+        SavedResultLabourAdapter.roofTypeFromTile(
+          {'materialType': 'Fibre Cement Slate'},
+        ),
+        LabourRoofType.fibreCementSlate,
+      );
+    });
+
     test('maps dry ridge flag to dry ridge linear item', () {
       final input = SavedResultLabourAdapter.inputFromSavedResult(
         _combinedResult(
@@ -134,6 +156,17 @@ void main() {
         closeTo(10, 0.01),
       );
       expect(project.customerName, 'Multi-bay site');
+    });
+
+    test('builds import summary for multi-bay job', () {
+      final summary = SavedResultLabourAdapter.importSummaryFromSavedResult(
+        _multiBayResult(),
+      );
+
+      expect(summary, isNotNull);
+      expect(summary!.sectionCount, 2);
+      expect(summary.roofAreaSqm, closeTo(50, 0.01));
+      expect(summary.sectionLabels, ['Rafter 1 / Width 1', 'Rafter 2 / Width 2']);
     });
 
     test('returns null when tile material is missing', () {

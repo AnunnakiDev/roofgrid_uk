@@ -15,6 +15,8 @@ import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_pricing_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quote_pdf_exporter.dart';
+import 'package:roofgrid_uk/app/labour_pricing/services/saved_result_labour_adapter.dart';
+import 'package:roofgrid_uk/widgets/labour/labour_import_summary_dialog.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/navigation/home_back_button.dart';
@@ -104,9 +106,15 @@ class _LabourPricingCalculatorScreenState
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Imported $count section(s) from saved job')),
-    );
+    final summary =
+        SavedResultLabourAdapter.importSummaryFromSavedResult(match);
+    if (summary != null) {
+      await showLabourImportSummaryDialog(context, summary);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported $count section(s) from saved job')),
+      );
+    }
   }
 
   Future<void> _pickQuoteDate(DateTime? current) async {
@@ -219,21 +227,32 @@ class _LabourPricingCalculatorScreenState
                               return ListTile(
                                 title: Text(job.projectName),
                                 subtitle: Text(_savedJobSubtitle(job)),
-                                onTap: () {
+                                onTap: () async {
                                   final sectionCount = ref
                                       .read(labourPricingProvider.notifier)
                                       .importFromSavedResult(job);
                                   Navigator.pop(sheetContext);
                                   if (!mounted) return;
-                                  final message = sectionCount == null
-                                      ? 'Could not import "${job.projectName}"'
-                                      : sectionCount == 1
-                                          ? 'Imported "${job.projectName}" (1 section)'
-                                          : 'Imported "${job.projectName}" ($sectionCount sections)';
-                                  ScaffoldMessenger.of(this.context)
-                                      .showSnackBar(
-                                    SnackBar(content: Text(message)),
-                                  );
+                                  if (sectionCount == null || sectionCount <= 0) {
+                                    ScaffoldMessenger.of(this.context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Could not import "${job.projectName}"',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  final summary =
+                                      SavedResultLabourAdapter
+                                          .importSummaryFromSavedResult(job);
+                                  if (summary != null) {
+                                    await showLabourImportSummaryDialog(
+                                      this.context,
+                                      summary,
+                                    );
+                                  }
                                 },
                               );
                             },

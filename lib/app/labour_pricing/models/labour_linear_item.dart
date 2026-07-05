@@ -2,6 +2,7 @@ enum LabourLinearItem {
   ridge,
   hip,
   dryRidge,
+  dryVerge,
   valley,
   openValley,
   closedValley,
@@ -39,6 +40,8 @@ extension LabourLinearItemLabels on LabourLinearItem {
         return 'Hip';
       case LabourLinearItem.dryRidge:
         return 'Dry ridge system';
+      case LabourLinearItem.dryVerge:
+        return 'Dry verge system';
       case LabourLinearItem.valley:
         return 'Valley';
       case LabourLinearItem.openValley:

@@ -53,6 +53,7 @@ class LabourLinearCatalog {
     ],
     LabourLinearGroup.vergesAbutments: [
       LabourLinearItem.verge,
+      LabourLinearItem.dryVerge,
       LabourLinearItem.abutment,
       LabourLinearItem.partyWall,
     ],

@@ -22,6 +22,7 @@ class BoqSuggestionService {
     LabourLinearItem.openValley: ['open valley'],
     LabourLinearItem.closedValley: ['closed valley'],
     LabourLinearItem.verge: ['verge'],
+    LabourLinearItem.dryVerge: ['dry verge', 'dryverge'],
     LabourLinearItem.abutment: ['abutment'],
     LabourLinearItem.partyWall: ['party wall', 'partywall'],
     LabourLinearItem.steppedFlashing: ['stepped', 'flashing'],

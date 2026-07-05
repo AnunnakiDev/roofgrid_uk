@@ -1,4 +1,5 @@
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_linear_item.dart';
+import 'package:roofgrid_uk/app/labour_pricing/models/saved_result_labour_import_summary.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_pricing_mode.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_input.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_project.dart';
@@ -51,7 +52,7 @@ class SavedResultLabourAdapter {
       return LabourRoofType.flatTraditionalLead;
     }
     if (raw.contains('fibre')) {
-      return LabourRoofType.modernInterlocking;
+      return LabourRoofType.fibreCementSlate;
     }
     if (raw.contains('plain')) {
       return LabourRoofType.plainTile;
@@ -69,6 +70,7 @@ class SavedResultLabourAdapter {
     required double ridgeMetres,
     required double vergeMetres,
     String? useDryRidge,
+    String? useDryVerge,
   }) {
     final linearMetres = <LabourLinearItem, double>{};
     if (ridgeMetres > 0) {
@@ -79,7 +81,11 @@ class SavedResultLabourAdapter {
       }
     }
     if (vergeMetres > 0) {
-      linearMetres[LabourLinearItem.verge] = vergeMetres;
+      if (useDryVerge == 'YES') {
+        linearMetres[LabourLinearItem.dryVerge] = vergeMetres;
+      } else {
+        linearMetres[LabourLinearItem.verge] = vergeMetres;
+      }
     }
     return linearMetres;
   }
@@ -156,6 +162,7 @@ class SavedResultLabourAdapter {
       ridgeMetres: measurements.ridgeMetres,
       vergeMetres: measurements.vergeMetres,
       useDryRidge: flags.useDryRidge,
+      useDryVerge: flags.useDryVerge,
     );
 
     return LabourQuoteInput(
@@ -198,6 +205,7 @@ class SavedResultLabourAdapter {
             slope: slopes[i],
             width: widths[i],
             useDryRidge: flags.useDryRidge,
+            useDryVerge: flags.useDryVerge,
           ),
         );
       }
@@ -261,12 +269,47 @@ class SavedResultLabourAdapter {
     );
   }
 
+  static SavedResultLabourImportSummary? importSummaryFromSavedResult(
+    SavedResult result,
+  ) {
+    final project = projectFromSavedResult(result);
+    if (project == null || project.sections.isEmpty) return null;
+
+    final normalized = normalizeSavedResult(result);
+    final measurements = measurementsFromSavedResult(normalized);
+    final flags = _flagsFromInputs(normalized.inputs);
+    final roofType = roofTypeFromTile(normalized.tile);
+    if (roofType == null) return null;
+
+    final notes = <String>[
+      'Area uses slope length × width per bay — add pitch or hips/valleys manually if needed.',
+    ];
+    if (measurements.ridgeMetres <= 0 || measurements.vergeMetres <= 0) {
+      notes.add('Some linear quantities are missing — check sections before calculating.');
+    }
+
+    return SavedResultLabourImportSummary(
+      projectName: result.projectName,
+      tileName: normalized.tile['name']?.toString(),
+      roofType: roofType,
+      sectionCount: project.sections.length,
+      roofAreaSqm: measurements.roofAreaSqm,
+      ridgeMetres: measurements.ridgeMetres,
+      vergeMetres: measurements.vergeMetres,
+      dryRidge: flags.useDryRidge == 'YES',
+      dryVerge: flags.useDryVerge == 'YES',
+      sectionLabels: project.sections.map((section) => section.label).toList(),
+      notes: notes,
+    );
+  }
+
   static LabourRoofSection _sectionFromBay({
     required int index,
     required LabourRoofType roofType,
     required SlopeInputEntry slope,
     required WidthInputEntry width,
     String? useDryRidge,
+    String? useDryVerge,
   }) {
     final slopeM = slope.value / 1000;
     final widthM = width.value / 1000;
@@ -274,6 +317,7 @@ class SavedResultLabourAdapter {
       ridgeMetres: widthM,
       vergeMetres: slopeM > 0 ? slopeM * 2 : 0,
       useDryRidge: useDryRidge,
+      useDryVerge: useDryVerge,
     );
 
     return LabourRoofSection(

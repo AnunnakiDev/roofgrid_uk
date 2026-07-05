@@ -16,6 +16,7 @@ class LabourDefaults {
     LabourRoofType.traditionalPantile: 1.0,
     LabourRoofType.plainTile: 1.05,
     LabourRoofType.naturalSlate: 1.25,
+    LabourRoofType.fibreCementSlate: 1.12,
     LabourRoofType.shingles: 1.08,
     LabourRoofType.flatFelt: 0.90,
     LabourRoofType.flatGrp: 0.95,

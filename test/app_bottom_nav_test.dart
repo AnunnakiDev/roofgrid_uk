@@ -192,7 +192,7 @@ void main() {
       expect(mainShellNavItems.length, 4);
       expect(mainShellNavItems[0].label, 'Home');
       expect(mainShellNavItems[1].label, 'Calculator');
-      expect(mainShellNavItems[2].label, 'Results');
+      expect(mainShellNavItems[2].label, 'My Jobs');
       expect(mainShellNavItems[3].label, 'Tiles');
     });
   });

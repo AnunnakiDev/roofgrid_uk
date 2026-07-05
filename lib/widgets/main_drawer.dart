@@ -56,7 +56,7 @@ class MainDrawer extends ConsumerWidget {
           ),
           _DrawerNavTile(
             icon: Icons.folder_outlined,
-            title: effectiveIsPro ? 'Saved Results' : 'Saved Results (Pro)',
+            title: effectiveIsPro ? 'My Jobs' : 'My Jobs (Pro)',
             locked: !effectiveIsPro,
             onTap: () {
               if (!effectiveIsPro) {

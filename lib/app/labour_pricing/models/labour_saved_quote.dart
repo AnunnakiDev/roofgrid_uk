@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_config.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_project.dart';
 
@@ -9,6 +10,7 @@ class LabourSavedQuote {
   final LabourQuoteProject project;
   final LabourQuoteConfig quoteConfig;
   final String? importedProjectName;
+  final String? sourceJobId;
 
   const LabourSavedQuote({
     required this.id,
@@ -17,6 +19,7 @@ class LabourSavedQuote {
     required this.project,
     required this.quoteConfig,
     this.importedProjectName,
+    this.sourceJobId,
   });
 
   LabourSavedQuote copyWith({
@@ -26,7 +29,9 @@ class LabourSavedQuote {
     LabourQuoteProject? project,
     LabourQuoteConfig? quoteConfig,
     String? importedProjectName,
+    String? sourceJobId,
     bool clearImportedProjectName = false,
+    bool clearSourceJobId = false,
   }) {
     return LabourSavedQuote(
       id: id ?? this.id,
@@ -37,6 +42,8 @@ class LabourSavedQuote {
       importedProjectName: clearImportedProjectName
           ? null
           : (importedProjectName ?? this.importedProjectName),
+      sourceJobId:
+          clearSourceJobId ? null : (sourceJobId ?? this.sourceJobId),
     );
   }
 
@@ -48,14 +55,20 @@ class LabourSavedQuote {
         'quoteConfig': quoteConfig.toJson(),
         if (importedProjectName != null)
           'importedProjectName': importedProjectName,
+        if (sourceJobId != null) 'sourceJobId': sourceJobId,
       };
+
+  static DateTime _parseSavedAt(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+    return DateTime.tryParse(raw as String? ?? '') ?? DateTime.now();
+  }
 
   factory LabourSavedQuote.fromJson(Map<String, dynamic> json) {
     return LabourSavedQuote(
       id: json['id'] as String,
       name: json['name'] as String? ?? 'Untitled quote',
-      savedAt: DateTime.tryParse(json['savedAt'] as String? ?? '') ??
-          DateTime.now(),
+      savedAt: _parseSavedAt(json['savedAt']),
       project: LabourQuoteProject.fromJson(
         Map<String, dynamic>.from(json['project'] as Map),
       ),
@@ -63,6 +76,7 @@ class LabourSavedQuote {
         Map<String, dynamic>.from(json['quoteConfig'] as Map),
       ),
       importedProjectName: json['importedProjectName'] as String?,
+      sourceJobId: json['sourceJobId'] as String?,
     );
   }
 }

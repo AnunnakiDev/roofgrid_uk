@@ -344,7 +344,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             items: [
               QuickAccessItem(
                 icon: Icons.save_alt_rounded,
-                label: 'Results',
+                label: 'My Jobs',
                 locked: !isPro,
                 onTap: () {
                   if (!isPro) {

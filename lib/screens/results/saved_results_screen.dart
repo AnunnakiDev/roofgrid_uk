@@ -7,7 +7,9 @@ import 'package:roofgrid_uk/models/user_model.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/utils/result_display_registry.dart';
@@ -95,7 +97,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Saved Results'),
+            title: const Text('My Jobs'),
           ),
           drawer: const MainDrawer(),
           body: effectiveIsPro
@@ -126,11 +128,11 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Semantics(
-        label: 'Search saved results',
+        label: 'Search my jobs',
         child: TextField(
           controller: _searchController,
           decoration: InputDecoration(
-            hintText: 'Search by project name or type',
+            hintText: 'Search jobs by name or type',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
@@ -177,7 +179,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Saved Results',
+              'My Jobs',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
@@ -218,9 +220,11 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
 
         final filteredResults = _searchQuery.isEmpty
             ? Future.value(results)
-            : ref
-                .read(resultsServiceProvider)
-                .searchResults(user.id, _searchQuery);
+            : _isOnline
+                ? ref
+                    .read(resultsServiceProvider)
+                    .searchResults(user.id, _searchQuery)
+                : Future.value(_filterResultsLocally(results, _searchQuery));
 
         return FutureBuilder<List<SavedResult>>(
           future: filteredResults,
@@ -229,7 +233,7 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Center(child: Text('No saved results found.'));
+              return const Center(child: Text('No jobs found.'));
             }
 
             final resultsList = snapshot.data!;
@@ -267,7 +271,22 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
     );
   }
 
+  List<SavedResult> _filterResultsLocally(
+    List<SavedResult> results,
+    String query,
+  ) {
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty) return results;
+    return results.where((result) {
+      final projectNameMatch =
+          result.projectName.toLowerCase().contains(needle);
+      final typeMatch = result.type.toString().toLowerCase().contains(needle);
+      return projectNameMatch || typeMatch;
+    }).toList();
+  }
+
   Widget _buildResultCard(SavedResult result) {
+    final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final typeText = savedCalculationTypeLabel(result.type);
     final updatedLine =
         formatSavedUpdatedLine(result.createdAt, result.updatedAt);
@@ -322,6 +341,22 @@ class _SavedResultsScreenState extends ConsumerState<SavedResultsScreen> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Semantics(
+              label: 'Quote job ${result.projectName}',
+              child: IconButton(
+                icon: Icon(
+                  canAccessLabour
+                      ? Icons.request_quote_outlined
+                      : Icons.lock_outline_rounded,
+                ),
+                onPressed: () => navigateToLabourCalculatorWithJob(
+                  context,
+                  result.id,
+                  canAccessLabour: canAccessLabour,
+                ),
+                tooltip: canAccessLabour ? 'Quote this job' : 'Quote (add-on)',
+              ),
+            ),
             Semantics(
               label: 'Recalculate result ${result.projectName}',
               child: IconButton(

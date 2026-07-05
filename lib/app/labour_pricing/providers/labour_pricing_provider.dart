@@ -13,6 +13,8 @@ import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_backend_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_materials_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
+import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
+import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/boq_suggestion_service.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_pricing_engine.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quote_validation.dart';
@@ -24,12 +26,14 @@ class LabourPricingState {
   final LabourQuoteConfig quoteConfig;
   final LabourProjectResult? projectResult;
   final String? importedProjectName;
+  final String? sourceJobId;
 
   const LabourPricingState({
     required this.project,
     required this.quoteConfig,
     this.projectResult,
     this.importedProjectName,
+    this.sourceJobId,
   });
 
   factory LabourPricingState.initial() {
@@ -59,8 +63,10 @@ class LabourPricingState {
     LabourQuoteConfig? quoteConfig,
     LabourProjectResult? projectResult,
     String? importedProjectName,
+    String? sourceJobId,
     bool clearResult = false,
     bool clearImport = false,
+    bool clearSourceJob = false,
   }) {
     return LabourPricingState(
       project: project ?? this.project,
@@ -68,6 +74,7 @@ class LabourPricingState {
       projectResult: clearResult ? null : (projectResult ?? this.projectResult),
       importedProjectName:
           clearImport ? null : (importedProjectName ?? this.importedProjectName),
+      sourceJobId: clearSourceJob ? null : (sourceJobId ?? this.sourceJobId),
     );
   }
 }
@@ -326,6 +333,7 @@ class LabourPricingNotifier extends Notifier<LabourPricingState> {
         contingencyPercent: state.project.contingencyPercent,
       ),
       importedProjectName: result.projectName,
+      sourceJobId: result.id,
       clearResult: true,
     );
     return imported.sections.length;
@@ -342,8 +350,36 @@ class LabourPricingNotifier extends Notifier<LabourPricingState> {
       project: state.project,
       quoteConfig: state.quoteConfig,
       importedProjectName: state.importedProjectName,
+      sourceJobId: state.sourceJobId,
     );
-    return ref.read(labourQuotesProvider.notifier).saveQuote(quote);
+    final saved = await ref.read(labourQuotesProvider.notifier).saveQuote(quote);
+
+    final jobId = state.sourceJobId;
+    if (saved != null && jobId != null && jobId.isNotEmpty) {
+      try {
+        final userId = ref.read(currentUserProvider).value?.id;
+        if (userId != null) {
+          final results =
+              await ref.read(savedResultsProvider(userId).future);
+          SavedResult? job;
+          for (final entry in results) {
+            if (entry.id == jobId) {
+              job = entry;
+              break;
+            }
+          }
+          if (job != null) {
+            await ref.read(resultsServiceProvider).linkQuoteToJob(
+                  result: job,
+                  quoteId: saved.id,
+                );
+          }
+        }
+      } catch (_) {
+        // Linking is best-effort; quote is still saved locally/cloud.
+      }
+    }
+    return saved;
   }
 
   void loadQuote(LabourSavedQuote quote) {
@@ -352,6 +388,7 @@ class LabourPricingNotifier extends Notifier<LabourPricingState> {
       project: quote.project,
       quoteConfig: quote.quoteConfig,
       importedProjectName: quote.importedProjectName,
+      sourceJobId: quote.sourceJobId,
       clearResult: true,
     );
     ref.read(labourBackendProvider.notifier).updateQuoteConfig(quote.quoteConfig);

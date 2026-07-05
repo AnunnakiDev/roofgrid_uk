@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
+import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/navigation/home_back_button.dart';
@@ -50,6 +52,7 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
         formatSavedUpdatedLine(result.createdAt, result.updatedAt);
     final tileName = result.tile['name']?.toString();
     final fontSize = MediaQuery.of(context).size.width >= 600 ? 16.0 : 14.0;
+    final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
 
     // Extract vertical and horizontal results from savedResult
     VerticalCalculationResult? verticalResult;
@@ -158,6 +161,68 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                             ),
                       ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Labour quote',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          canAccessLabour
+                              ? 'Create a labour quote from this job\'s measurements.'
+                              : 'Labour Pricing add-on required to quote from this job.',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                        ),
+                        if (result.linkedQuoteId != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Linked quote saved',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color:
+                                      Theme.of(context).colorScheme.secondary,
+                                ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _isExporting
+                              ? null
+                              : () => navigateToLabourCalculatorWithJob(
+                                    context,
+                                    result.id,
+                                    canAccessLabour: canAccessLabour,
+                                  ),
+                          icon: Icon(
+                            canAccessLabour
+                                ? Icons.request_quote_outlined
+                                : Icons.lock_outline_rounded,
+                          ),
+                          label: Text(
+                            canAccessLabour
+                                ? 'Quote this job'
+                                : 'Quote this job (add-on)',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               Padding(

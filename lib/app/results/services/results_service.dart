@@ -97,6 +97,22 @@ class ResultsService {
     return true;
   }
 
+  Future<void> linkQuoteToJob({
+    required SavedResult result,
+    required String quoteId,
+  }) async {
+    final now = DateTime.now();
+    await _firestore
+        .collection('users')
+        .doc(result.userId)
+        .collection('saved_results')
+        .doc(result.id)
+        .update({
+      'linkedQuoteId': quoteId,
+      'updatedAt': Timestamp.fromDate(now),
+    });
+  }
+
   Future<bool> updateProjectName(SavedResult result, String newName) async {
     await _firestore
         .collection('users')

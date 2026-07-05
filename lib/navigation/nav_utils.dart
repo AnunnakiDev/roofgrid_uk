@@ -139,6 +139,24 @@ void navigateToLabourCalculator(BuildContext context) {
   context.go(labourCalculatorPath);
 }
 
+void navigateToLabourCalculatorWithJob(
+  BuildContext context,
+  String jobId, {
+  bool canAccessLabour = true,
+}) {
+  final trimmed = jobId.trim();
+  if (trimmed.isEmpty) {
+    navigateToLabourCalculator(context);
+    return;
+  }
+  if (!canAccessLabour) {
+    showLabourGateSnackBar(context);
+    context.go(labourCalculatorUpsellPath);
+    return;
+  }
+  context.go('$labourCalculatorPath?jobId=$trimmed');
+}
+
 void showProGateSnackBar(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(

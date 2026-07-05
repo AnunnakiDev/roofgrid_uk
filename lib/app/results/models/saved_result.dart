@@ -36,6 +36,9 @@ class SavedResult {
   @HiveField(9)
   final DateTime updatedAt;
 
+  @HiveField(10)
+  final String? linkedQuoteId;
+
   SavedResult({
     required this.id,
     required this.userId,
@@ -47,7 +50,38 @@ class SavedResult {
     required this.tile,
     required this.createdAt,
     required this.updatedAt,
+    this.linkedQuoteId,
   });
+
+  SavedResult copyWith({
+    String? id,
+    String? userId,
+    String? projectName,
+    CalculationType? type,
+    DateTime? timestamp,
+    Map<String, dynamic>? inputs,
+    Map<String, dynamic>? outputs,
+    Map<String, dynamic>? tile,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? linkedQuoteId,
+    bool clearLinkedQuoteId = false,
+  }) {
+    return SavedResult(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      projectName: projectName ?? this.projectName,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      inputs: inputs ?? this.inputs,
+      outputs: outputs ?? this.outputs,
+      tile: tile ?? this.tile,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      linkedQuoteId:
+          clearLinkedQuoteId ? null : (linkedQuoteId ?? this.linkedQuoteId),
+    );
+  }
 
   // Add this helper method to the SavedResult class
   static List<Map<String, dynamic>> _safeParseList(dynamic rawList) {
@@ -82,6 +116,7 @@ class SavedResult {
       tile: Map<String, dynamic>.from(json['tile'] as Map),
       createdAt: (json['createdAt'] as Timestamp).toDate(),
       updatedAt: (json['updatedAt'] as Timestamp).toDate(),
+      linkedQuoteId: json['linkedQuoteId'] as String?,
     );
   }
 
@@ -98,6 +133,7 @@ class SavedResult {
       'tile': tile,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
+      if (linkedQuoteId != null) 'linkedQuoteId': linkedQuoteId,
     };
   }
 
@@ -114,6 +150,7 @@ class SavedResult {
       'tile': tile,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      if (linkedQuoteId != null) 'linkedQuoteId': linkedQuoteId,
     };
   }
 }

@@ -14,7 +14,7 @@ const List<BottomNavItem> mainShellNavItems = [
     activeIcon: Icons.calculate,
   ),
   BottomNavItem(
-    label: 'Results',
+    label: 'My Jobs',
     icon: Icons.save_outlined,
     activeIcon: Icons.save,
   ),

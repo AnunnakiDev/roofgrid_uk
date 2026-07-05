@@ -3,6 +3,7 @@ enum LabourRoofType {
   traditionalPantile,
   plainTile,
   naturalSlate,
+  fibreCementSlate,
   shingles,
   flatFelt,
   flatGrp,
@@ -22,6 +23,8 @@ extension LabourRoofTypeLabels on LabourRoofType {
         return 'Plain tiles';
       case LabourRoofType.naturalSlate:
         return 'Natural slate';
+      case LabourRoofType.fibreCementSlate:
+        return 'Fibre cement slate';
       case LabourRoofType.shingles:
         return 'Shingles';
       case LabourRoofType.flatFelt:
@@ -59,7 +62,8 @@ LabourRoofType labourRoofTypeFromName(String name) {
     case 'pantile':
       return LabourRoofType.traditionalPantile;
     case 'fibreCement':
-      return LabourRoofType.modernInterlocking;
+    case 'fibreCementSlate':
+      return LabourRoofType.fibreCementSlate;
     case 'slate':
       return LabourRoofType.naturalSlate;
     default:
