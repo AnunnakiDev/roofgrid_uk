@@ -7,6 +7,7 @@ import 'package:roofgrid_uk/app/labour_pricing/models/material_category.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/material_price_entry.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_materials_provider.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_decimal_text_field.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 
 class LabourMaterialLinesPanel extends ConsumerWidget {
   final List<LabourMaterialLine> lines;
@@ -91,35 +92,13 @@ class LabourMaterialLinesPanel extends ConsumerWidget {
                       style: GoogleFonts.poppins(fontSize: 12),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _QtyField(
-                            label: 'Suggested',
-                            value: line.suggestedQty,
-                            enabled: false,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _QtyField(
-                            label: 'Actual qty',
-                            value: line.overrideQty ?? line.suggestedQty,
-                            onChanged: (qty) {
-                              final next = [...lines];
-                              next[index] = line.copyWith(overrideQty: qty);
-                              onChanged(next);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          gbp.format(line.lineTotalGbp),
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                    _buildQtyRow(
+                      context,
+                      gbp: gbp,
+                      line: line,
+                      lines: lines,
+                      index: index,
+                      onChanged: onChanged,
                     ),
                   ],
                 ),
@@ -143,6 +122,58 @@ class LabourMaterialLinesPanel extends ConsumerWidget {
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildQtyRow(
+    BuildContext context, {
+    required NumberFormat gbp,
+    required LabourMaterialLine line,
+    required List<LabourMaterialLine> lines,
+    required int index,
+    required ValueChanged<List<LabourMaterialLine>> onChanged,
+  }) {
+    final narrow = isNarrowLayout(context);
+    final suggested = _QtyField(
+      label: 'Suggested',
+      value: line.suggestedQty,
+      enabled: false,
+    );
+    final actual = _QtyField(
+      label: 'Actual qty',
+      value: line.overrideQty ?? line.suggestedQty,
+      onChanged: (qty) {
+        final next = [...lines];
+        next[index] = line.copyWith(overrideQty: qty);
+        onChanged(next);
+      },
+    );
+    final total = Text(
+      gbp.format(line.lineTotalGbp),
+      style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+    );
+
+    if (narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          suggested,
+          const SizedBox(height: 8),
+          actual,
+          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerRight, child: total),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: suggested),
+        const SizedBox(width: 8),
+        Expanded(child: actual),
+        const SizedBox(width: 8),
+        total,
       ],
     );
   }

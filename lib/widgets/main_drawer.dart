@@ -21,6 +21,8 @@ class MainDrawer extends ConsumerWidget {
     final effectiveIsPro = ref.watch(effectiveIsProProvider);
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final location = GoRouterState.of(context).matchedLocation;
+    final onShellRoute = isMainShellPath(location);
 
     return Drawer(
       child: ListView(
@@ -38,58 +40,60 @@ class MainDrawer extends ConsumerWidget {
               Navigator.pop(context);
             },
           ),
-          _DrawerNavTile(
-            icon: Icons.home_outlined,
-            title: 'Home',
-            onTap: () {
-              context.go('/home');
-              Navigator.pop(context);
-            },
-          ),
-          _DrawerNavTile(
-            icon: Icons.calculate_outlined,
-            title: 'Calculator',
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/calculator');
-            },
-          ),
-          _DrawerNavTile(
-            icon: Icons.folder_outlined,
-            title: effectiveIsPro ? 'My Jobs' : 'My Jobs (Pro)',
-            locked: !effectiveIsPro,
-            onTap: () {
-              if (!effectiveIsPro) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                context.go('/subscription');
-              } else {
-                context.go('/results');
-              }
-              Navigator.pop(context);
-            },
-          ),
-          _DrawerNavTile(
-            icon: Icons.grid_view_rounded,
-            title: effectiveIsPro ? 'Manage Tiles' : 'Manage Tiles (Pro)',
-            locked: !effectiveIsPro,
-            onTap: () {
-              if (!effectiveIsPro) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Upgrade to Pro to access this feature'),
-                  ),
-                );
-                context.go('/subscription');
-              } else {
-                context.go('/tiles');
-              }
-              Navigator.pop(context);
-            },
-          ),
+          if (!onShellRoute) ...[
+            _DrawerNavTile(
+              icon: Icons.home_outlined,
+              title: 'Home',
+              onTap: () {
+                context.go('/home');
+                Navigator.pop(context);
+              },
+            ),
+            _DrawerNavTile(
+              icon: Icons.calculate_outlined,
+              title: 'Calculator',
+              onTap: () {
+                Navigator.pop(context);
+                context.go('/calculator');
+              },
+            ),
+            _DrawerNavTile(
+              icon: Icons.folder_outlined,
+              title: effectiveIsPro ? 'My Jobs' : 'My Jobs (Pro)',
+              locked: !effectiveIsPro,
+              onTap: () {
+                if (!effectiveIsPro) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  context.go('/results');
+                }
+                Navigator.pop(context);
+              },
+            ),
+            _DrawerNavTile(
+              icon: Icons.grid_view_rounded,
+              title: effectiveIsPro ? 'Manage Tiles' : 'Manage Tiles (Pro)',
+              locked: !effectiveIsPro,
+              onTap: () {
+                if (!effectiveIsPro) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Upgrade to Pro to access this feature'),
+                    ),
+                  );
+                  context.go('/subscription');
+                } else {
+                  context.go('/tiles');
+                }
+                Navigator.pop(context);
+              },
+            ),
+          ],
           if (!effectiveIsPro)
             _DrawerNavTile(
               icon: Icons.workspace_premium_outlined,

@@ -16,22 +16,40 @@ class LabourGroupedLinearInputs extends StatelessWidget {
   final LabourRoofType roofType;
   final LabourQuoteInput input;
   final LabourMetresChanged onMetresChanged;
+  final bool compact;
+  final bool showUntypical;
 
   const LabourGroupedLinearInputs({
     super.key,
     required this.roofType,
     required this.input,
     required this.onMetresChanged,
+    this.compact = false,
+    this.showUntypical = false,
   });
+
+  static bool hasHiddenGroups(LabourRoofType roofType) {
+    final groups = LabourLinearCatalog.visibleGroups();
+    return groups.any(
+      (group) => !LabourLinearCatalog.isGroupEnabled(group, roofType),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final groups = LabourLinearCatalog.visibleGroups();
+    final visibleGroups = groups.where((group) {
+      final enabled = LabourLinearCatalog.isGroupEnabled(group, roofType);
+      if (!compact || showUntypical) return true;
+      return enabled;
+    });
+
     return Column(
-      children: groups.map((group) {
+      children: visibleGroups.map((group) {
         final enabled = LabourLinearCatalog.isGroupEnabled(group, roofType);
         final items = LabourLinearCatalog.itemsForGroup(group);
         return ExpansionTile(
+          initiallyExpanded: enabled,
           title: Text(
             group.label,
             style: GoogleFonts.poppins(
@@ -68,22 +86,33 @@ class LabourGroupedAncillaryInputs extends StatelessWidget {
   final LabourRoofType roofType;
   final LabourQuoteInput input;
   final LabourAncillaryChanged onCountChanged;
+  final bool compact;
+  final bool showUntypical;
 
   const LabourGroupedAncillaryInputs({
     super.key,
     required this.roofType,
     required this.input,
     required this.onCountChanged,
+    this.compact = false,
+    this.showUntypical = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final groups = LabourAncillaryCatalog.visibleGroups();
+    final visibleGroups = groups.where((group) {
+      final enabled = LabourAncillaryCatalog.isGroupEnabled(group, roofType);
+      if (!compact || showUntypical) return true;
+      return enabled;
+    });
+
     return Column(
-      children: groups.map((group) {
+      children: visibleGroups.map((group) {
         final enabled = LabourAncillaryCatalog.isGroupEnabled(group, roofType);
         final items = LabourAncillaryCatalog.itemsByGroup[group] ?? const [];
         return ExpansionTile(
+          initiallyExpanded: enabled,
           title: Text(
             group.label,
             style: GoogleFonts.poppins(
@@ -115,4 +144,3 @@ class LabourGroupedAncillaryInputs extends StatelessWidget {
     );
   }
 }
-

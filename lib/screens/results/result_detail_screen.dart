@@ -18,6 +18,7 @@ import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/models/calculator/horizontal_calculation_result.dart';
 import 'package:roofgrid_uk/models/calculator/vertical_calculation_result.dart';
 import 'package:roofgrid_uk/navigation/home_back_button.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
 import 'package:roofgrid_uk/utils/result_display_registry.dart';
@@ -100,22 +101,21 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
           ['gutterOverhang'] as double?;
     }
 
+    final narrow = isNarrowLayout(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(result.projectName),
         actions: [
           const HomeBackButton(),
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed:
-                _isExporting ? null : () => _showExportOptions(context, result),
-            tooltip: 'Export',
-          ),
-          IconButton(
-            icon: const Icon(Icons.calculate_outlined),
-            onPressed: _isExporting
-                ? null
-                : () {
+          if (narrow)
+            PopupMenuButton<String>(
+              enabled: !_isExporting,
+              onSelected: (action) {
+                switch (action) {
+                  case 'share':
+                    _showExportOptions(context, result);
+                  case 'recalculate':
                     if (isInstaller) {
                       navigateToLockedSetOutCalculator(
                         context,
@@ -125,15 +125,48 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
                     } else {
                       navigateToCalculator(context, savedResult: _result);
                     }
-                  },
-            tooltip: 'Recalculate',
-          ),
-          IconButton(
-            icon: const Icon(Icons.drive_file_rename_outline),
-            onPressed:
-                _isExporting ? null : () => _navigateToEditScreen(context),
-            tooltip: 'Rename project',
-          ),
+                  case 'rename':
+                    _navigateToEditScreen(context);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'share', child: Text('Export')),
+                PopupMenuItem(value: 'recalculate', child: Text('Recalculate')),
+                PopupMenuItem(value: 'rename', child: Text('Rename project')),
+              ],
+            )
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _isExporting
+                  ? null
+                  : () => _showExportOptions(context, result),
+              tooltip: 'Export',
+            ),
+            IconButton(
+              icon: const Icon(Icons.calculate_outlined),
+              onPressed: _isExporting
+                  ? null
+                  : () {
+                      if (isInstaller) {
+                        navigateToLockedSetOutCalculator(
+                          context,
+                          savedResult: _result,
+                          orgJobId: matchingOrgJob?.id,
+                        );
+                      } else {
+                        navigateToCalculator(context, savedResult: _result);
+                      }
+                    },
+              tooltip: 'Recalculate',
+            ),
+            IconButton(
+              icon: const Icon(Icons.drive_file_rename_outline),
+              onPressed:
+                  _isExporting ? null : () => _navigateToEditScreen(context),
+              tooltip: 'Rename project',
+            ),
+          ],
         ],
       ),
       drawer: const MainDrawer(),
@@ -145,8 +178,10 @@ class _ResultDetailScreenState extends ConsumerState<ResultDetailScreen> {
             children: [
               // Summary banner
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                padding: EdgeInsets.symmetric(
+                  vertical: narrow ? 12 : 16,
+                  horizontal: screenHorizontalPadding(context),
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [

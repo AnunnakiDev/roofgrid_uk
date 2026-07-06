@@ -20,30 +20,45 @@ import 'package:roofgrid_uk/utils/decimal_input_utils.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_new_covering_panel.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_section_materials_panel.dart';
 import 'package:roofgrid_uk/screens/labour/widgets/labour_stripping_panel.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 
-class LabourSectionList extends ConsumerWidget {
+class LabourSectionList extends ConsumerStatefulWidget {
   const LabourSectionList({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LabourSectionList> createState() => _LabourSectionListState();
+}
+
+class _LabourSectionListState extends ConsumerState<LabourSectionList> {
+  String? _expandedSectionId;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(labourPricingProvider);
     final notifier = ref.read(labourPricingProvider.notifier);
     final sections = state.project.sections;
     final sectionResults = state.projectResult?.sectionResults ?? const [];
+    final expandedId = _expandedSectionId ??
+        (sections.isNotEmpty ? sections.first.id : null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < sections.length; i++)
           _LabourSectionTile(
-            key: ValueKey(sections[i].id),
+            key: ValueKey('${sections[i].id}-$expandedId'),
             section: sections[i],
             sectionResult: _sectionResultFor(
               sectionResults,
               sections[i].id,
             ),
             canRemove: sections.length > 1,
-            initiallyExpanded: i == 0,
+            isExpanded: sections[i].id == expandedId,
+            onExpansionChanged: (expanded) {
+              setState(() {
+                _expandedSectionId = expanded ? sections[i].id : null;
+              });
+            },
             onLabelChanged: (label) =>
                 notifier.updateSectionLabel(sections[i].id, label),
             onDuplicate: () => notifier.duplicateSection(sections[i].id),
@@ -65,7 +80,15 @@ class LabourSectionList extends ConsumerWidget {
           ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: notifier.addSection,
+          onPressed: () {
+            notifier.addSection();
+            final nextSections = ref.read(labourPricingProvider).project.sections;
+            if (nextSections.isNotEmpty) {
+              setState(() {
+                _expandedSectionId = nextSections.last.id;
+              });
+            }
+          },
           icon: const Icon(Icons.add_rounded),
           label: const Text('Add section'),
         ),
@@ -87,7 +110,8 @@ class _LabourSectionTile extends StatefulWidget {
   final LabourRoofSection section;
   final LabourSectionResult? sectionResult;
   final bool canRemove;
-  final bool initiallyExpanded;
+  final bool isExpanded;
+  final ValueChanged<bool> onExpansionChanged;
   final ValueChanged<String> onLabelChanged;
   final VoidCallback onDuplicate;
   final VoidCallback onRemove;
@@ -105,7 +129,8 @@ class _LabourSectionTile extends StatefulWidget {
     required this.section,
     required this.sectionResult,
     required this.canRemove,
-    required this.initiallyExpanded,
+    required this.isExpanded,
+    required this.onExpansionChanged,
     required this.onLabelChanged,
     required this.onDuplicate,
     required this.onRemove,
@@ -127,6 +152,7 @@ class _LabourSectionTileState extends State<_LabourSectionTile> {
   late final TextEditingController _labelController;
   late final TextEditingController _manualController;
   late final FocusNode _manualFocusNode;
+  bool _showAllLinearWork = false;
 
   @override
   void initState() {
@@ -167,10 +193,13 @@ class _LabourSectionTileState extends State<_LabourSectionTile> {
     final section = widget.section;
     final input = section.input;
 
+    final narrow = isNarrowLayout(context);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ExpansionTile(
-        initiallyExpanded: widget.initiallyExpanded,
+        initiallyExpanded: widget.isExpanded,
+        onExpansionChanged: widget.onExpansionChanged,
         title: Text(
           section.label,
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -194,31 +223,76 @@ class _LabourSectionTileState extends State<_LabourSectionTile> {
                   onChanged: widget.onLabelChanged,
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.canMoveUp ? widget.onMoveUp : null,
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                      tooltip: 'Move section up',
+                if (narrow)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (action) {
+                        switch (action) {
+                          case 'up':
+                            if (widget.canMoveUp) widget.onMoveUp();
+                          case 'down':
+                            if (widget.canMoveDown) widget.onMoveDown();
+                          case 'duplicate':
+                            widget.onDuplicate();
+                          case 'remove':
+                            if (widget.canRemove) widget.onRemove();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'up',
+                          child: Text('Move up'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'down',
+                          child: Text('Move down'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'duplicate',
+                          child: Text('Duplicate'),
+                        ),
+                        if (widget.canRemove)
+                          const PopupMenuItem(
+                            value: 'remove',
+                            child: Text('Remove'),
+                          ),
+                      ],
                     ),
-                    IconButton(
-                      onPressed: widget.canMoveDown ? widget.onMoveDown : null,
-                      icon: const Icon(Icons.arrow_downward_rounded),
-                      tooltip: 'Move section down',
-                    ),
-                    TextButton.icon(
-                      onPressed: widget.onDuplicate,
-                      icon: const Icon(Icons.copy_rounded, size: 18),
-                      label: const Text('Duplicate'),
-                    ),
-                    if (widget.canRemove)
-                      TextButton.icon(
-                        onPressed: widget.onRemove,
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                        label: const Text('Remove'),
+                  )
+                else
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      IconButton(
+                        onPressed: widget.canMoveUp ? widget.onMoveUp : null,
+                        icon: const Icon(Icons.arrow_upward_rounded),
+                        tooltip: 'Move section up',
                       ),
-                  ],
-                ),
+                      IconButton(
+                        onPressed:
+                            widget.canMoveDown ? widget.onMoveDown : null,
+                        icon: const Icon(Icons.arrow_downward_rounded),
+                        tooltip: 'Move section down',
+                      ),
+                      TextButton.icon(
+                        onPressed: widget.onDuplicate,
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        label: const Text('Duplicate'),
+                      ),
+                      if (widget.canRemove)
+                        TextButton.icon(
+                          onPressed: widget.onRemove,
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                          ),
+                          label: const Text('Remove'),
+                        ),
+                    ],
+                  ),
                 const SizedBox(height: 8),
                 LabourComplexityPanel(
                   section: section,
@@ -277,9 +351,28 @@ class _LabourSectionTileState extends State<_LabourSectionTile> {
                 LabourGroupedLinearInputs(
                   roofType: input.roofType,
                   input: input,
+                  compact: narrow,
+                  showUntypical: _showAllLinearWork,
                   onMetresChanged: (item, value) =>
                       _updateLinear(input, item, value),
                 ),
+                if (narrow &&
+                    LabourGroupedLinearInputs.hasHiddenGroups(input.roofType))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _showAllLinearWork = !_showAllLinearWork;
+                        });
+                      },
+                      child: Text(
+                        _showAllLinearWork
+                            ? 'Hide non-typical linear work'
+                            : 'Show all linear work',
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Text(
                   'Ancillaries',
@@ -289,6 +382,8 @@ class _LabourSectionTileState extends State<_LabourSectionTile> {
                 LabourGroupedAncillaryInputs(
                   roofType: input.roofType,
                   input: input,
+                  compact: narrow,
+                  showUntypical: _showAllLinearWork,
                   onCountChanged: (ancillary, value) =>
                       _updateAncillary(input, ancillary, value),
                 ),

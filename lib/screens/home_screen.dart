@@ -13,6 +13,7 @@ import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
 import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
 import 'package:roofgrid_uk/utils/calculator_mode.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
 import 'package:roofgrid_uk/widgets/brand_wordmark.dart';
 
 import 'package:roofgrid_uk/widgets/home_welcome_banner.dart';
@@ -174,7 +175,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isPro = ref.watch(effectiveIsProProvider);
     final canAccessLabour = ref.watch(canAccessLabourCalculatorProvider);
     final isInstaller = ref.watch(isInstallerRoleProvider);
-    final horizontalPadding = isLargeScreen ? 24.0 : 18.0;
+    final horizontalPadding = screenHorizontalPadding(context);
     final sectionSpacing = isLargeScreen ? 36.0 : 28.0;
 
     return SingleChildScrollView(

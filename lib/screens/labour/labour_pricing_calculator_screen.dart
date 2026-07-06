@@ -6,33 +6,32 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/models/labour_flow_step.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_config.dart';
-import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_method.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_quote_project.dart';
 import 'package:roofgrid_uk/app/labour_pricing/models/labour_saved_quote.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_backend_provider.dart';
-import 'package:roofgrid_uk/app/auth/providers/permissions_provider.dart';
+import 'package:roofgrid_uk/app/labour_pricing/providers/labour_flow_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_pricing_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/providers/labour_quotes_provider.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/labour_quote_pdf_exporter.dart';
 import 'package:roofgrid_uk/app/labour_pricing/services/saved_result_labour_adapter.dart';
-import 'package:roofgrid_uk/widgets/labour/labour_import_summary_dialog.dart';
+import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
 import 'package:roofgrid_uk/app/results/models/saved_result.dart';
 import 'package:roofgrid_uk/app/results/providers/results_provider.dart';
 import 'package:roofgrid_uk/navigation/home_back_button.dart';
 import 'package:roofgrid_uk/navigation/nav_utils.dart';
 import 'package:roofgrid_uk/providers/auth_provider.dart';
-import 'package:roofgrid_uk/providers/developer_mode_provider.dart';
-import 'package:roofgrid_uk/widgets/header_widget.dart';
+import 'package:roofgrid_uk/screens/labour/steps/labour_materials_step.dart';
+import 'package:roofgrid_uk/screens/labour/steps/labour_project_step.dart';
+import 'package:roofgrid_uk/screens/labour/steps/labour_quote_step.dart';
+import 'package:roofgrid_uk/screens/labour/steps/labour_results_step.dart';
+import 'package:roofgrid_uk/screens/labour/steps/labour_sections_step.dart';
+import 'package:roofgrid_uk/screens/labour/widgets/labour_step_progress.dart';
+import 'package:roofgrid_uk/utils/layout_utils.dart';
+import 'package:roofgrid_uk/widgets/labour/labour_import_summary_dialog.dart';
 import 'package:roofgrid_uk/widgets/main_drawer.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_decimal_text_field.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_int_text_field.dart';
-import 'package:roofgrid_uk/app/labour_pricing/utils/labour_quote_lookup.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_linked_job_banner.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_project_materials_panel.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_quotes_sync_chip.dart';
-import 'package:roofgrid_uk/screens/labour/widgets/labour_section_panel.dart';
-import 'package:roofgrid_uk/widgets/section_header.dart';
 import 'package:share_plus/share_plus.dart';
 
 class LabourPricingCalculatorScreen extends ConsumerStatefulWidget {
@@ -67,6 +66,12 @@ class _LabourPricingCalculatorScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyHostHandoff());
   }
 
+  void _syncFlowStepAfterLoad({bool hasResult = false}) {
+    ref.read(labourFlowProvider.notifier).goTo(
+          hasResult ? LabourFlowStep.results : LabourFlowStep.project,
+        );
+  }
+
   Future<void> _applyHostHandoff() async {
     if (_hostHandoffApplied || !mounted) return;
     _hostHandoffApplied = true;
@@ -77,6 +82,9 @@ class _LabourPricingCalculatorScreenState
       notifier.loadInitialProject(
         widget.initialProject!,
         quoteConfig: widget.initialQuoteConfig,
+      );
+      _syncFlowStepAfterLoad(
+        hasResult: ref.read(labourPricingProvider).result != null,
       );
       return;
     }
@@ -93,6 +101,9 @@ class _LabourPricingCalculatorScreenState
         return;
       }
       notifier.loadQuote(quote);
+      _syncFlowStepAfterLoad(
+        hasResult: ref.read(labourPricingProvider).result != null,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Loaded "${quote.name}"')),
       );
@@ -129,6 +140,7 @@ class _LabourPricingCalculatorScreenState
       );
       return;
     }
+    ref.read(labourFlowProvider.notifier).goTo(LabourFlowStep.project);
     final summary =
         SavedResultLabourAdapter.importSummaryFromSavedResult(match);
     if (summary != null) {
@@ -138,19 +150,6 @@ class _LabourPricingCalculatorScreenState
         SnackBar(content: Text('Imported $count section(s) from saved job')),
       );
     }
-  }
-
-  Future<void> _pickQuoteDate(DateTime? current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked == null || !mounted) return;
-    ref.read(labourPricingProvider.notifier).updateProject(
-          ref.read(labourPricingProvider).project.copyWith(quoteDate: picked),
-        );
   }
 
   void _openCustomerQuote() {
@@ -194,108 +193,6 @@ class _LabourPricingCalculatorScreenState
     } finally {
       if (mounted) setState(() => _isExportingPdf = false);
     }
-  }
-
-  void _showImportPicker() {
-    final effectiveIsPro = ref.read(effectiveIsProProvider);
-    if (!effectiveIsPro) {
-      showProGateSnackBar(context);
-      context.go('/subscription');
-      return;
-    }
-
-    final userId = ref.read(currentUserProvider).value?.id;
-    if (userId == null || userId.isEmpty) return;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return Consumer(
-          builder: (context, ref, _) {
-            final resultsAsync = ref.watch(savedResultsProvider(userId));
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Import from saved job',
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    resultsAsync.when(
-                      data: (results) {
-                        if (results.isEmpty) {
-                          return Text(
-                            'No saved jobs found. Save a set-out calculation first.',
-                            style: GoogleFonts.poppins(),
-                          );
-                        }
-                        return ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight:
-                                MediaQuery.of(sheetContext).size.height * 0.45,
-                          ),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: results.length,
-                            itemBuilder: (context, index) {
-                              final job = results[index];
-                              return ListTile(
-                                title: Text(job.projectName),
-                                subtitle: Text(_savedJobSubtitle(job)),
-                                onTap: () async {
-                                  final sectionCount = ref
-                                      .read(labourPricingProvider.notifier)
-                                      .importFromSavedResult(job);
-                                  Navigator.pop(sheetContext);
-                                  if (!mounted) return;
-                                  if (sectionCount == null || sectionCount <= 0) {
-                                    ScaffoldMessenger.of(this.context)
-                                        .showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Could not import "${job.projectName}"',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  final summary =
-                                      SavedResultLabourAdapter
-                                          .importSummaryFromSavedResult(job);
-                                  if (summary != null) {
-                                    await showLabourImportSummaryDialog(
-                                      this.context,
-                                      summary,
-                                    );
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                        );
-                      },
-                      loading: () => const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (error, _) => Text('Error loading jobs: $error'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _showSaveQuoteDialog() async {
@@ -358,59 +255,188 @@ class _LabourPricingCalculatorScreenState
     );
   }
 
-  Future<void> _confirmDeleteQuote(LabourSavedQuote quote) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete quote?'),
-          content: Text('Delete "${quote.name}"? This cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
+  Widget _buildStepBody(LabourFlowStep step) {
+    switch (step) {
+      case LabourFlowStep.project:
+        return const LabourProjectStep();
+      case LabourFlowStep.materials:
+        return const LabourMaterialsStep();
+      case LabourFlowStep.sections:
+        return const LabourSectionsStep();
+      case LabourFlowStep.quote:
+        return LabourQuoteStep(onSaveQuote: _showSaveQuoteDialog);
+      case LabourFlowStep.results:
+        return LabourResultsStep(onOpenCustomerQuote: _openCustomerQuote);
+    }
+  }
 
-    if (confirmed != true || !mounted) return;
+  Widget _buildSummaryChip() {
+    final state = ref.watch(labourPricingProvider);
+    final gbp = NumberFormat.currency(locale: 'en_GB', symbol: '£');
+    final sectionCount = state.project.sections.length;
+    final total = state.projectResult?.activeQuoteTotalGbp;
 
-    final deleted =
-        await ref.read(labourPricingProvider.notifier).deleteSavedQuote(quote.id);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          deleted ? 'Deleted "${quote.name}"' : 'Could not delete quote',
+    if (total == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: screenHorizontalPadding(context),
+        vertical: 6,
+      ),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                '$sectionCount section${sectionCount == 1 ? '' : 's'}',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                gbp.format(total),
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  String _savedJobSubtitle(SavedResult job) {
-    final type = switch (job.type) {
-      CalculationType.vertical => 'Vertical',
-      CalculationType.horizontal => 'Horizontal',
-      CalculationType.combined => 'Combined',
-    };
-    return '$type · ${DateFormat('d MMM yyyy').format(job.createdAt)}';
+  Widget _buildWizardFooter(LabourFlowStep step) {
+    final flow = ref.read(labourFlowProvider.notifier);
+    final validation = flow.validationMessageForAdvance();
+    final horizontalPadding = screenHorizontalPadding(context);
+
+    return Material(
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 12),
+          child: Row(
+            children: [
+              if (step.previous != null)
+                OutlinedButton(
+                  onPressed: flow.retreat,
+                  child: const Text('Back'),
+                )
+              else
+                const SizedBox(width: 80),
+              const Spacer(),
+              if (step == LabourFlowStep.quote)
+                FilledButton.icon(
+                  onPressed: () => calculateLabourQuote(context, ref),
+                  icon: const Icon(Icons.calculate_rounded),
+                  label: const Text('Calculate'),
+                )
+              else if (step == LabourFlowStep.results)
+                FilledButton(
+                  onPressed: () => flow.goTo(LabourFlowStep.quote),
+                  child: const Text('Edit quote'),
+                )
+              else
+                FilledButton(
+                  onPressed: validation == null
+                      ? flow.advance
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(validation)),
+                          );
+                        },
+                  child: Text(step == LabourFlowStep.sections ? 'Continue' : 'Next'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWizardShell() {
+    final step = ref.watch(labourFlowProvider);
+    final compactProgress = isNarrowLayout(context);
+    final horizontalPadding = screenHorizontalPadding(context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+          child: LabourStepProgress(
+            currentStep: step,
+            compact: compactProgress,
+          ),
+        ),
+        _buildSummaryChip(),
+        Expanded(
+          child: constrainContentWidth(
+            context,
+            _buildStepBody(step),
+          ),
+        ),
+        _buildWizardFooter(step),
+      ],
+    );
+  }
+
+  Widget _buildLegacyScroll() {
+    final state = ref.watch(labourPricingProvider);
+    final horizontalPadding = screenHorizontalPadding(context);
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 18, horizontalPadding, 32),
+      children: [
+        const LabourProjectStep(embedded: true),
+        const SizedBox(height: 24),
+        const LabourMaterialsStep(embedded: true),
+        const SizedBox(height: 24),
+        const LabourSectionsStep(embedded: true),
+        const SizedBox(height: 24),
+        LabourQuoteStep(
+          embedded: true,
+          onSaveQuote: _showSaveQuoteDialog,
+        ),
+        const SizedBox(height: 24),
+        LabourResultsStep(
+          embedded: true,
+          onOpenCustomerQuote: _openCustomerQuote,
+        ),
+        if (state.result != null) ...[
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () {
+              final message =
+                  ref.read(labourPricingProvider.notifier).recalculate();
+              if (!mounted) return;
+              if (message != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(message)),
+                );
+              }
+            },
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Recalculate'),
+          ),
+        ],
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(labourPricingProvider);
-    final savedQuotesAsync = ref.watch(labourQuotesProvider);
     final backendHydrated = ref.watch(labourBackendProvider).isHydrated;
-    final effectiveIsPro = ref.watch(effectiveIsProProvider);
-    final userId = ref.watch(currentUserProvider).value?.id;
-    final notifier = ref.read(labourPricingProvider.notifier);
-    final gbp = NumberFormat.currency(locale: 'en_GB', symbol: '£');
+    final useWizard = useLabourWizardLayout(context);
 
     if (!backendHydrated) {
       return const Scaffold(
@@ -444,603 +470,7 @@ class _LabourPricingCalculatorScreenState
         ],
       ),
       drawer: const MainDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
-        children: [
-          const SectionHeader(
-            title: 'Project quote',
-            subtitle:
-                'Add roof sections, then calculate your profitable day rate',
-          ),
-          if (state.sourceJobId != null && state.sourceJobId!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            LabourLinkedJobBanner(jobId: state.sourceJobId!),
-          ],
-          const SizedBox(height: 16),
-          const HeaderWidget(title: 'Project details'),
-          const SizedBox(height: 12),
-          _TextField(
-            label: 'Quote reference',
-            value: state.project.quoteRef,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(quoteRef: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text('Quote date', style: GoogleFonts.poppins()),
-            subtitle: Text(
-              DateFormat('d MMMM yyyy')
-                  .format(state.project.quoteDate ?? DateTime.now()),
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
-            trailing: const Icon(Icons.calendar_today_outlined),
-            onTap: () => _pickQuoteDate(state.project.quoteDate),
-          ),
-          const SizedBox(height: 12),
-          _TextField(
-            label: 'Customer name',
-            value: state.project.customerName,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(customerName: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _TextField(
-            label: 'Site address',
-            value: state.project.siteAddress,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(siteAddress: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _TextField(
-            label: 'Access notes',
-            value: state.project.accessNotes,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(accessNotes: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _TextField(
-            label: 'Scaffold notes',
-            value: state.project.scaffoldNotes,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(scaffoldNotes: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          LabourDecimalTextField(
-            label: 'Contingency (%)',
-            value: state.project.contingencyPercent,
-            onChanged: (value) => notifier.updateProject(
-              state.project.copyWith(contingencyPercent: value),
-            ),
-          ),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            onPressed: _showImportPicker,
-            icon: Icon(
-              effectiveIsPro ? Icons.download_rounded : Icons.lock_outline,
-            ),
-            label: Text(
-              effectiveIsPro
-                  ? 'Import from saved job'
-                  : 'Import from saved job (Pro)',
-            ),
-          ),
-          if (state.importedProjectName != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Imported: ${state.importedProjectName} '
-              '(${state.project.sections.length} section'
-              '${state.project.sections.length == 1 ? '' : 's'})',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.secondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          const SizedBox(height: 20),
-          const HeaderWidget(title: 'My quotes'),
-          if (userId != null && userId.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: LabourQuotesSyncChip(),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _showSaveQuoteDialog,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Save current quote'),
-          ),
-          const SizedBox(height: 12),
-          savedQuotesAsync.when(
-            data: (quotes) {
-              if (quotes.isEmpty) {
-                return Text(
-                  'No saved quotes yet. Save your current project to reload it later.',
-                  style: GoogleFonts.poppins(fontSize: 13),
-                );
-              }
-              return Column(
-                children: quotes.map((quote) {
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      title: Text(
-                        quote.name,
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        '${quote.project.sections.length} section'
-                        '${quote.project.sections.length == 1 ? '' : 's'} · '
-                        '${DateFormat('d MMM yyyy').format(quote.savedAt)}',
-                        style: GoogleFonts.poppins(fontSize: 12),
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (action) async {
-                          switch (action) {
-                            case 'load':
-                              notifier.loadQuote(quote);
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Loaded "${quote.name}"'),
-                                ),
-                              );
-                            case 'duplicate':
-                              final messenger = ScaffoldMessenger.of(context);
-                              final duplicate = await notifier
-                                  .duplicateSavedQuote(quote.id);
-                              if (!mounted) return;
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    duplicate != null
-                                        ? 'Duplicated as "${duplicate.name}"'
-                                        : 'Could not duplicate quote',
-                                  ),
-                                ),
-                              );
-                            case 'delete':
-                              await _confirmDeleteQuote(quote);
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'load',
-                            child: Text('Load'),
-                          ),
-                          PopupMenuItem(
-                            value: 'duplicate',
-                            child: Text('Duplicate'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (error, _) => Text(
-              'Could not load saved quotes: $error',
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (!effectiveIsPro)
-            Card(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: Theme.of(context).colorScheme.secondary,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Set-out Pro is required to import saved jobs. '
-                        'You can still quote manually here.',
-                        style: GoogleFonts.poppins(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (!effectiveIsPro) const SizedBox(height: 16),
-          const HeaderWidget(title: 'Project materials'),
-          const SizedBox(height: 12),
-          const LabourProjectMaterialsPanel(),
-          const SizedBox(height: 20),
-          const HeaderWidget(title: 'Roof sections'),
-          const SizedBox(height: 12),
-          const LabourSectionList(),
-          const SizedBox(height: 20),
-          const HeaderWidget(title: 'Gang & uplifts'),
-          const SizedBox(height: 12),
-          LabourIntTextField(
-            label: 'Gang size',
-            value: state.quoteConfig.gangSize,
-            onChanged: (value) => notifier.updateQuoteConfig(
-              state.quoteConfig.copyWith(gangSize: value),
-            ),
-          ),
-          LabourDecimalTextField(
-            label: 'Difficulty uplift (%)',
-            value: state.quoteConfig.difficultyUpliftPercent,
-            onChanged: (value) => notifier.updateQuoteConfig(
-              state.quoteConfig.copyWith(difficultyUpliftPercent: value),
-            ),
-          ),
-          LabourDecimalTextField(
-            label: 'Travel miles (one way)',
-            value: state.quoteConfig.travelMiles,
-            onChanged: (value) => notifier.updateQuoteConfig(
-              state.quoteConfig.copyWith(travelMiles: value),
-            ),
-          ),
-          LabourIntTextField(
-            label: 'Overnight nights',
-            value: state.quoteConfig.overnightNights,
-            onChanged: (value) => notifier.updateQuoteConfig(
-              state.quoteConfig.copyWith(overnightNights: value),
-            ),
-          ),
-          LabourDecimalTextField(
-            label: 'Target margin (%)',
-            value: state.quoteConfig.targetMarginPercent,
-            onChanged: (value) => notifier.updateQuoteConfig(
-              state.quoteConfig.copyWith(targetMarginPercent: value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => context.go('/profile?tab=labour-rates'),
-            icon: const Icon(Icons.tune_rounded),
-            label: const Text('Edit rates in Profile'),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () {
-              final message = notifier.recalculate();
-              if (!mounted) return;
-              if (message != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(message)),
-                );
-              }
-            },
-            icon: const Icon(Icons.calculate_rounded),
-            label: const Text('Calculate quote'),
-          ),
-          if (state.projectResult != null) ...[
-            const SizedBox(height: 24),
-            const HeaderWidget(title: 'Project methods'),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _MethodTotalCard(
-                    title: 'Method A',
-                    subtitle: 'All sections rate-based',
-                    totalGbp: state.projectResult!.methodATotalGbp,
-                    isSelected: false,
-                    gbp: gbp,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MethodTotalCard(
-                    title: 'Method B',
-                    subtitle: 'All sections timing-based',
-                    totalGbp: state.projectResult!.methodBTotalGbp,
-                    isSelected: false,
-                    gbp: gbp,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const HeaderWidget(title: 'Project total'),
-            const SizedBox(height: 12),
-            _ResultHighlight(
-              label: 'Quote total',
-              value: gbp.format(state.projectResult!.activeQuoteTotalGbp),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _openCustomerQuote,
-                icon: const Icon(Icons.description_outlined),
-                label: Text(
-                  ref.watch(canAccessCustomerQuoteProvider)
-                      ? 'Open customer quote preview'
-                      : 'Unlock customer quote PDF',
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _ResultRow(
-              label: 'Profitable day rate / man',
-              value: gbp.format(
-                state.projectResult!.rollup.profitableDayRatePerManGbp,
-              ),
-            ),
-            _ResultRow(
-              label: 'Profitable day rate / gang',
-              value: gbp.format(
-                state.projectResult!.rollup.profitableDayRatePerGangGbp,
-              ),
-            ),
-            _ResultRow(
-              label: 'Man-days (gang)',
-              value: state.projectResult!.rollup.manDays.toStringAsFixed(2),
-            ),
-            _ResultRow(
-              label: 'Total hours',
-              value:
-                  state.projectResult!.rollup.upliftedHours.toStringAsFixed(1),
-            ),
-            _ResultRow(
-              label: 'Labour cost',
-              value: gbp.format(state.projectResult!.rollup.baseLabourCostGbp),
-            ),
-            if (state.projectResult!.rollup.travelCostGbp > 0)
-              _ResultRow(
-                label: 'Travel',
-                value: gbp.format(state.projectResult!.rollup.travelCostGbp),
-              ),
-            if (state.projectResult!.rollup.overnightCostGbp > 0)
-              _ResultRow(
-                label: 'Overnight',
-                value:
-                    gbp.format(state.projectResult!.rollup.overnightCostGbp),
-              ),
-            if (state.project.contingencyPercent > 0)
-              _ResultRow(
-                label: 'Contingency',
-                value: gbp.format(state.projectResult!.contingencyCostGbp),
-              ),
-            const SizedBox(height: 16),
-            const HeaderWidget(title: 'Section totals'),
-            const SizedBox(height: 8),
-            ...state.projectResult!.sectionResults.map(
-              (sectionResult) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        sectionResult.section.label,
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        sectionResult.section.selectedMethod.shortLabel,
-                        style: GoogleFonts.poppins(fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      _ResultRow(
-                        label: 'Section labour',
-                        value: gbp.format(sectionResult.activeLabourCostGbp),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-}
-
-class _TextField extends StatefulWidget {
-  final String label;
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _TextField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  State<_TextField> createState() => _TextFieldState();
-}
-
-class _TextFieldState extends State<_TextField> {
-  late final TextEditingController _controller;
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.value);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TextField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_isFocused && oldWidget.value != widget.value) {
-      _controller.text = widget.value;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (focused) => _isFocused = focused,
-      child: TextFormField(
-        controller: _controller,
-        decoration: InputDecoration(
-          labelText: widget.label,
-          border: const OutlineInputBorder(),
-        ),
-        onChanged: widget.onChanged,
-      ),
-    );
-  }
-}
-
-class _MethodTotalCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final double totalGbp;
-  final bool isSelected;
-  final NumberFormat gbp;
-
-  const _MethodTotalCard({
-    required this.title,
-    required this.subtitle,
-    required this.totalGbp,
-    required this.isSelected,
-    required this.gbp,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected
-              ? colorScheme.secondary
-              : colorScheme.outline.withValues(alpha: 0.4),
-          width: isSelected ? 2 : 1,
-        ),
-        color: isSelected
-            ? colorScheme.secondary.withValues(alpha: 0.08)
-            : colorScheme.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
-          ),
-          Text(
-            subtitle,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            gbp.format(totalGbp),
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.secondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultHighlight extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _ResultHighlight({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.secondary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.secondary.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.secondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _ResultRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: GoogleFonts.poppins()),
-          Text(
-            value,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
+      body: useWizard ? _buildWizardShell() : _buildLegacyScroll(),
     );
   }
 }

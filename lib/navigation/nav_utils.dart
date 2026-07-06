@@ -51,6 +51,14 @@ bool isProGatedShellPath(String location) {
   return _proGatedPaths.any((path) => location.startsWith(path));
 }
 
+/// Routes that already expose primary tabs via bottom navigation.
+bool isMainShellPath(String location) {
+  return location == '/home' ||
+      location.startsWith('/calculator') ||
+      location.startsWith('/results') ||
+      location.startsWith('/tiles');
+}
+
 bool isLabourCalculatorPath(String location) {
   return location == labourCalculatorPath ||
       location.startsWith('$labourCalculatorPath/');
